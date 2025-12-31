@@ -1,13 +1,17 @@
+import Link from 'next/link'
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-white text-black font-sans">
       {/* Barre de navigation */}
-      <nav className="w-full border-b border-gray-200">
+      <nav className="w-full border-b border-gray-200 relative z-50">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">ArtisScan</h1>
-          <button className="text-gray-700 hover:text-black font-medium px-4 py-2 transition-colors duration-200">
-            Connexion
-          </button>
+          <Link href="/login">
+            <button className="text-gray-700 hover:text-black font-medium px-4 py-2 transition-colors duration-200 relative z-50 cursor-pointer">
+              Connexion
+            </button>
+          </Link>
         </div>
       </nav>
 
@@ -21,9 +25,11 @@ export default function Home() {
           Prenez vos factures en photo, l&apos;IA s&apos;occupe du reste. Simple. Rapide. Pro.
         </p>
 
-        <button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105">
-          Commencer gratuitement
-        </button>
+        <Link href="/login">
+          <button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 relative z-50 cursor-pointer">
+            Commencer gratuitement
+          </button>
+        </Link>
       </section>
 
       {/* Section Comment ça marche */}
