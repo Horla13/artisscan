@@ -21,11 +21,14 @@ export const metadata: Metadata = {
     title: "ArtisScan",
   },
   icons: {
+    icon: [
+      { url: "/icon-rounded.svg", type: "image/svg+xml" }
+    ],
     apple: [
       {
-        url: "/apple-touch-icon.png",
+        url: "/icon-rounded.svg",
         sizes: "180x180",
-        type: "image/png",
+        type: "image/svg+xml",
       },
     ],
   },
@@ -39,8 +42,8 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
-        {/* Couleur de la barre de statut iOS - Orange */}
-        <meta name="theme-color" content="#f97316" />
+        {/* Couleur de la barre de statut iOS - Gris ardoise */}
+        <meta name="theme-color" content="#1e293b" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         
         {/* Meta tags pour iOS */}

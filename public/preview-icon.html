@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArtisScan - Prévisualisation des Icônes</title>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: white;
+      padding: 40px;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #10b981, #059669);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 3rem;
+      font-size: 1.2rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 2rem;
+      text-align: center;
+    }
+    .card h2 {
+      color: #10b981;
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+    }
+    .icon-display {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 16px;
+      padding: 2rem;
+      margin: 1rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+    }
+    .icon-display.dark {
+      background: #1e293b;
+    }
+    .icon-display.light {
+      background: #f8fafc;
+    }
+    .size-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .size-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .size-label {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+    }
+    .download-btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: transform 0.2s;
+    }
+    .download-btn:hover {
+      transform: scale(1.05);
+    }
+    .info-box {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-top: 2rem;
+    }
+    .info-box h3 {
+      color: #10b981;
+      margin-bottom: 1rem;
+    }
+    .info-box ul {
+      color: #cbd5e1;
+      line-height: 1.8;
+    }
+    .color-palette {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin: 2rem 0;
+    }
+    .color-box {
+      width: 80px;
+      height: 80px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ArtisScan</h1>
+    <p class="subtitle">Icônes d'Application Professionnelles</p>
+
+    <div class="grid">
+      <!-- Version Transparente -->
+      <div class="card">
+        <h2>🎨 Version Transparente</h2>
+        <p style="color: #94a3b8;">Pour interfaces claires et foncées</p>
+        <div class="icon-display">
+          <img src="/icon.svg" alt="ArtisScan Icon" style="width: 200px; height: 200px;">
+        </div>
+        <button class="download-btn" onclick="downloadSVG('/icon.svg', 'artisscan-icon.svg')">
+          Télécharger SVG
+        </button>
+      </div>
+
+      <!-- Version Arrondie -->
+      <div class="card">
+        <h2>📱 Version Arrondie</h2>
+        <p style="color: #94a3b8;">Pour iOS/Android avec animation</p>
+        <div class="icon-display dark">
+          <img src="/icon-rounded.svg" alt="ArtisScan Icon Rounded" style="width: 200px; height: 200px;">
+        </div>
+        <button class="download-btn" onclick="downloadSVG('/icon-rounded.svg', 'artisscan-icon-rounded.svg')">
+          Télécharger SVG
+        </button>
+      </div>
+    </div>
+
+    <!-- Aperçu des tailles -->
+    <div class="card">
+      <h2>📐 Aperçu des Tailles</h2>
+      <div class="size-grid">
+        <div class="size-box">
+          <img src="/icon-rounded.svg" style="width: 32px; height: 32px;">
+          <div class="size-label">32px</div>
+        </div>
+        <div class="size-box">
+          <img src="/icon-rounded.svg" style="width: 48px; height: 48px;">
+          <div class="size-label">48px</div>
+        </div>
+        <div class="size-box">
+          <img src="/icon-rounded.svg" style="width: 64px; height: 64px;">
+          <div class="size-label">64px</div>
+        </div>
+        <div class="size-box">
+          <img src="/icon-rounded.svg" style="width: 128px; height: 128px;">
+          <div class="size-label">128px</div>
+        </div>
+        <div class="size-box">
+          <img src="/icon-rounded.svg" style="width: 180px; height: 180px;">
+          <div class="size-label">180px (iOS)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Palette de couleurs -->
+    <div class="card">
+      <h2>🎨 Palette de Couleurs</h2>
+      <div class="color-palette">
+        <div class="color-box" style="background: #10b981;">
+          <span style="color: white; font-weight: bold;">Émeraude</span>
+          <span style="color: rgba(255,255,255,0.8);">#10b981</span>
+        </div>
+        <div class="color-box" style="background: #1e293b;">
+          <span style="color: white; font-weight: bold;">Ardoise</span>
+          <span style="color: rgba(255,255,255,0.8);">#1e293b</span>
+        </div>
+        <div class="color-box" style="background: #059669;">
+          <span style="color: white; font-weight: bold;">Émeraude Foncé</span>
+          <span style="color: rgba(255,255,255,0.8);">#059669</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Informations -->
+    <div class="info-box">
+      <h3>📋 Caractéristiques du Design</h3>
+      <ul>
+        <li><strong>Concept :</strong> Lettre 'A' fusionnée avec cadre de scan</li>
+        <li><strong>Style :</strong> Minimaliste et professionnel</li>
+        <li><strong>Couleur principale :</strong> Vert émeraude (#10b981)</li>
+        <li><strong>Couleur secondaire :</strong> Gris ardoise (#1e293b)</li>
+        <li><strong>Format :</strong> SVG (scalable, parfait pour toutes tailles)</li>
+        <li><strong>Fond :</strong> Transparent (version 1) ou Ardoise (version 2)</li>
+        <li><strong>Effet spécial :</strong> Ligne de scan laser animée (version arrondie)</li>
+        <li><strong>Usage :</strong> Web, mobile, impression</li>
+      </ul>
+    </div>
+
+    <!-- Guide d'utilisation -->
+    <div class="info-box">
+      <h3>🚀 Guide d'Utilisation</h3>
+      <ul>
+        <li><strong>Web :</strong> Utilisez icon.svg dans votre favicon et manifest</li>
+        <li><strong>iOS :</strong> Convertissez icon-rounded.svg en PNG 180x180</li>
+        <li><strong>Android :</strong> Créez des versions 48, 72, 96, 144, 192px</li>
+        <li><strong>Favicon :</strong> Créez des versions 16, 32, 48px</li>
+        <li><strong>Open Graph :</strong> Version 1200x630 pour réseaux sociaux</li>
+      </ul>
+    </div>
+
+    <!-- Instructions de conversion -->
+    <div class="info-box">
+      <h3>⚙️ Convertir en PNG</h3>
+      <p style="color: #cbd5e1; margin-top: 1rem;">
+        Pour convertir les SVG en PNG aux bonnes dimensions :
+      </p>
+      <pre style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; overflow-x: auto; color: #10b981; margin-top: 1rem;">
+# Avec ImageMagick (à installer)
+convert -background none -resize 180x180 icon-rounded.svg apple-touch-icon.png
+convert -background none -resize 192x192 icon-rounded.svg android-chrome-192x192.png
+convert -background none -resize 512x512 icon-rounded.svg android-chrome-512x512.png
+convert -background none -resize 32x32 icon.svg favicon-32x32.png
+convert -background none -resize 16x16 icon.svg favicon-16x16.png
+
+# Ou utilisez le générateur HTML (cliquez sur Télécharger ci-dessus)</pre>
+    </div>
+
+  </div>
+
+  <script>
+    function downloadSVG(filename, downloadName) {
+      fetch(filename)
+        .then(response => response.text())
+        .then(svgText => {
+          const blob = new Blob([svgText], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = downloadName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+    }
+  </script>
+</body>
+</html>
+

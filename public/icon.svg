@@ -1,0 +1,78 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fond transparent -->
+  <rect width="512" height="512" fill="transparent"/>
+  
+  <!-- Cadre de scan - Coin supérieur gauche -->
+  <path d="M 80 80 L 80 120 M 80 80 L 120 80" 
+        stroke="#1e293b" 
+        stroke-width="16" 
+        stroke-linecap="round"/>
+  
+  <!-- Cadre de scan - Coin supérieur droit -->
+  <path d="M 432 80 L 392 80 M 432 80 L 432 120" 
+        stroke="#1e293b" 
+        stroke-width="16" 
+        stroke-linecap="round"/>
+  
+  <!-- Cadre de scan - Coin inférieur gauche -->
+  <path d="M 80 432 L 80 392 M 80 432 L 120 432" 
+        stroke="#1e293b" 
+        stroke-width="16" 
+        stroke-linecap="round"/>
+  
+  <!-- Cadre de scan - Coin inférieur droit -->
+  <path d="M 432 432 L 432 392 M 432 432 L 392 432" 
+        stroke="#1e293b" 
+        stroke-width="16" 
+        stroke-linecap="round"/>
+  
+  <!-- Lettre 'A' stylisée fusionnée avec le scan -->
+  <g id="letter-a">
+    <!-- Partie gauche du A -->
+    <path d="M 180 380 L 256 160 L 256 160" 
+          stroke="#10b981" 
+          stroke-width="40" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none"/>
+    
+    <!-- Partie droite du A -->
+    <path d="M 256 160 L 332 380" 
+          stroke="#10b981" 
+          stroke-width="40" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none"/>
+    
+    <!-- Barre horizontale du A (stylisée comme une ligne de scan) -->
+    <line x1="200" y1="290" x2="312" y2="290" 
+          stroke="#10b981" 
+          stroke-width="40" 
+          stroke-linecap="round"/>
+    
+    <!-- Effet de scan laser horizontal (ligne subtile) -->
+    <line x1="120" y1="290" x2="392" y2="290" 
+          stroke="#10b981" 
+          stroke-width="4" 
+          opacity="0.6" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <!-- Points d'accentuation du scan aux intersections -->
+  <circle cx="180" cy="380" r="8" fill="#10b981"/>
+  <circle cx="332" cy="380" r="8" fill="#10b981"/>
+  <circle cx="256" cy="160" r="8" fill="#10b981"/>
+  
+  <!-- Éléments de scan supplémentaires pour le détail -->
+  <line x1="140" y1="256" x2="170" y2="256" 
+        stroke="#1e293b" 
+        stroke-width="6" 
+        stroke-linecap="round" 
+        opacity="0.6"/>
+  <line x1="342" y1="256" x2="372" y2="256" 
+        stroke="#1e293b" 
+        stroke-width="6" 
+        stroke-linecap="round" 
+        opacity="0.6"/>
+</svg>
+

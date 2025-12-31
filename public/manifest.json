@@ -4,20 +4,27 @@
   "description": "Scannez et gérez vos factures d'artisan facilement avec l'IA",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#f97316",
-  "theme_color": "#f97316",
+  "background_color": "#1e293b",
+  "theme_color": "#1e293b",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "/icon-rounded.svg",
+      "sizes": "120x120",
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
-      "src": "/apple-touch-icon.svg",
+      "src": "/icon-rounded.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "categories": ["business", "finance", "productivity"],
