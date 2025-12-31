@@ -7,10 +7,11 @@ export default function Home() {
       <nav className="w-full border-b border-gray-200 relative z-50">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">ArtisScan</h1>
-          <Link href="/login">
-            <button className="text-gray-700 hover:text-black font-medium px-4 py-2 transition-colors duration-200 relative z-50 cursor-pointer">
-              Connexion
-            </button>
+          <Link 
+            href="/login"
+            className="text-gray-700 hover:text-black font-medium px-4 py-2 transition-colors duration-200 relative z-50 cursor-pointer inline-block"
+          >
+            Connexion
           </Link>
         </div>
       </nav>
@@ -25,10 +26,11 @@ export default function Home() {
           Prenez vos factures en photo, l&apos;IA s&apos;occupe du reste. Simple. Rapide. Pro.
         </p>
 
-        <Link href="/login">
-          <button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 relative z-50 cursor-pointer">
-            Commencer gratuitement
-          </button>
+        <Link 
+          href="/login"
+          className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 relative z-50 cursor-pointer inline-block"
+        >
+          Commencer gratuitement
         </Link>
       </section>
 
