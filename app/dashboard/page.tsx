@@ -104,9 +104,74 @@ export default function DashboardPage() {
     fileInputRef.current?.click()
   }
 
+  // Fonction pour compresser l'image avant l'envoi
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      
+      reader.onload = (event) => {
+        const img = new Image()
+        img.src = event.target?.result as string
+        
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          
+          if (!ctx) {
+            reject(new Error('Impossible de créer le contexte canvas'))
+            return
+          }
+          
+          // Calculer les nouvelles dimensions (max 1200px)
+          let width = img.width
+          let height = img.height
+          const maxDimension = 1200
+          
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = (height * maxDimension) / width
+              width = maxDimension
+            } else {
+              width = (width * maxDimension) / height
+              height = maxDimension
+            }
+          }
+          
+          canvas.width = width
+          canvas.height = height
+          
+          // Dessiner l'image redimensionnée
+          ctx.drawImage(img, 0, 0, width, height)
+          
+          // Convertir en base64 avec qualité 0.7
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7)
+          resolve(compressedBase64)
+        }
+        
+        img.onerror = () => {
+          reject(new Error('Erreur lors du chargement de l\'image'))
+        }
+      }
+      
+      reader.onerror = () => {
+        reject(new Error('Erreur lors de la lecture du fichier'))
+      }
+    })
+  }
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Vérifier la taille du fichier (max 10 Mo)
+      const maxSizeInMB = 10
+      const maxSizeInBytes = maxSizeInMB * 1024 * 1024
+      
+      if (file.size > maxSizeInBytes) {
+        setAnalysisError(`Image trop lourde (${(file.size / 1024 / 1024).toFixed(1)} Mo), essayez de reculer un peu`)
+        return
+      }
+      
       setSelectedImage(file)
       // Créer une URL de prévisualisation
       const reader = new FileReader()
@@ -130,56 +195,68 @@ export default function DashboardPage() {
     setAnalysisResult(null)
 
     try {
-      // Transformer l'image en base64
-      const reader = new FileReader()
+      // Compresser l'image avant l'envoi
+      const compressedBase64 = await compressImage(selectedImage)
       
-      reader.onloadend = async () => {
-        try {
-          const base64String = reader.result as string
-
-          // Envoyer l'image à l'API
-          const response = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              imageBase64: base64String,
-            }),
-          })
-
-          const data = await response.json()
-
-          if (!response.ok) {
-            throw new Error(data.error || 'Erreur lors de l\'analyse')
-          }
-
-          // Afficher le résultat
-          setAnalysisResult(data)
-
-          // Sauvegarder dans Supabase
-          await saveFacture(data)
-        } catch (error) {
-          console.error('Erreur lors de l\'analyse:', error)
-          setAnalysisError(
-            error instanceof Error 
-              ? error.message 
-              : 'Une erreur est survenue lors de l\'analyse'
-          )
-        } finally {
-          setAnalyzing(false)
-        }
-      }
-
-      reader.onerror = () => {
-        setAnalysisError('Erreur lors de la lecture de l\'image')
+      // Vérifier la taille de l'image compressée (max ~4 Mo en base64)
+      const base64Size = compressedBase64.length * 0.75 / 1024 / 1024 // Conversion en Mo
+      if (base64Size > 4) {
+        setAnalysisError('Image trop lourde, essayez de reculer un peu')
         setAnalyzing(false)
+        return
       }
 
-      reader.readAsDataURL(selectedImage)
+      // Envoyer l'image à l'API
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageBase64: compressedBase64,
+        }),
+      })
+
+      // Lire la réponse en tant que texte brut
+      const responseText = await response.text()
+
+      // Nettoyer la réponse pour extraire le JSON
+      let data
+      try {
+        // Chercher le premier { et le dernier }
+        const firstBrace = responseText.indexOf('{')
+        const lastBrace = responseText.lastIndexOf('}')
+        
+        if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+          const jsonString = responseText.substring(firstBrace, lastBrace + 1)
+          data = JSON.parse(jsonString)
+        } else {
+          // Si pas de JSON trouvé, essayer de parser directement
+          data = JSON.parse(responseText)
+        }
+      } catch (parseError) {
+        console.error('Erreur de parsing JSON:', parseError)
+        console.error('Réponse brute:', responseText)
+        throw new Error('La réponse de l\'API n\'est pas au bon format')
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors de l\'analyse')
+      }
+
+      // Afficher le résultat
+      setAnalysisResult(data)
+
+      // Sauvegarder dans Supabase
+      await saveFacture(data)
     } catch (error) {
-      console.error('Erreur:', error)
-      setAnalysisError('Une erreur est survenue')
+      console.error('Erreur lors de l\'analyse:', error)
+      setAnalysisError(
+        error instanceof Error 
+          ? error.message 
+          : 'Une erreur est survenue lors de l\'analyse'
+      )
+    } finally {
       setAnalyzing(false)
     }
   }
