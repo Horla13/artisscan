@@ -9,10 +9,11 @@ export async function POST(request: NextRequest) {
   try {
     // Récupérer le body de la requête
     const body = await request.json();
-    const { imageBase64 } = body;
+    const { image, imageBase64 } = body;
+    const imageData = image || imageBase64;
 
     // Vérifier que l'image est fournie
-    if (!imageBase64) {
+    if (!imageData) {
       return NextResponse.json(
         { error: 'Aucune image fournie. Veuillez prendre une photo de votre facture.' },
         { status: 400 }
@@ -31,9 +32,9 @@ export async function POST(request: NextRequest) {
     // Préparer l'image pour l'API OpenAI
     // Si l'image est déjà en format data URL, on l'utilise directement
     // Sinon, on ajoute le préfixe data:image
-    const imageUrl = imageBase64.startsWith('data:')
-      ? imageBase64
-      : `data:image/jpeg;base64,${imageBase64}`;
+    const imageUrl = imageData.startsWith('data:')
+      ? imageData
+      : `data:image/jpeg;base64,${imageData}`;
 
     // Appeler l'API OpenAI avec GPT-4o pour analyser l'image
     const response = await openai.chat.completions.create({
@@ -45,19 +46,21 @@ export async function POST(request: NextRequest) {
             {
               type: 'text',
               text: `Analyse cette image de facture et extrais les informations suivantes au format JSON strict :
-- nomFournisseur : le nom du fournisseur
+- entreprise : le nom de l'entreprise/fournisseur
 - date : la date de la facture (format YYYY-MM-DD si possible)
-- montantHT : le montant hors taxes (nombre uniquement, sans symbole)
-- montantTVA : le montant de la TVA (nombre uniquement, sans symbole)
-- montantTTC : le montant toutes taxes comprises (nombre uniquement, sans symbole)
+- montant_ht : le montant hors taxes (nombre uniquement, sans symbole)
+- montant_ttc : le montant toutes taxes comprises (nombre uniquement, sans symbole)
+- description : une brève description des services/produits
+- categorie : classe la facture dans une de ces catégories : "Matériaux", "Carburant", "Restaurant", "Outillage", "Sous-traitance", "Fournitures", "Location", "Autre"
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans markdown, sans code blocks. Format de réponse attendu :
 {
-  "nomFournisseur": "string",
+  "entreprise": "string",
   "date": "YYYY-MM-DD",
-  "montantHT": number,
-  "montantTVA": number,
-  "montantTTC": number
+  "montant_ht": number,
+  "montant_ttc": number,
+  "description": "string",
+  "categorie": "string"
 }`,
             },
             {
@@ -127,9 +130,13 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
     };
 
     // Appliquer le nettoyage aux montants
-    extractedData.montantHT = cleanAmount(extractedData.montantHT);
-    extractedData.montantTVA = cleanAmount(extractedData.montantTVA);
-    extractedData.montantTTC = cleanAmount(extractedData.montantTTC);
+    extractedData.montant_ht = cleanAmount(extractedData.montant_ht || extractedData.montantHT);
+    extractedData.montant_ttc = cleanAmount(extractedData.montant_ttc || extractedData.montantTTC);
+
+    // Assurer que la catégorie est présente
+    if (!extractedData.categorie) {
+      extractedData.categorie = 'Autre';
+    }
 
     console.log('✅ Données extraites et nettoyées:', extractedData);
 
