@@ -14,15 +14,16 @@ export async function POST(request: NextRequest) {
     // Vérifier que l'image est fournie
     if (!imageBase64) {
       return NextResponse.json(
-        { error: 'Image en base64 requise' },
+        { error: 'Aucune image fournie. Veuillez prendre une photo de votre facture.' },
         { status: 400 }
       );
     }
 
     // Vérifier que la clé API est configurée
     if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ Clé API OpenAI manquante');
       return NextResponse.json(
-        { error: 'Clé API OpenAI non configurée' },
+        { error: 'Service temporairement indisponible. Veuillez réessayer dans quelques instants.' },
         { status: 500 }
       );
     }
@@ -75,41 +76,93 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
     // Extraire la réponse JSON
     const content = response.choices[0]?.message?.content;
 
+    // Log pour débogage
+    console.log('🤖 Réponse brute de l\'IA:', content);
+
     if (!content) {
       return NextResponse.json(
-        { error: 'Aucune réponse de l\'IA' },
+        { error: 'Désolé, l\'IA n\'a pas pu analyser cette photo. Veuillez réessayer avec une photo plus nette.' },
         { status: 500 }
       );
     }
 
-    // Parser le JSON de la réponse
+    // Parser le JSON de la réponse avec robustesse
     let extractedData;
     try {
+      // Étape 1: Essayer de parser directement
       extractedData = JSON.parse(content);
     } catch (parseError) {
-      // Si le parsing échoue, essayer de nettoyer la réponse
-      const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      extractedData = JSON.parse(cleanedContent);
+      try {
+        // Étape 2: Nettoyer les code blocks markdown
+        let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        // Étape 3: Utiliser une regex pour extraire uniquement le bloc JSON {...}
+        const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanedContent = jsonMatch[0];
+        }
+        
+        console.log('📝 JSON nettoyé:', cleanedContent);
+        extractedData = JSON.parse(cleanedContent);
+      } catch (secondParseError) {
+        console.error('❌ Erreur de parsing JSON:', secondParseError);
+        console.error('📄 Contenu reçu:', content);
+        return NextResponse.json(
+          { error: 'Désolé, l\'IA n\'a pas réussi à lire cette photo. Recommencez en étant plus proche de la facture.' },
+          { status: 500 }
+        );
+      }
     }
+
+    // Nettoyer et valider les montants
+    const cleanAmount = (value: any): number => {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string') {
+        // Retirer €, espaces, et autres caractères non numériques sauf . et ,
+        const cleaned = value.replace(/[^\d.,\-]/g, '').replace(',', '.');
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? 0 : num;
+      }
+      return 0;
+    };
+
+    // Appliquer le nettoyage aux montants
+    extractedData.montantHT = cleanAmount(extractedData.montantHT);
+    extractedData.montantTVA = cleanAmount(extractedData.montantTVA);
+    extractedData.montantTTC = cleanAmount(extractedData.montantTTC);
+
+    console.log('✅ Données extraites et nettoyées:', extractedData);
 
     // Retourner les données extraites
     return NextResponse.json(extractedData, { status: 200 });
   } catch (error: unknown) {
-    console.error('Erreur lors de l\'analyse de l\'image:', error);
+    console.error('❌ Erreur lors de l\'analyse de l\'image:', error);
     
     // Gérer les erreurs spécifiques de l'API OpenAI
     if (error && typeof error === 'object' && 'status' in error) {
       const apiError = error as { status?: number; message?: string };
+      console.error('❌ Erreur API OpenAI:', apiError);
+      
+      // Messages d'erreur conviviaux selon le type d'erreur
+      if (apiError.status === 429) {
+        return NextResponse.json(
+          { error: 'Trop de demandes en même temps. Veuillez patienter 30 secondes et réessayer.' },
+          { status: 429 }
+        );
+      }
+      
       return NextResponse.json(
-        { error: `Erreur API OpenAI: ${apiError.message || 'Erreur inconnue'}` },
+        { error: 'L\'analyse de l\'image a échoué. Assurez-vous que la photo est nette et bien éclairée.' },
         { status: apiError.status || 500 }
       );
     }
 
     // Gérer les autres erreurs
     const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+    console.error('❌ Erreur inattendue:', errorMessage);
+    
     return NextResponse.json(
-      { error: `Erreur lors de l'analyse de l'image: ${errorMessage}` },
+      { error: 'Une erreur s\'est produite. Veuillez réessayer avec une photo de meilleure qualité.' },
       { status: 500 }
     );
   }
