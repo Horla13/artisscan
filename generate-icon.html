@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Générateur d'icône ArtisScan</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+    canvas {
+      border: 3px solid white;
+      border-radius: 20px;
+      margin: 20px 0;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    button {
+      background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    p {
+      opacity: 0.9;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 Icône ArtisScan</h1>
+    <p>Votre icône d'application iOS est prête !</p>
+    <canvas id="iconCanvas" width="180" height="180"></canvas>
+    <br>
+    <button onclick="downloadIcon()">📥 Télécharger l'icône</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('iconCanvas');
+    const ctx = canvas.getContext('2d');
+    const size = 180;
+
+    // Dessiner l'icône
+    function drawIcon() {
+      // Fond dégradé orange
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#fb923c');
+      gradient.addColorStop(1, '#ea580c');
+      
+      // Rectangle arrondi pour le fond
+      ctx.fillStyle = gradient;
+      roundRect(ctx, 0, 0, size, size, 40);
+      ctx.fill();
+
+      // Document blanc
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      roundRect(ctx, 50, 35, 70, 95, 8);
+      ctx.fill();
+
+      // Coin plié
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(110, 35);
+      ctx.lineTo(120, 35);
+      ctx.lineTo(120, 45);
+      ctx.closePath();
+      ctx.fill();
+
+      // Ligne de titre orange
+      ctx.fillStyle = '#f97316';
+      roundRect(ctx, 60, 50, 40, 4, 2);
+      ctx.fill();
+
+      // Lignes de texte grises
+      ctx.fillStyle = '#9ca3af';
+      roundRect(ctx, 60, 63, 50, 3, 1.5);
+      ctx.fill();
+      roundRect(ctx, 60, 71, 45, 3, 1.5);
+      ctx.fill();
+      roundRect(ctx, 60, 79, 48, 3, 1.5);
+      ctx.fill();
+
+      // Montant en vert (en bas)
+      ctx.fillStyle = '#10b981';
+      roundRect(ctx, 60, 100, 50, 6, 3);
+      ctx.fill();
+
+      // Point blanc sur le montant
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(65, 103, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Lignes de scan laser (effet scanner)
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+      roundRect(ctx, 40, 80, 100, 2, 1);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.6)';
+      roundRect(ctx, 40, 87, 100, 1.5, 0.75);
+      ctx.fill();
+    }
+
+    // Fonction helper pour dessiner des rectangles arrondis
+    function roundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    // Télécharger l'icône
+    function downloadIcon() {
+      const link = document.createElement('a');
+      link.download = 'apple-touch-icon.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Dessiner l'icône au chargement
+    drawIcon();
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,15 @@
+Pour générer l'icône iOS :
+
+Option 1 - Générateur intégré (RECOMMANDÉ) :
+1. Ouvrez http://localhost:3000/generate-icon.html dans votre navigateur
+2. Cliquez sur "Télécharger l'icône"
+3. Déplacez apple-touch-icon.png vers le dossier public/
+
+Option 2 - ImageMagick :
+brew install imagemagick librsvg
+convert -background none -resize 180x180 public/apple-touch-icon.svg public/apple-touch-icon.png
+
+Option 3 - En ligne :
+Allez sur https://realfavicongenerator.net/
+Uploadez public/apple-touch-icon.svg
+Téléchargez l'icône générée
