@@ -44,16 +44,13 @@ export default function Home() {
           Scannez vos factures, extrayez la TVA automatiquement et exportez tout en CSV pour votre comptable. Simple. Rapide. Professionnel.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-center mb-12">
+        <div className="flex items-center justify-center mb-12">
           <Link 
             href="/login"
             className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
           >
             Commencer gratuitement
           </Link>
-          <button className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-lg px-10 py-4 rounded-xl transition-all duration-200 active:scale-95 border border-slate-200">
-            Voir la démo
-          </button>
         </div>
 
         {/* Badges de confiance */}
