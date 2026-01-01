@@ -163,9 +163,9 @@ export default function Dashboard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data, error } = await supabase
+      const { data, error } = await supabase
           .from('scans')
-          .select('*')
+        .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
         
@@ -462,11 +462,16 @@ export default function Dashboard() {
         navigator.vibrate(200);
       }
 
-      // ✅ CORRECTION 1: Rafraîchissement immédiat et séquentiel
+      // ✅ CORRECTION 2: Rafraîchissement immédiat + Reload pour compteur
       console.log('🔄 Rafraîchissement des données...');
       await loadInvoices();
       await checkSubscriptionLimits();
       console.log('✅ Données rafraîchies');
+      
+      // ✅ Force le rechargement complet pour garantir la mise à jour du compteur
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500); // Délai pour voir le toast de succès
 
     } catch (err: any) {
       console.error('❌ Erreur sauvegarde:', err);
@@ -486,7 +491,7 @@ export default function Dashboard() {
     fileInputRef.current?.click();
   };
 
-  return (
+    return (
     <div className="min-h-screen bg-white pb-24">
       {/* Header */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-40">
@@ -495,7 +500,7 @@ export default function Dashboard() {
             <div>
               <h1 className="text-2xl font-bold text-slate-900">ArtisScan Expert</h1>
               <p className="text-sm text-slate-500 mt-1">Gestion comptable intelligente</p>
-            </div>
+      </div>
             {/* Badge du plan à droite */}
             {!isLoadingProfile && (
               <div>
@@ -540,7 +545,7 @@ export default function Dashboard() {
                       })}
                     </p>
                     <p className="text-xs text-slate-400 mt-2">{stats.nombreFactures} factures</p>
-                  </div>
+        </div>
                   <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
                     <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -633,8 +638,8 @@ export default function Dashboard() {
                 onChange={handleAnalyze}
             className="hidden"
           />
-              
-                <button
+
+          <button
                 onClick={triggerFileInput}
                   disabled={analyzing}
                 className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-full font-semibold text-base shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -650,7 +655,7 @@ export default function Dashboard() {
                     Prendre une photo
                   </span>
                   )}
-                </button>
+          </button>
               </div>
 
             {/* Erreur */}
@@ -719,7 +724,7 @@ export default function Dashboard() {
             {/* Header avec export et tri */}
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900">Historique des factures</h2>
-              <button
+                <button
                 onClick={exportToCSV}
                 disabled={invoices.length === 0 || (userTier === 'free')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
@@ -731,12 +736,12 @@ export default function Dashboard() {
               >
                 <Download className="w-4 h-4" />
                 Export CSV
-              </button>
-            </div>
-
+                </button>
+              </div>
+              
             {/* Boutons de tri */}
             <div className="flex gap-2">
-              <button
+                <button
                 onClick={() => setSortBy('date')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   sortBy === 'date' 
@@ -765,14 +770,14 @@ export default function Dashboard() {
                 }`}
               >
                 Catégorie
-              </button>
-            </div>
-            
+                </button>
+              </div>
+
             {loadingInvoices ? (
               <div className="card-clean rounded-2xl p-8 text-center">
                 <div className="spinner w-8 h-8 mx-auto"></div>
                 <p className="text-slate-500 mt-4">Chargement...</p>
-              </div>
+                </div>
             ) : invoices.length === 0 ? (
               <div className="card-clean rounded-2xl p-8 text-center">
                 <Clock className="w-16 h-16 mx-auto mb-4 text-slate-300" />
@@ -780,56 +785,75 @@ export default function Dashboard() {
                 <p className="text-slate-500">Vos factures scannées apparaîtront ici</p>
               </div>
             ) : (
-              <div className="space-y-3">
+                  <div className="space-y-3">
                 {getSortedInvoices().map((invoice) => (
-                  <div key={invoice.id} className="card-clean rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between">
+                  <div key={invoice.id} className="card-clean rounded-xl p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <h4 className="font-semibold text-slate-900">{invoice.entreprise}</h4>
-                            {invoice.categorie && (
-                              <span className="inline-block mt-1 px-2 py-1 text-xs font-medium bg-orange-50 text-orange-700 rounded">
-                                {invoice.categorie}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => confirmDelete(invoice.id)}
-                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-slate-500">HT:</span>
-                            <span className="font-medium text-slate-900 ml-1">
-                              {invoice.montant_ht.toFixed(2)} €
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="font-semibold text-slate-900 text-lg">{invoice.entreprise}</h4>
+                          {invoice.categorie && (
+                            <span className="inline-block px-2 py-1 text-xs font-medium bg-orange-50 text-orange-700 rounded">
+                              {invoice.categorie}
                       </span>
+                          )}
                     </div>
-                          <div>
-                            <span className="text-slate-500">TTC:</span>
-                            <span className="font-medium text-slate-900 ml-1">
-                              {invoice.montant_ttc.toFixed(2)} €
-                      </span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-2">
+                        <p className="text-xs text-slate-400">
                           {new Date(invoice.date_facture).toLocaleDateString('fr-FR')}
                         </p>
-                        {invoice.description && (
-                          <p className="text-sm text-slate-600 mt-2 line-clamp-2">
-                            {invoice.description}
-                          </p>
-                        )}
-                      </div>
+                    </div>
+                      <button
+                        onClick={() => confirmDelete(invoice.id)}
+                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    </div>
+
+                    {/* ✅ CORRECTION 4: Tableau avec colonnes TTC et Description */}
+                    <div className="grid grid-cols-3 gap-4 mb-3 p-3 bg-slate-50 rounded-lg">
+                      <div>
+                        <span className="text-xs text-slate-500 uppercase font-medium block mb-1">Montant HT</span>
+                        <span className="font-semibold text-slate-900 text-base">
+                          {invoice.montant_ht.toFixed(2)} €
+                      </span>
+                    </div>
+                      <div>
+                        <span className="text-xs text-slate-500 uppercase font-medium block mb-1">TVA</span>
+                        <span className="font-semibold text-orange-600 text-base">
+                          {(invoice.montant_ttc - invoice.montant_ht).toFixed(2)} €
+                      </span>
+                    </div>
+                      <div>
+                        <span className="text-xs text-slate-500 uppercase font-medium block mb-1">Montant TTC</span>
+                        <span className="font-semibold text-slate-900 text-base">
+                          {invoice.montant_ttc.toFixed(2)} €
+                      </span>
                     </div>
                   </div>
-                ))}
+
+                    {/* ✅ CORRECTION 4: Description toujours visible */}
+                    {invoice.description && (
+                      <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+                        <p className="text-xs text-blue-700 font-medium mb-1">DESCRIPTION</p>
+                        <p className="text-sm text-slate-700">
+                          {invoice.description}
+                        </p>
                 </div>
               )}
+
+                    {/* Nom du chantier si présent */}
+                    {invoice.nom_chantier && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                        <span className="font-medium">Chantier:</span>
+                        <span>{invoice.nom_chantier}</span>
+            </div>
+          )}
+        </div>
+                ))}
+              </div>
+            )}
             </div>
           )}
 
@@ -862,8 +886,8 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500">
                   {remainingScans >= 0 ? `${remainingScans} scans restants ce mois` : 'Limite de scans atteinte'}
                 </p>
-              )}
-            </div>
+          )}
+        </div>
 
             {/* Simulateur de Test - Mode Développeur */}
             <div className="card-clean rounded-2xl p-6 border-2 border-amber-200 bg-amber-50">
@@ -908,9 +932,9 @@ export default function Dashboard() {
               </div>
               <p className="text-xs text-amber-700 mt-3">
                 ⚠️ Cette section est uniquement pour tester les fonctionnalités. À supprimer en production.
-              </p>
-            </div>
-            
+                </p>
+              </div>
+
             <div className="card-clean rounded-2xl p-6">
               <h3 className="font-semibold text-slate-900 mb-4">Export & Données</h3>
               <button
@@ -935,7 +959,7 @@ export default function Dashboard() {
                   Format compatible avec votre comptable
                 </p>
               )}
-          </div>
+              </div>
 
             <div className="card-clean rounded-2xl p-6">
               <h3 className="font-semibold text-slate-900 mb-2">À propos</h3>
@@ -999,9 +1023,9 @@ export default function Dashboard() {
               >
                 Passer à Pro
               </Link>
+          </div>
             </div>
-                      </div>
-                    </div>
+            </div>
       )}
 
       {/* Modale de validation des données scannées */}
@@ -1145,9 +1169,9 @@ export default function Dashboard() {
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                     placeholder="Description de la facture..."
                   />
-                </div>
+                      </div>
               )}
-            </div>
+                    </div>
 
             {/* Bouton de validation */}
             <div className="mt-6 pt-6 border-t border-slate-200">
@@ -1166,7 +1190,7 @@ export default function Dashboard() {
               >
                 Annuler
               </button>
-            </div>
+                      </div>
           </div>
         </div>
       )}
@@ -1180,7 +1204,7 @@ export default function Dashboard() {
               Êtes-vous sûr de vouloir supprimer cette facture ? Cette action est irréversible.
             </p>
             <div className="flex gap-3">
-              <button
+                      <button
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
               >
@@ -1208,7 +1232,7 @@ export default function Dashboard() {
       <nav className="bottom-nav">
         <div className="max-w-7xl mx-auto px-2">
           <div className="flex items-center justify-around py-2">
-            <button
+        <button
               onClick={() => setCurrentView('dashboard')}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
                 currentView === 'dashboard' 
@@ -1257,7 +1281,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium">Paramètres</span>
         </button>
       </div>
-        </div>
+    </div>
       </nav>
     </div>
   );
