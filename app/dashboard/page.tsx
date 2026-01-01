@@ -134,49 +134,60 @@ export default function Dashboard() {
     console.log('TVA récupérable:', stats.tvaRecuperable, '€');
   }, [invoices]);
 
-  // Données pour le graphique des 7 derniers jours (TTC) - VERSION SIMPLIFIÉE
+  // Données pour le graphique des 7 derniers jours (TTC) - VERSION CORRIGÉE
   const getLast7DaysData = () => {
     console.log('🔍 === DÉBUT GÉNÉRATION GRAPHIQUE 7 JOURS ===');
     console.log('📊 Nombre total de factures chargées:', invoices.length);
     
-    // Afficher toutes les factures avec leurs dates
-    console.log('📋 Liste des factures:', invoices.map(inv => ({
-      entreprise: inv.entreprise,
-      date: inv.date_facture,
-      montant_ttc: inv.montant_ttc
-    })));
+    // 🔍 DIAGNOSTIC : Afficher TOUTES les dates de factures
+    console.log('📅 === TOUTES LES DATES DE FACTURES DANS LA BASE ===');
+    invoices.forEach((inv, index) => {
+      if (inv.date_facture) {
+        const factureDate = new Date(inv.date_facture);
+        console.log(`${index + 1}. ${inv.entreprise}: ${inv.date_facture} → ${factureDate.toLocaleDateString('fr-FR')} (${inv.montant_ttc}€)`);
+      } else {
+        console.log(`${index + 1}. ${inv.entreprise}: PAS DE DATE`);
+      }
+    });
+    console.log('📅 === FIN LISTE DES DATES ===');
     
-    // 1️⃣ CRÉER MANUELLEMENT LE TABLEAU DES 7 DERNIERS JOURS
+    // 1️⃣ CRÉER LE TABLEAU DES 7 DERNIERS JOURS
     const chartData = [];
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset à minuit pour comparaison propre
+    
+    console.log('📅 Aujourd\'hui (minuit):', today.toLocaleDateString('fr-FR'));
     
     for (let i = 6; i >= 0; i--) {
-      const targetDate = new Date();
+      const targetDate = new Date(today);
       targetDate.setDate(today.getDate() - i);
+      targetDate.setHours(0, 0, 0, 0); // Reset à minuit
       
-      // Format YYYY-MM-DD pour comparaison stricte
-      const targetDateStr = targetDate.toISOString().split('T')[0];
+      // Format français COMPLET pour comparaison (ex: "01/01/2025")
+      const targetDateStr = targetDate.toLocaleDateString('fr-FR');
       
-      // Format français pour affichage (lun. 26, mar. 27...)
+      // Format court pour affichage (lun. 26, mar. 27...)
       const displayDate = targetDate.toLocaleDateString('fr-FR', { 
         weekday: 'short', 
         day: 'numeric' 
       });
       
-      // 2️⃣ CHERCHER TOUTES LES FACTURES DE CE JOUR
+      // 2️⃣ CHERCHER TOUTES LES FACTURES DE CE JOUR (IGNORER L'HEURE)
       let dayTotal = 0;
       let dayCount = 0;
       
       invoices.forEach(invoice => {
         if (invoice.date_facture) {
-          // Nettoyer la date de la facture au format YYYY-MM-DD
-          const invoiceDateStr = invoice.date_facture.split('T')[0]; // Enlever l'heure si présente
+          // ✅ CORRECTION : Créer un objet Date et utiliser toLocaleDateString
+          const invoiceDate = new Date(invoice.date_facture);
+          invoiceDate.setHours(0, 0, 0, 0); // Reset à minuit
+          const invoiceDateStr = invoiceDate.toLocaleDateString('fr-FR');
           
-          // Comparaison stricte des dates
+          // Comparaison STRICTE des dates (format français DD/MM/YYYY)
           if (invoiceDateStr === targetDateStr) {
             dayTotal += invoice.montant_ttc || 0;
             dayCount++;
-            console.log(`  ✅ Match trouvé: ${invoice.entreprise} - ${invoice.montant_ttc}€`);
+            console.log(`  ✅ Match trouvé: ${invoice.entreprise} - ${invoice.montant_ttc}€ (${invoiceDateStr})`);
           }
         }
       });
@@ -192,6 +203,7 @@ export default function Dashboard() {
     
     console.log('📊 === DONNÉES FINALES POUR LE GRAPHIQUE ===');
     console.log('Données graphique:', chartData);
+    console.log('✅ Total des 7 jours:', chartData.reduce((sum, day) => sum + day.montant, 0).toFixed(2), '€');
     console.log('✅ === FIN GÉNÉRATION ===');
     
     return chartData;
