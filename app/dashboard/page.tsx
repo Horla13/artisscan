@@ -236,9 +236,16 @@ export default function Dashboard() {
 
   // Export CSV
   const exportToCSV = () => {
-    // Vérifier si l'utilisateur a accès
-    if (!canExportCSV(userTier)) {
-      showToastMessage('Export CSV disponible uniquement en Pro et Business', 'error');
+    // ✅ CORRECTION 2: Dégrisé si Pro ou Business
+    const canExport = userTier === 'pro' || userTier === 'business';
+    
+    if (!canExport) {
+      showToastMessage('📊 Export CSV disponible uniquement en Pro et Business', 'error');
+      return;
+    }
+
+    if (invoices.length === 0) {
+      showToastMessage('❌ Aucune facture à exporter', 'error');
       return;
     }
 
@@ -267,7 +274,7 @@ export default function Dashboard() {
     link.click();
     document.body.removeChild(link);
 
-    showToastMessage('Export CSV réussi !', 'success');
+    showToastMessage('✅ Export CSV réussi !', 'success');
   };
 
   // Compression d'image optimisée
@@ -392,18 +399,56 @@ export default function Dashboard() {
       // Sauvegarder dans Supabase
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (user) {
-        await supabase.from('scans').insert([{
-          user_id: user.id,
-          entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
-          montant_ht: parseFloat(pendingInvoiceData.montant_ht) || 0,
-          montant_ttc: parseFloat(pendingInvoiceData.montant_ttc) || 0,
-          date_facture: pendingInvoiceData.date || new Date().toISOString(),
-          description: pendingInvoiceData.description || '',
-          categorie: pendingInvoiceData.categorie || 'Non classé',
-          nom_chantier: nomChantier || null,
-        }]);
+      if (!user) {
+        showToastMessage('❌ Utilisateur non connecté', 'error');
+        return;
       }
+
+      // Validation des données
+      const montantHT = parseFloat(pendingInvoiceData.montant_ht);
+      const montantTTC = parseFloat(pendingInvoiceData.montant_ttc);
+
+      if (isNaN(montantHT) || montantHT < 0) {
+        showToastMessage('❌ Montant HT invalide', 'error');
+        return;
+      }
+
+      if (isNaN(montantTTC) || montantTTC < 0) {
+        showToastMessage('❌ Montant TTC invalide', 'error');
+        return;
+      }
+
+      // Préparer les données pour l'insertion
+      const invoiceData = {
+        user_id: user.id,
+        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
+        montant_ht: montantHT,
+        montant_ttc: montantTTC, // ✅ CORRECTION 1: S'assurer que TTC est bien envoyé
+        date_facture: pendingInvoiceData.date || new Date().toISOString(),
+        description: pendingInvoiceData.description || '',
+        categorie: pendingInvoiceData.categorie || 'Non classé',
+        nom_chantier: nomChantier || null,
+      };
+
+      console.log('📤 Envoi données à Supabase:', invoiceData);
+
+      const { data, error } = await supabase
+        .from('scans')
+        .insert([invoiceData])
+        .select();
+
+      if (error) {
+        console.error('❌ Erreur Supabase:', error);
+        // ✅ CORRECTION 4: Message d'erreur précis
+        if (error.code === '400' || error.code === 'PGRST116') {
+          showToastMessage(`❌ Erreur 400: ${error.message || 'Données invalides'}. Vérifiez les champs.`, 'error');
+        } else {
+          showToastMessage(`❌ Erreur: ${error.message || 'Erreur base de données'}`, 'error');
+        }
+        return;
+      }
+
+      console.log('✅ Facture enregistrée:', data);
 
       // Fermer la modale
       setShowValidationModal(false);
@@ -417,13 +462,16 @@ export default function Dashboard() {
         navigator.vibrate(200);
       }
 
-      // Recharger les factures et vérifier les limites
+      // ✅ CORRECTION 1: Rafraîchissement immédiat et séquentiel
+      console.log('🔄 Rafraîchissement des données...');
       await loadInvoices();
       await checkSubscriptionLimits();
+      console.log('✅ Données rafraîchies');
 
     } catch (err: any) {
-      console.error('Erreur sauvegarde:', err);
-      showToastMessage('Erreur lors de l\'enregistrement', 'error');
+      console.error('❌ Erreur sauvegarde:', err);
+      // ✅ CORRECTION 4: Message d'erreur détaillé
+      showToastMessage(`❌ Erreur: ${err.message || 'Erreur lors de l\'enregistrement'}`, 'error');
     }
   };
 
@@ -673,8 +721,13 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold text-slate-900">Historique des factures</h2>
               <button
                 onClick={exportToCSV}
-                disabled={invoices.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={invoices.length === 0 || (userTier === 'free')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
+                  invoices.length === 0 || userTier === 'free'
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                }`}
+                title={userTier === 'free' ? 'Export CSV disponible en Pro et Business' : 'Exporter en CSV'}
               >
                 <Download className="w-4 h-4" />
                 Export CSV
@@ -862,15 +915,26 @@ export default function Dashboard() {
               <h3 className="font-semibold text-slate-900 mb-4">Export & Données</h3>
               <button
                 onClick={exportToCSV}
-                disabled={invoices.length === 0 || !canExportCSV(userTier)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={invoices.length === 0 || userTier === 'free'}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors font-medium ${
+                  invoices.length === 0 || userTier === 'free'
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                }`}
+                title={userTier === 'free' ? 'Export CSV disponible en Pro et Business' : 'Exporter en CSV'}
               >
                 <Download className="w-5 h-5" />
                 Exporter toutes les factures (CSV)
               </button>
-              <p className="text-sm text-slate-500 mt-2">
-                Format compatible avec votre comptable
-              </p>
+              {userTier === 'free' ? (
+                <p className="text-sm text-amber-600 mt-2 font-medium">
+                  ⚠️ Export CSV disponible en plan Pro ou Business
+                </p>
+              ) : (
+                <p className="text-sm text-slate-500 mt-2">
+                  Format compatible avec votre comptable
+                </p>
+              )}
           </div>
 
             <div className="card-clean rounded-2xl p-6">
