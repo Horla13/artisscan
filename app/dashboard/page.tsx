@@ -618,7 +618,7 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 pb-24">
         {/* DASHBOARD */}
         {currentView === 'dashboard' && (
           <div className="space-y-6 fade-in">
@@ -631,11 +631,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-slate-500 mb-1">Total HT (Mois)</p>
                     <p className="text-3xl font-bold text-slate-900">
                       {stats.totalHT.toLocaleString('fr-FR', { 
-                        style: 'currency', 
-                        currency: 'EUR',
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                      })}
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })} €
                     </p>
                     <p className="text-xs text-slate-400 mt-2">{stats.nombreFactures} factures</p>
                   </div>
@@ -654,11 +652,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-slate-500 mb-1">TVA récupérable</p>
                     <p className="text-3xl font-bold text-slate-900">
                       {stats.tvaRecuperable.toLocaleString('fr-FR', { 
-                        style: 'currency', 
-                        currency: 'EUR',
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                      })}
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })} €
                     </p>
                     <p className="text-xs text-slate-400 mt-2">TVA 20%</p>
                   </div>
@@ -675,11 +671,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-slate-500 mb-1">Total TTC (Mois)</p>
                     <p className="text-3xl font-bold text-slate-900">
                       {stats.totalTTC.toLocaleString('fr-FR', { 
-                        style: 'currency', 
-                        currency: 'EUR',
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                      })}
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })} €
                     </p>
                     <p className="text-xs text-slate-400 mt-2">Total à payer</p>
                   </div>
@@ -930,31 +924,40 @@ export default function Dashboard() {
                       </button>
                     </div>
 
-                    {/* ✅ CORRECTION 4: Tableau avec colonnes TTC et Description */}
-                    <div className="grid grid-cols-3 gap-4 mb-3 p-3 bg-slate-50 rounded-lg">
+                    {/* ✅ Tableau responsive avec colonnes cachées sur mobile */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-3 p-3 bg-slate-50 rounded-lg">
                       <div>
                         <span className="text-xs text-slate-500 uppercase font-medium block mb-1">Montant HT</span>
                         <span className="font-semibold text-slate-900 text-base">
-                          {invoice.montant_ht.toFixed(2)} €
+                          {invoice.montant_ht.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
                       </span>
                     </div>
-                      <div>
+                      <div className="hidden md:block">
                         <span className="text-xs text-slate-500 uppercase font-medium block mb-1">TVA</span>
                         <span className="font-semibold text-orange-600 text-base">
-                          {(invoice.montant_ttc - invoice.montant_ht).toFixed(2)} €
+                          {(invoice.montant_ttc - invoice.montant_ht).toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
                       </span>
                     </div>
                       <div>
                         <span className="text-xs text-slate-500 uppercase font-medium block mb-1">Montant TTC</span>
-                        <span className="font-semibold text-slate-900 text-base">
-                          {invoice.montant_ttc.toFixed(2)} €
+                        <span className="font-semibold text-slate-900 text-lg md:text-base">
+                          {invoice.montant_ttc.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
                       </span>
                     </div>
                   </div>
 
-                    {/* ✅ CORRECTION 4: Description toujours visible */}
+                    {/* ✅ Description cachée sur mobile pour gagner de l'espace */}
                     {invoice.description && (
-                      <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+                      <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded hidden md:block">
                         <p className="text-xs text-blue-700 font-medium mb-1">DESCRIPTION</p>
                         <p className="text-sm text-slate-700">
                           {invoice.description}
