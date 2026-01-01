@@ -125,51 +125,67 @@ export default function Dashboard() {
     nombreFactures: invoices.length
   };
 
-  // Données pour le graphique des 7 derniers jours (TTC)
+  // Données pour le graphique des 7 derniers jours (TTC) - VERSION SIMPLIFIÉE
   const getLast7DaysData = () => {
-    const last7Days = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Réinitialiser l'heure pour comparer uniquement les jours
+    console.log('🔍 === DÉBUT GÉNÉRATION GRAPHIQUE 7 JOURS ===');
+    console.log('📊 Nombre total de factures chargées:', invoices.length);
     
-    console.log('🔍 Génération données graphique 7 jours');
-    console.log('📅 Aujourd\'hui:', today.toISOString().split('T')[0]);
-    console.log('📊 Nombre total de factures:', invoices.length);
+    // Afficher toutes les factures avec leurs dates
+    console.log('📋 Liste des factures:', invoices.map(inv => ({
+      entreprise: inv.entreprise,
+      date: inv.date_facture,
+      montant_ttc: inv.montant_ttc
+    })));
+    
+    // 1️⃣ CRÉER MANUELLEMENT LE TABLEAU DES 7 DERNIERS JOURS
+    const chartData = [];
+    const today = new Date();
     
     for (let i = 6; i >= 0; i--) {
-      const currentDate = new Date(today);
-      currentDate.setDate(today.getDate() - i);
+      const targetDate = new Date();
+      targetDate.setDate(today.getDate() - i);
       
-      // Filtrer les factures pour ce jour spécifique
-      const dayInvoices = invoices.filter(inv => {
-        if (!inv.date_facture) return false;
-        
-        // Extraire la date de la facture (gérer différents formats)
-        const invoiceDate = new Date(inv.date_facture);
-        invoiceDate.setHours(0, 0, 0, 0);
-        
-        // Comparer uniquement le jour
-        return invoiceDate.getTime() === currentDate.getTime();
-      });
+      // Format YYYY-MM-DD pour comparaison stricte
+      const targetDateStr = targetDate.toISOString().split('T')[0];
       
-      // Calculer le total TTC pour ce jour
-      const totalTTC = dayInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || 0), 0);
-      
-      // Format date français (lun. 26, mar. 27, etc.)
-      const formattedDate = currentDate.toLocaleDateString('fr-FR', { 
+      // Format français pour affichage (lun. 26, mar. 27...)
+      const displayDate = targetDate.toLocaleDateString('fr-FR', { 
         weekday: 'short', 
         day: 'numeric' 
       });
       
-      console.log(`📅 ${formattedDate} (${currentDate.toISOString().split('T')[0]}): ${dayInvoices.length} facture(s), Total: ${totalTTC.toFixed(2)} €`);
+      // 2️⃣ CHERCHER TOUTES LES FACTURES DE CE JOUR
+      let dayTotal = 0;
+      let dayCount = 0;
       
-      last7Days.push({
-        date: formattedDate,
-        montant: totalTTC // Forcé à 0 si aucune facture
+      invoices.forEach(invoice => {
+        if (invoice.date_facture) {
+          // Nettoyer la date de la facture au format YYYY-MM-DD
+          const invoiceDateStr = invoice.date_facture.split('T')[0]; // Enlever l'heure si présente
+          
+          // Comparaison stricte des dates
+          if (invoiceDateStr === targetDateStr) {
+            dayTotal += invoice.montant_ttc || 0;
+            dayCount++;
+            console.log(`  ✅ Match trouvé: ${invoice.entreprise} - ${invoice.montant_ttc}€`);
+          }
+        }
+      });
+      
+      console.log(`📅 ${displayDate} (${targetDateStr}): ${dayCount} facture(s) = ${dayTotal.toFixed(2)}€`);
+      
+      // 3️⃣ AJOUTER AU TABLEAU (0 si pas de facture)
+      chartData.push({
+        date: displayDate,
+        montant: dayTotal
       });
     }
     
-    console.log('✅ Données graphique générées:', last7Days);
-    return last7Days;
+    console.log('📊 === DONNÉES FINALES POUR LE GRAPHIQUE ===');
+    console.log('Données graphique:', chartData);
+    console.log('✅ === FIN GÉNÉRATION ===');
+    
+    return chartData;
   };
 
   // Toast helper
@@ -626,7 +642,11 @@ export default function Dashboard() {
             <div className="card-clean rounded-2xl p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Dépenses TTC des 7 derniers jours</h3>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={getLast7DaysData()}>
+                <BarChart data={(() => {
+                  const chartData = getLast7DaysData();
+                  console.log('🎨 Rendu graphique avec données:', chartData);
+                  return chartData;
+                })()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
                   <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
@@ -642,7 +662,7 @@ export default function Dashboard() {
                       return [`${value.toFixed(2)} €`, 'Montant TTC'];
                     }}
                   />
-                  <Bar dataKey="montant" fill="#f97316" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="montant" fill="#ff6600" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
