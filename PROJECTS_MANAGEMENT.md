@@ -465,6 +465,28 @@ interface ProjectStats {
 
 ---
 
+## 🧭 NOUVELLES OPTIONS MULTI-CHANTIERS
+
+### Filtrer le Dashboard par chantier
+- Un sélecteur est maintenant disponible tout en haut du Dashboard (sous le badge du plan).
+- Il propose « Tous les chantiers » ou chacun des projets créés.
+- Lorsqu’un chantier est sélectionné, **les cartes (HT, TVA, TTC)**, **le graphique 7 jours** et **l’historique** affichent uniquement les dépenses liées à ce chantier.
+- Un bouton “Tout afficher” permet de revenir au total global.
+
+### Section “Gérer mes chantiers” dans les Paramètres
+- Ajoutée juste après la carte d’abonnement dans l’onglet Paramètres.
+- On peut : saisir le nom du chantier, le client et le budget, puis cliquer sur “Créer ce chantier”.
+- Une mini-liste sous le formulaire affiche les chantiers existants avec leur client et budget.
+- La création déclenche `createProject()` et rafraîchit automatiquement la liste dans tout le tableau de bord.
+
+### Dropdown de validation
+- Dans la modale de validation du scan, un menu déroulant “🏗️ Affecter à un projet” liste tous les chantiers en cours.
+- L’ID sélectionné (`project_id`) est envoyé à Supabase lors de l’insertion.
+
+### Réinitialisation
+- Après l’enregistrement d’une facture, la sélection projet est remise à zéro (`selectedProjectId`).
+ 
+
 ## 📚 FICHIERS MODIFIÉS
 
 ### `/app/dashboard/page.tsx`

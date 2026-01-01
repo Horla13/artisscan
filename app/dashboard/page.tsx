@@ -76,6 +76,7 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsStats, setProjectsStats] = useState<ProjectStats[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [projectFilterId, setProjectFilterId] = useState<string>('');
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [newProject, setNewProject] = useState({
     nom: '',
@@ -154,31 +155,37 @@ export default function Dashboard() {
     }
   }, [analyzing]);
 
-  // Stats calculées depuis les factures - SOURCE UNIQUE
+  // Filtrer les factures si un chantier est sélectionné
+  const filteredInvoices = projectFilterId
+    ? invoices.filter((inv) => inv.project_id === projectFilterId)
+    : invoices;
+
+  // Stats calculées depuis les factures filtrées
   const stats = {
-    totalHT: invoices.reduce((sum, inv) => sum + inv.montant_ht, 0),
-    totalTTC: invoices.reduce((sum, inv) => sum + inv.montant_ttc, 0),
-    tvaRecuperable: invoices.reduce((sum, inv) => sum + (inv.montant_ttc - inv.montant_ht), 0),
-    nombreFactures: invoices.length
+    totalHT: filteredInvoices.reduce((sum, inv) => sum + inv.montant_ht, 0),
+    totalTTC: filteredInvoices.reduce((sum, inv) => sum + inv.montant_ttc, 0),
+    tvaRecuperable: filteredInvoices.reduce((sum, inv) => sum + (inv.montant_ttc - inv.montant_ht), 0),
+    nombreFactures: filteredInvoices.length
   };
 
   // Log des stats pour diagnostic
   useEffect(() => {
     console.log('📊 === STATS CALCULÉES ===');
-    console.log('Nombre de factures dans invoices:', invoices.length);
+    console.log('Filtre chantier :', projectFilterId || 'Tous les chantiers');
+    console.log('Nombre de factures filtrées:', filteredInvoices.length);
     console.log('Total HT:', stats.totalHT, '€');
     console.log('Total TTC:', stats.totalTTC, '€');
     console.log('TVA récupérable:', stats.tvaRecuperable, '€');
-  }, [invoices]);
+  }, [filteredInvoices, projectFilterId]);
 
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION CORRIGÉE
   const getLast7DaysData = () => {
     console.log('🔍 === DÉBUT GÉNÉRATION GRAPHIQUE 7 JOURS ===');
-    console.log('📊 Nombre total de factures chargées:', invoices.length);
+    console.log('📊 Nombre total de factures chargées (filtrées):', filteredInvoices.length);
     
     // 🔍 DIAGNOSTIC : Afficher TOUTES les dates de factures
     console.log('📅 === TOUTES LES DATES DE FACTURES DANS LA BASE ===');
-    invoices.forEach((inv, index) => {
+    filteredInvoices.forEach((inv, index) => {
       if (inv.date_facture) {
         const factureDate = new Date(inv.date_facture);
         console.log(`${index + 1}. ${inv.entreprise}: ${inv.date_facture} → ${factureDate.toLocaleDateString('fr-FR')} (${inv.montant_ttc}€)`);
@@ -213,7 +220,7 @@ export default function Dashboard() {
       let dayTotal = 0;
       let dayCount = 0;
       
-      invoices.forEach(invoice => {
+      filteredInvoices.forEach(invoice => {
         if (invoice.date_facture) {
           // ✅ CORRECTION : Créer un objet Date et utiliser toLocaleDateString
           const invoiceDate = new Date(invoice.date_facture);
@@ -424,7 +431,7 @@ export default function Dashboard() {
 
   // Tri des factures
   const getSortedInvoices = () => {
-    const sorted = [...invoices];
+    const sorted = [...filteredInvoices];
     
     switch (sortBy) {
       case 'date':
@@ -690,6 +697,7 @@ export default function Dashboard() {
       // Fermer la modale
       setShowValidationModal(false);
       setPendingInvoiceData(null);
+      setSelectedProjectId('');
 
       // Toast de succès
       showToastMessage('✅ Facture enregistrée !', 'success');
@@ -759,6 +767,34 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium text-slate-500">Afficher les dépenses pour</label>
+            <select
+              value={projectFilterId}
+              onChange={(e) => setProjectFilterId(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white text-sm"
+            >
+              <option value="">Tous les chantiers</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.nom} ({project.client})
+                </option>
+              ))}
+            </select>
+            {projectFilterId && (
+              <button
+                onClick={() => setProjectFilterId('')}
+                className="text-sm text-orange-500 underline underline-offset-4"
+              >
+                Tout afficher
+              </button>
+            )}
+            {projects.length === 0 && (
+              <p className="text-xs text-amber-600">
+                Créez un chantier dans les paramètres pour le filtrer ici.
+              </p>
             )}
           </div>
         </div>
@@ -1285,6 +1321,84 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500">
                   {remainingScans >= 0 ? `${remainingScans} scans restants ce mois` : 'Limite de scans atteinte'}
                 </p>
+          )}
+        </div>
+
+        {/* Gérer mes chantiers */}
+        <div className="card-clean rounded-2xl p-6 border border-slate-100 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Gérer mes chantiers</h3>
+              <p className="text-sm text-slate-500">
+                Créez un chantier, définissez son budget et il sera immédiatement disponible dans toute l'app.
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              {projects.length} chantier{projects.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Nom du chantier *</label>
+              <input
+                type="text"
+                value={newProject.nom}
+                onChange={(e) => setNewProject({ ...newProject, nom: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Ex: Rénovation Paris 15"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Client *</label>
+              <input
+                type="text"
+                value={newProject.client}
+                onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Ex: M. Dupont"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Budget alloué (€) *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={newProject.budget_alloue}
+                onChange={(e) => setNewProject({ ...newProject, budget_alloue: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Ex: 50000.00"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={createProject}
+              disabled={!newProject.nom || !newProject.client || !newProject.budget_alloue}
+              className="flex-1 px-5 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Créer ce chantier
+            </button>
+            <button
+              onClick={() => setNewProject({ nom: '', client: '', budget_alloue: '' })}
+              className="flex-1 px-5 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors"
+            >
+              Réinitialiser
+            </button>
+          </div>
+          {projects.length > 0 && (
+            <div className="pt-4 border-t border-slate-100 grid gap-3">
+              {projects.map((project) => (
+                <div key={project.id} className="flex items-center justify-between gap-3 text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="font-semibold text-slate-900">{project.nom}</p>
+                    <p className="text-xs text-slate-500">Client : {project.client}</p>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-900">
+                    {project.budget_alloue.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
