@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getUserProfile, canUserScan, canExportCSV, hasChantierAccess, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
 
@@ -120,6 +120,7 @@ export default function Dashboard() {
   // Stats calculées depuis les factures
   const stats = {
     totalHT: invoices.reduce((sum, inv) => sum + inv.montant_ht, 0),
+    totalTTC: invoices.reduce((sum, inv) => sum + inv.montant_ttc, 0),
     tvaRecuperable: invoices.reduce((sum, inv) => sum + (inv.montant_ttc - inv.montant_ht), 0),
     nombreFactures: invoices.length
   };
@@ -479,6 +480,7 @@ export default function Dashboard() {
       showToastMessage(`❌ Erreur: ${err.message || 'Erreur lors de l\'enregistrement'}`, 'error');
     }
   };
+  
 
   const triggerFileInput = () => {
     // Vérifier SEULEMENT si on affiche la modale (ne pas bloquer le bouton)
@@ -530,13 +532,14 @@ export default function Dashboard() {
         {/* DASHBOARD */}
         {currentView === 'dashboard' && (
           <div className="space-y-6 fade-in">
-            {/* Stats principales */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Stats principales - 3 cartes */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Carte 1 : Total HT */}
               <div className="card-clean rounded-2xl p-6">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-medium text-slate-500 mb-1">Total HT (Mois)</p>
-                    <p className="text-4xl font-bold text-slate-900">
+                    <p className="text-3xl font-bold text-slate-900">
                       {stats.totalHT.toLocaleString('fr-FR', { 
                         style: 'currency', 
                         currency: 'EUR',
@@ -545,7 +548,7 @@ export default function Dashboard() {
                       })}
                     </p>
                     <p className="text-xs text-slate-400 mt-2">{stats.nombreFactures} factures</p>
-        </div>
+                  </div>
                   <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
                     <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -554,11 +557,12 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Carte 2 : TVA récupérable */}
               <div className="card-clean rounded-2xl p-6">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-medium text-slate-500 mb-1">TVA récupérable</p>
-                    <p className="text-4xl font-bold text-slate-900">
+                    <p className="text-3xl font-bold text-slate-900">
                       {stats.tvaRecuperable.toLocaleString('fr-FR', { 
                         style: 'currency', 
                         currency: 'EUR',
@@ -573,7 +577,28 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-        </div>
+
+              {/* Carte 3 : Total TTC (NOUVELLE) */}
+              <div className="card-clean rounded-2xl p-6 border-l-4 border-emerald-500">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500 mb-1">Total TTC (Mois)</p>
+                    <p className="text-3xl font-bold text-slate-900">
+                      {stats.totalTTC.toLocaleString('fr-FR', { 
+                        style: 'currency', 
+                        currency: 'EUR',
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                      })}
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-2 font-medium">Total à payer</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
+                    <Receipt className="w-6 h-6 text-emerald-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Graphique 7 derniers jours */}
             <div className="card-clean rounded-2xl p-6">
