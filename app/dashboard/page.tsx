@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getUserProfile, canUserScan, canExportCSV, hasChantierAccess, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
 
@@ -16,7 +16,33 @@ interface Invoice {
   description: string;
   categorie?: string;
   nom_chantier?: string;
+  project_id?: string;
   created_at: string;
+}
+
+interface Project {
+  id: string;
+  user_id: string;
+  nom: string;
+  client: string;
+  budget_alloue: number;
+  statut: 'en_cours' | 'termine' | 'annule';
+  date_debut: string;
+  date_fin?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ProjectStats {
+  id: string;
+  nom: string;
+  client: string;
+  budget_alloue: number;
+  budget_consomme: number;
+  budget_restant: number;
+  nombre_factures: number;
+  pourcentage_consomme: number;
+  statut: string;
 }
 
 const LOADING_MESSAGES = [
@@ -45,6 +71,17 @@ export default function Dashboard() {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // États pour la gestion des projets
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsStats, setProjectsStats] = useState<ProjectStats[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [newProject, setNewProject] = useState({
+    nom: '',
+    client: '',
+    budget_alloue: ''
+  });
 
   // États pour la gestion des abonnements
   const [userTier, setUserTier] = useState<SubscriptionTier>('free');
@@ -261,20 +298,128 @@ export default function Dashboard() {
     }
   };
 
+  // Charger les projets depuis Supabase
+  const loadProjects = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        setProjects(data || []);
+      }
+    } catch (err) {
+      console.error('Erreur chargement projets:', err);
+    }
+  };
+
+  // Charger les stats des projets
+  const loadProjectsStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Charger les projets avec leurs stats
+        const { data: projectsData, error: projectsError } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('statut', 'en_cours')
+          .order('created_at', { ascending: false });
+
+        if (projectsError) throw projectsError;
+
+        // Pour chaque projet, calculer les stats
+        const statsPromises = (projectsData || []).map(async (project) => {
+          const { data: scansData, error: scansError } = await supabase
+            .from('scans')
+            .select('montant_ttc')
+            .eq('project_id', project.id);
+
+          if (scansError) throw scansError;
+
+          const budget_consomme = (scansData || []).reduce((sum, scan) => sum + (scan.montant_ttc || 0), 0);
+          const budget_restant = project.budget_alloue - budget_consomme;
+          const pourcentage_consomme = project.budget_alloue > 0 
+            ? (budget_consomme / project.budget_alloue * 100) 
+            : 0;
+
+          return {
+            id: project.id,
+            nom: project.nom,
+            client: project.client,
+            budget_alloue: project.budget_alloue,
+            budget_consomme,
+            budget_restant,
+            nombre_factures: scansData?.length || 0,
+            pourcentage_consomme,
+            statut: project.statut
+          };
+        });
+
+        const stats = await Promise.all(statsPromises);
+        setProjectsStats(stats);
+      }
+    } catch (err) {
+      console.error('Erreur chargement stats projets:', err);
+    }
+  };
+
+  // Créer un nouveau projet
+  const createProject = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const budget = parseFloat(newProject.budget_alloue);
+      if (isNaN(budget) || budget <= 0) {
+        showToastMessage('Budget invalide', 'error');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('projects')
+        .insert({
+          user_id: user.id,
+          nom: newProject.nom,
+          client: newProject.client,
+          budget_alloue: budget
+        });
+
+      if (error) throw error;
+
+      showToastMessage('Projet créé avec succès !', 'success');
+      setShowCreateProjectModal(false);
+      setNewProject({ nom: '', client: '', budget_alloue: '' });
+      await loadProjects();
+      await loadProjectsStats();
+    } catch (err) {
+      console.error('Erreur création projet:', err);
+      showToastMessage('Erreur lors de la création du projet', 'error');
+    }
+  };
+
   // Charger au montage ET changement de vue
   useEffect(() => {
     console.log('🔄 useEffect déclenché - currentView:', currentView);
-    if (currentView === 'historique' || currentView === 'dashboard') {
+    if (currentView === 'historique' || currentView === 'dashboard' || currentView === 'projets') {
       console.log('📥 Chargement des factures depuis Supabase...');
       loadInvoices();
+      loadProjects();
+      loadProjectsStats();
     }
   }, [currentView]);
 
-  // Charger les factures au montage initial
+  // Charger les factures et projets au montage initial
   useEffect(() => {
     console.log('🚀 Montage initial du Dashboard');
-    console.log('📥 Chargement initial des factures...');
+    console.log('📥 Chargement initial des factures et projets...');
     loadInvoices();
+    loadProjects();
+    loadProjectsStats();
   }, []);
 
   // Tri des factures
@@ -514,11 +659,12 @@ export default function Dashboard() {
         user_id: user.id,
         entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         montant_ht: montantHT,
-        montant_ttc: montantTTC, // ✅ CORRECTION 1: S'assurer que TTC est bien envoyé
+        montant_ttc: montantTTC,
         date_facture: pendingInvoiceData.date || new Date().toISOString(),
         description: pendingInvoiceData.description || '',
         categorie: pendingInvoiceData.categorie || 'Non classé',
         nom_chantier: nomChantier || null,
+        project_id: selectedProjectId || null, // ✅ NOUVEAU : Affecter au projet sélectionné
       };
 
       console.log('📤 Envoi données à Supabase:', invoiceData);
@@ -553,9 +699,10 @@ export default function Dashboard() {
         navigator.vibrate(200);
       }
 
-      // ✅ CORRECTION 2: Rafraîchissement immédiat + Reload pour compteur
+      // ✅ Rafraîchissement immédiat + Reload pour compteur
       console.log('🔄 Rafraîchissement des données...');
       await loadInvoices();
+      await loadProjectsStats(); // ✅ Rafraîchir les stats des projets
       await checkSubscriptionLimits();
       console.log('✅ Données rafraîchies');
       
@@ -979,6 +1126,136 @@ export default function Dashboard() {
             </div>
           )}
 
+        {/* PROJETS / CHANTIERS */}
+        {currentView === 'projets' && (
+          <div className="fade-in space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Gestion des Projets</h2>
+              <button
+                onClick={() => setShowCreateProjectModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                Nouveau Projet
+              </button>
+            </div>
+
+            {/* Stats des projets */}
+            {projectsStats.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {projectsStats.map((project) => (
+                  <div key={project.id} className="card-clean rounded-2xl p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-1">{project.nom}</h3>
+                        <p className="text-sm text-slate-500">Client : {project.client}</p>
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        project.statut === 'en_cours' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {project.statut === 'en_cours' ? '🟢 En cours' : 'Terminé'}
+                      </div>
+                    </div>
+
+                    {/* Budget */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-600">Budget alloué</span>
+                        <span className="font-semibold text-slate-900">
+                          {project.budget_alloue.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-600">Budget consommé</span>
+                        <span className="font-semibold text-orange-600">
+                          {project.budget_consomme.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-slate-700">Budget restant</span>
+                        <span className={`font-bold text-lg ${
+                          project.budget_restant < 0 ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          {project.budget_restant.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })} €
+                        </span>
+                      </div>
+
+                      {/* Barre de progression */}
+                      <div className="pt-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs text-slate-500">Consommation</span>
+                          <span className={`text-xs font-semibold ${
+                            project.pourcentage_consomme > 100 ? 'text-red-600' : 
+                            project.pourcentage_consomme > 80 ? 'text-amber-600' : 
+                            'text-green-600'
+                          }`}>
+                            {project.pourcentage_consomme.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              project.pourcentage_consomme > 100 ? 'bg-red-500' : 
+                              project.pourcentage_consomme > 80 ? 'bg-amber-500' : 
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${Math.min(project.pourcentage_consomme, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Nombre de factures */}
+                      <div className="pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-600">Factures associées</span>
+                          <span className="font-medium text-slate-900">{project.nombre_factures}</span>
+                        </div>
+                      </div>
+
+                      {/* Alerte si budget dépassé */}
+                      {project.budget_restant < 0 && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-sm text-red-700 font-medium">
+                            ⚠️ Budget dépassé de {Math.abs(project.budget_restant).toLocaleString('fr-FR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            })} €
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card-clean rounded-2xl p-12 text-center">
+                <FolderKanban className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+                <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucun projet actif</h3>
+                <p className="text-slate-500 mb-6">
+                  Créez votre premier projet pour suivre vos budgets et dépenses par chantier
+                </p>
+                <button
+                  onClick={() => setShowCreateProjectModal(true)}
+                  className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                >
+                  + Créer mon premier projet
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* PARAMÈTRES */}
         {currentView === 'parametres' && (
           <div className="fade-in space-y-4">
@@ -1275,6 +1552,30 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* Sélection du Projet/Chantier */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  🏗️ Affecter à un projet (optionnel)
+                </label>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Aucun projet</option>
+                  {projects.filter(p => p.statut === 'en_cours').map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.nom} ({project.client})
+                    </option>
+                  ))}
+                </select>
+                {projects.filter(p => p.statut === 'en_cours').length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Aucun projet actif. Créez-en un dans l'onglet Projets.
+                  </p>
+                )}
+              </div>
+
               {/* Description */}
               {pendingInvoiceData.description && (
                 <div>
@@ -1343,6 +1644,96 @@ export default function Dashboard() {
             </div>
           )}
 
+      {/* Modale de création de projet */}
+      {showCreateProjectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Créer un nouveau projet</h3>
+              <button
+                onClick={() => {
+                  setShowCreateProjectModal(false);
+                  setNewProject({ nom: '', client: '', budget_alloue: '' });
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Nom du projet */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nom du projet / chantier *
+                </label>
+                <input
+                  type="text"
+                  value={newProject.nom}
+                  onChange={(e) => setNewProject({ ...newProject, nom: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Ex: Rénovation Appartement Paris 15"
+                  required
+                />
+              </div>
+
+              {/* Client */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Client *
+                </label>
+                <input
+                  type="text"
+                  value={newProject.client}
+                  onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Ex: M. Dupont"
+                  required
+                />
+              </div>
+
+              {/* Budget alloué */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Budget alloué (€) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newProject.budget_alloue}
+                  onChange={(e) => setNewProject({ ...newProject, budget_alloue: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Ex: 50000.00"
+                  required
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Le budget total prévu pour ce projet
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateProjectModal(false);
+                  setNewProject({ nom: '', client: '', budget_alloue: '' });
+                }}
+                className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={createProject}
+                disabled={!newProject.nom || !newProject.client || !newProject.budget_alloue}
+                className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Créer le projet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast de confirmation */}
       {showToast && (
         <div className={`toast ${toastType === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
@@ -1391,17 +1782,17 @@ export default function Dashboard() {
               <span className="text-xs font-medium">Historique</span>
             </button>
 
-        <button
-              onClick={() => setCurrentView('parametres')}
+            <button
+              onClick={() => setCurrentView('projets')}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
-                currentView === 'parametres' 
+                currentView === 'projets' 
                   ? 'text-orange-600' 
                   : 'text-slate-400'
               }`}
             >
-              <Settings className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium">Paramètres</span>
-        </button>
+              <FolderKanban className="w-6 h-6 mb-1" />
+              <span className="text-xs font-medium">Projets</span>
+            </button>
       </div>
     </div>
       </nav>
