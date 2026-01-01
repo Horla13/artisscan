@@ -1,12 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { createClient } from '@supabase/supabase-js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Client Supabase pour vérifier les limites
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export async function POST(request: NextRequest) {
   try {
+    // Vérifier les limites d'abonnement côté serveur
+    const authHeader = request.headers.get('authorization');
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (user && !authError) {
+        // Récupérer le profil utilisateur
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('subscription_tier')
+          .eq('id', user.id)
+          .single();
+
+        const tier = profile?.subscription_tier || 'free';
+
+        // Si Free, vérifier la limite de 5 scans
+        if (tier === 'free') {
+          const { count } = await supabase
+            .from('scans')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id);
+
+          if (count && count >= 5) {
+            return NextResponse.json(
+              { error: 'Limite de 5 scans atteinte. Passez au plan Pro pour continuer.' },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    }
+
     // Récupérer le body de la requête
     const body = await request.json();
     const { image, imageBase64 } = body;

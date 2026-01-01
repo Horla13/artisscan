@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { getUserProfile, canUserScan, canExportCSV, hasChantierAccess, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
 
 interface Invoice {
   id: string;
@@ -13,6 +15,7 @@ interface Invoice {
   date_facture: string;
   description: string;
   categorie?: string;
+  nom_chantier?: string;
   created_at: string;
 }
 
@@ -38,7 +41,69 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState<'date' | 'montant' | 'categorie'>('date');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // États pour la gestion des abonnements
+  const [userTier, setUserTier] = useState<SubscriptionTier>('free');
+  const [canScan, setCanScan] = useState(true);
+  const [remainingScans, setRemainingScans] = useState(5);
+  const [nomChantier, setNomChantier] = useState('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // Charger le profil utilisateur et vérifier les limites dès que la session est prête
+  useEffect(() => {
+    const initializeProfile = async () => {
+      setIsLoadingProfile(true);
+      
+      // Attendre que la session soit confirmée
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        await checkSubscriptionLimits();
+      }
+      
+      setIsLoadingProfile(false);
+    };
+
+    initializeProfile();
+
+    // Écouter les changements de session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        checkSubscriptionLimits();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkSubscriptionLimits = async () => {
+    try {
+      const profile = await getUserProfile();
+      if (profile) {
+        setUserTier(profile.subscription_tier);
+      }
+
+      const scanStatus = await canUserScan();
+      // Ne pas bloquer si les données sont undefined
+      setCanScan(scanStatus.canScan !== false); // true par défaut
+      setRemainingScans(scanStatus.remaining >= 0 ? scanStatus.remaining : 5);
+      if (scanStatus.tier) {
+        setUserTier(scanStatus.tier);
+      }
+    } catch (error) {
+      console.error('Erreur checkSubscriptionLimits:', error);
+      // En cas d'erreur, ne JAMAIS bloquer l'utilisateur
+      setCanScan(true);
+      setRemainingScans(5);
+      setUserTier('free');
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
 
   // Rotation des messages de chargement
   useEffect(() => {
@@ -171,6 +236,12 @@ export default function Dashboard() {
 
   // Export CSV
   const exportToCSV = () => {
+    // Vérifier si l'utilisateur a accès
+    if (!canExportCSV(userTier)) {
+      showToastMessage('Export CSV disponible uniquement en Pro et Business', 'error');
+      return;
+    }
+
     const headers = ['Date', 'Libellé', 'Catégorie', 'Montant HT', 'TVA', 'Montant TTC'];
     const rows = invoices.map(inv => [
       new Date(inv.date_facture).toLocaleDateString('fr-FR'),
@@ -219,8 +290,8 @@ export default function Dashboard() {
             if (width > MAX_WIDTH) {
               height *= MAX_WIDTH / width;
               width = MAX_WIDTH;
-            }
-          } else {
+      }
+    } else {
             if (height > MAX_HEIGHT) {
               width *= MAX_HEIGHT / height;
               height = MAX_HEIGHT;
@@ -300,31 +371,9 @@ export default function Dashboard() {
 
       setResult(data);
 
-      // Sauvegarder dans Supabase
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        await supabase.from('scans').insert([{
-          user_id: user.id,
-          entreprise: data.entreprise || 'Non spécifié',
-          montant_ht: data.montant_ht || 0,
-          montant_ttc: data.montant_ttc || 0,
-          date_facture: data.date || new Date().toISOString(),
-          description: data.description || '',
-          categorie: data.categorie || 'Non classé',
-        }]);
-      }
-
-      // Toast de succès
-      showToastMessage('✅ Facture enregistrée !', 'success');
-
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(200);
-      }
-
-      // Recharger les factures
-      await loadInvoices();
+      // NE PAS sauvegarder automatiquement - Ouvrir la modale de validation
+      setPendingInvoiceData(data);
+      setShowValidationModal(true);
 
     } catch (err: any) {
       console.error('Erreur:', err);
@@ -335,7 +384,57 @@ export default function Dashboard() {
     }
   };
 
+  // Nouvelle fonction : Valider et enregistrer la facture
+  const validateAndSaveInvoice = async () => {
+    if (!pendingInvoiceData) return;
+
+    try {
+      // Sauvegarder dans Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        await supabase.from('scans').insert([{
+          user_id: user.id,
+          entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
+          montant_ht: parseFloat(pendingInvoiceData.montant_ht) || 0,
+          montant_ttc: parseFloat(pendingInvoiceData.montant_ttc) || 0,
+          date_facture: pendingInvoiceData.date || new Date().toISOString(),
+          description: pendingInvoiceData.description || '',
+          categorie: pendingInvoiceData.categorie || 'Non classé',
+          nom_chantier: nomChantier || null,
+        }]);
+      }
+
+      // Fermer la modale
+      setShowValidationModal(false);
+      setPendingInvoiceData(null);
+
+      // Toast de succès
+      showToastMessage('✅ Facture enregistrée !', 'success');
+
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(200);
+      }
+
+      // Recharger les factures et vérifier les limites
+      await loadInvoices();
+      await checkSubscriptionLimits();
+
+    } catch (err: any) {
+      console.error('Erreur sauvegarde:', err);
+      showToastMessage('Erreur lors de l\'enregistrement', 'error');
+    }
+  };
+
   const triggerFileInput = () => {
+    // Vérifier SEULEMENT si on affiche la modale (ne pas bloquer le bouton)
+    // La modale s'affiche uniquement si vraiment >= 5 scans
+    if (!isLoadingProfile && userTier === 'free' && remainingScans === 0 && stats.nombreFactures >= 5) {
+      setShowLimitModal(true);
+      return;
+    }
+    // Sinon, toujours permettre le scan
     fileInputRef.current?.click();
   };
 
@@ -344,8 +443,32 @@ export default function Dashboard() {
       {/* Header */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-slate-900">ArtisScan Expert</h1>
-          <p className="text-sm text-slate-500 mt-1">Gestion comptable intelligente</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">ArtisScan Expert</h1>
+              <p className="text-sm text-slate-500 mt-1">Gestion comptable intelligente</p>
+            </div>
+            {/* Badge du plan à droite */}
+            {!isLoadingProfile && (
+              <div>
+                {userTier === 'free' ? (
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 mb-1">
+                      <span className="text-sm font-semibold">Plan Gratuit</span>
+                    </div>
+                    {remainingScans >= 0 && (
+                      <span className="text-xs text-slate-500">{remainingScans}/5 scans restants</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${getTierBadgeColor(userTier)}`}>
+                    <Crown className="w-4 h-4" />
+                    <span className="text-sm font-semibold">Plan {getTierDisplayName(userTier)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -397,7 +520,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+        </div>
 
             {/* Graphique 7 derniers jours */}
             <div className="card-clean rounded-2xl p-6">
@@ -434,21 +557,41 @@ export default function Dashboard() {
                 Prenez une photo ou sélectionnez depuis votre galerie
               </p>
               
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
+              {/* Champ Chantier pour Business */}
+              {hasChantierAccess(userTier) && (
+                <div className="mb-6 max-w-md mx-auto">
+                  <label htmlFor="nomChantier" className="block text-sm font-medium text-slate-700 mb-2 text-left">
+                    Nom du Chantier (optionnel)
+                  </label>
+                  <input
+                    id="nomChantier"
+                    type="text"
+                    value={nomChantier}
+                    onChange={(e) => setNomChantier(e.target.value)}
+                    placeholder="Ex: Rénovation Appartement Paris 15"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-white text-slate-900"
+                  />
+                  <p className="text-xs text-slate-500 mt-2 text-left">
+                    Permet de filtrer et analyser la rentabilité par chantier
+                  </p>
+          </div>
+        )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
                 capture="environment"
                 onChange={handleAnalyze}
-                className="hidden"
-              />
+            className="hidden"
+          />
               
-              <button
+                <button
                 onClick={triggerFileInput}
-                disabled={analyzing}
+                  disabled={analyzing}
                 className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-full font-semibold text-base shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {analyzing ? (
+                >
+                  {analyzing ? (
                   <span className="flex items-center justify-center">
                     <div className="spinner w-5 h-5 mr-3"></div>
                     {loadingMessage}
@@ -458,22 +601,22 @@ export default function Dashboard() {
                     <Camera className="w-5 h-5 mr-2" />
                     Prendre une photo
                   </span>
-                )}
-              </button>
-            </div>
+                  )}
+                </button>
+              </div>
 
             {/* Erreur */}
             {error && (
               <div className="card-clean rounded-xl p-4 border-red-200 bg-red-50">
                 <p className="text-sm text-red-800">{error}</p>
-              </div>
-            )}
+                </div>
+              )}
 
             {/* Résultat */}
             {result && (
               <div className="card-clean rounded-2xl p-6 slide-up">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">✅ Facture analysée</h3>
-                <div className="space-y-3">
+                  <div className="space-y-3">
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-medium text-slate-600">Entreprise</span>
                     <span className="text-sm font-semibold text-slate-900">{result.entreprise || 'N/A'}</span>
@@ -502,7 +645,7 @@ export default function Dashboard() {
                       {result.montant_ttc && result.montant_ht 
                         ? `${(result.montant_ttc - result.montant_ht).toFixed(2)} €` 
                         : 'N/A'}
-                    </span>
+                      </span>
                   </div>
                   {result.date && (
                     <div className="flex justify-between py-2 border-b border-slate-100">
@@ -611,13 +754,13 @@ export default function Dashboard() {
                             <span className="text-slate-500">HT:</span>
                             <span className="font-medium text-slate-900 ml-1">
                               {invoice.montant_ht.toFixed(2)} €
-                            </span>
-                          </div>
+                      </span>
+                    </div>
                           <div>
                             <span className="text-slate-500">TTC:</span>
                             <span className="font-medium text-slate-900 ml-1">
                               {invoice.montant_ttc.toFixed(2)} €
-                            </span>
+                      </span>
                           </div>
                         </div>
                         <p className="text-xs text-slate-400 mt-2">
@@ -632,21 +775,94 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          )}
 
         {/* PARAMÈTRES */}
         {currentView === 'parametres' && (
           <div className="fade-in space-y-4">
             <h2 className="text-xl font-bold text-slate-900 mb-4">Paramètres</h2>
             
+            {/* Informations sur le plan actuel */}
+            <div className="card-clean rounded-2xl p-6">
+              <h3 className="font-semibold text-slate-900 mb-4">Votre Abonnement</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Plan actuel</p>
+                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full ${getTierBadgeColor(userTier)}`}>
+                    <Crown className="w-4 h-4" />
+                    <span className="font-semibold">{getTierDisplayName(userTier)}</span>
+                  </div>
+        </div>
+                {userTier === 'free' && (
+                  <Link
+                    href="/#tarification"
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
+                  >
+                    Passer à Pro
+                  </Link>
+                )}
+              </div>
+              {userTier === 'free' && (
+                <p className="text-sm text-slate-500">
+                  {remainingScans >= 0 ? `${remainingScans} scans restants ce mois` : 'Limite de scans atteinte'}
+                </p>
+              )}
+            </div>
+
+            {/* Simulateur de Test - Mode Développeur */}
+            <div className="card-clean rounded-2xl p-6 border-2 border-amber-200 bg-amber-50">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+                <h3 className="font-semibold text-slate-900">Mode Test (Développeur)</h3>
+              </div>
+              <p className="text-sm text-slate-600 mb-4">
+                Testez les différents plans d'abonnement en simulant un changement de tier
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    await updateSubscriptionTier('free');
+                    await checkSubscriptionLimits();
+                    showToastMessage('Plan changé en FREE', 'success');
+                  }}
+                  className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  FREE
+                </button>
+                <button
+                  onClick={async () => {
+                    await updateSubscriptionTier('pro');
+                    await checkSubscriptionLimits();
+                    showToastMessage('Plan changé en PRO 🎉', 'success');
+                  }}
+                  className="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  PRO
+                </button>
+                <button
+                  onClick={async () => {
+                    await updateSubscriptionTier('business');
+                    await checkSubscriptionLimits();
+                    showToastMessage('Plan changé en BUSINESS 👑', 'success');
+                  }}
+                  className="flex-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  BUSINESS
+                </button>
+              </div>
+              <p className="text-xs text-amber-700 mt-3">
+                ⚠️ Cette section est uniquement pour tester les fonctionnalités. À supprimer en production.
+              </p>
+            </div>
+            
             <div className="card-clean rounded-2xl p-6">
               <h3 className="font-semibold text-slate-900 mb-4">Export & Données</h3>
               <button
                 onClick={exportToCSV}
-                disabled={invoices.length === 0}
+                disabled={invoices.length === 0 || !canExportCSV(userTier)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-5 h-5" />
@@ -655,7 +871,7 @@ export default function Dashboard() {
               <p className="text-sm text-slate-500 mt-2">
                 Format compatible avec votre comptable
               </p>
-            </div>
+          </div>
 
             <div className="card-clean rounded-2xl p-6">
               <h3 className="font-semibold text-slate-900 mb-2">À propos</h3>
@@ -669,6 +885,227 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* Modale de limitation Free */}
+      {showLimitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full slide-up">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-orange-500" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Limite de scans atteinte</h3>
+              <p className="text-slate-600">
+                Vous avez utilisé vos <strong>5 scans gratuits</strong> ce mois.
+              </p>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-6">
+              <h4 className="font-semibold text-slate-900 mb-2">Passez au plan Pro pour :</h4>
+              <ul className="space-y-2 text-sm text-slate-700">
+                <li className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                  <span><strong>Scans illimités</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                  <span>Export CSV illimité</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                  <span>Catégorisation IA automatique</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                  <span>Graphiques & statistiques avancées</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLimitModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/#tarification"
+                className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold text-center"
+              >
+                Passer à Pro
+              </Link>
+            </div>
+                      </div>
+                    </div>
+      )}
+
+      {/* Modale de validation des données scannées */}
+      {showValidationModal && pendingInvoiceData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full slide-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Vérification de la facture</h3>
+              <button
+                onClick={() => {
+                  setShowValidationModal(false);
+                  setPendingInvoiceData(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-600 mb-6">
+              Vérifiez et modifiez les informations si nécessaire avant de valider l'enregistrement.
+            </p>
+
+            <div className="space-y-4">
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Date de la facture
+                </label>
+                <input
+                  type="date"
+                  value={pendingInvoiceData.date ? pendingInvoiceData.date.split('T')[0] : ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    date: e.target.value
+                  })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Nom du fournisseur / Entreprise */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nom du fournisseur
+                </label>
+                <input
+                  type="text"
+                  value={pendingInvoiceData.entreprise || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    entreprise: e.target.value
+                  })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Nom de l'entreprise"
+                />
+              </div>
+
+              {/* Montant HT */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant HT (€)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={pendingInvoiceData.montant_ht || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    montant_ht: e.target.value
+                  })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="0.00"
+                />
+              </div>
+
+              {/* TVA calculée automatiquement */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  TVA (€) - Calculée automatiquement
+                </label>
+                <input
+                  type="text"
+                  value={pendingInvoiceData.montant_ttc && pendingInvoiceData.montant_ht 
+                    ? (parseFloat(pendingInvoiceData.montant_ttc) - parseFloat(pendingInvoiceData.montant_ht)).toFixed(2)
+                    : '0.00'}
+                  readOnly
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-600"
+                />
+              </div>
+
+              {/* Montant TTC */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant TTC (€)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={pendingInvoiceData.montant_ttc || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    montant_ttc: e.target.value
+                  })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="0.00"
+                />
+              </div>
+
+              {/* Catégorie */}
+              {pendingInvoiceData.categorie && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Catégorie
+                  </label>
+                  <input
+                    type="text"
+                    value={pendingInvoiceData.categorie || ''}
+                    onChange={(e) => setPendingInvoiceData({
+                      ...pendingInvoiceData,
+                      categorie: e.target.value
+                    })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="Ex: Matériaux, Carburant..."
+                  />
+                </div>
+              )}
+
+              {/* Description */}
+              {pendingInvoiceData.description && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={pendingInvoiceData.description || ''}
+                    onChange={(e) => setPendingInvoiceData({
+                      ...pendingInvoiceData,
+                      description: e.target.value
+                    })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                    placeholder="Description de la facture..."
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Bouton de validation */}
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <button
+                onClick={validateAndSaveInvoice}
+                className="w-full px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold"
+              >
+                ✓ Valider et Enregistrer
+              </button>
+              <button
+                onClick={() => {
+                  setShowValidationModal(false);
+                  setPendingInvoiceData(null);
+                }}
+                className="w-full mt-2 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modale de confirmation suppression */}
       {showDeleteModal && (
@@ -685,16 +1122,16 @@ export default function Dashboard() {
               >
                 Annuler
               </button>
-              <button
+                      <button
                 onClick={deleteInvoice}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Supprimer
-              </button>
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* Toast de confirmation */}
       {showToast && (
@@ -719,6 +1156,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium">Dashboard</span>
             </button>
 
+            {/* Scanner central plus gros */}
             <button
               onClick={triggerFileInput}
               disabled={analyzing}
@@ -743,7 +1181,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium">Historique</span>
             </button>
 
-            <button
+        <button
               onClick={() => setCurrentView('parametres')}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
                 currentView === 'parametres' 
@@ -753,8 +1191,8 @@ export default function Dashboard() {
             >
               <Settings className="w-6 h-6 mb-1" />
               <span className="text-xs font-medium">Paramètres</span>
-            </button>
-          </div>
+        </button>
+      </div>
         </div>
       </nav>
     </div>
