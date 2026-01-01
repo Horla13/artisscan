@@ -125,7 +125,7 @@ export default function Dashboard() {
     nombreFactures: invoices.length
   };
 
-  // Données pour le graphique des 7 derniers jours
+  // Données pour le graphique des 7 derniers jours (TTC)
   const getLast7DaysData = () => {
     const last7Days = [];
     const today = new Date();
@@ -135,15 +135,17 @@ export default function Dashboard() {
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
       
+      // Filtrer les factures de ce jour
       const dayInvoices = invoices.filter(inv => 
         inv.date_facture.startsWith(dateStr)
       );
       
-      const total = dayInvoices.reduce((sum, inv) => sum + inv.montant_ht, 0);
+      // ✅ CORRECTION : Calculer le total TTC au lieu de HT
+      const totalTTC = dayInvoices.reduce((sum, inv) => sum + inv.montant_ttc, 0);
       
       last7Days.push({
         date: date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }),
-        montant: total
+        montant: totalTTC // Total TTC du jour
       });
     }
     
@@ -578,8 +580,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Carte 3 : Total TTC (NOUVELLE) */}
-              <div className="card-clean rounded-2xl p-6 border-l-4 border-emerald-500">
+              {/* Carte 3 : Total TTC (HARMONISÉE) */}
+              <div className="card-clean rounded-2xl p-6">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-medium text-slate-500 mb-1">Total TTC (Mois)</p>
@@ -591,18 +593,18 @@ export default function Dashboard() {
                         maximumFractionDigits: 0
                       })}
                     </p>
-                    <p className="text-xs text-emerald-600 mt-2 font-medium">Total à payer</p>
+                    <p className="text-xs text-slate-400 mt-2">Total à payer</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
-                    <Receipt className="w-6 h-6 text-emerald-600" />
+                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
+                    <Receipt className="w-6 h-6 text-orange-600" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Graphique 7 derniers jours */}
+            {/* Graphique 7 derniers jours (TTC) */}
             <div className="card-clean rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Dépenses des 7 derniers jours</h3>
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Dépenses TTC des 7 derniers jours</h3>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={getLast7DaysData()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -616,8 +618,8 @@ export default function Dashboard() {
                       fontSize: '14px'
                     }}
                     formatter={(value: number | undefined) => {
-                      if (value === undefined) return ['0.00 €', 'Montant HT'];
-                      return [`${value.toFixed(2)} €`, 'Montant HT'];
+                      if (value === undefined) return ['0.00 €', 'Montant TTC'];
+                      return [`${value.toFixed(2)} €`, 'Montant TTC'];
                     }}
                   />
                   <Bar dataKey="montant" fill="#f97316" radius={[8, 8, 0, 0]} />
