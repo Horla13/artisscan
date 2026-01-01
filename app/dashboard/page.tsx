@@ -129,26 +129,46 @@ export default function Dashboard() {
   const getLast7DaysData = () => {
     const last7Days = [];
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Réinitialiser l'heure pour comparer uniquement les jours
+    
+    console.log('🔍 Génération données graphique 7 jours');
+    console.log('📅 Aujourd\'hui:', today.toISOString().split('T')[0]);
+    console.log('📊 Nombre total de factures:', invoices.length);
     
     for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const currentDate = new Date(today);
+      currentDate.setDate(today.getDate() - i);
       
-      // Filtrer les factures de ce jour
-      const dayInvoices = invoices.filter(inv => 
-        inv.date_facture.startsWith(dateStr)
-      );
+      // Filtrer les factures pour ce jour spécifique
+      const dayInvoices = invoices.filter(inv => {
+        if (!inv.date_facture) return false;
+        
+        // Extraire la date de la facture (gérer différents formats)
+        const invoiceDate = new Date(inv.date_facture);
+        invoiceDate.setHours(0, 0, 0, 0);
+        
+        // Comparer uniquement le jour
+        return invoiceDate.getTime() === currentDate.getTime();
+      });
       
-      // ✅ CORRECTION : Calculer le total TTC au lieu de HT
-      const totalTTC = dayInvoices.reduce((sum, inv) => sum + inv.montant_ttc, 0);
+      // Calculer le total TTC pour ce jour
+      const totalTTC = dayInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || 0), 0);
+      
+      // Format date français (lun. 26, mar. 27, etc.)
+      const formattedDate = currentDate.toLocaleDateString('fr-FR', { 
+        weekday: 'short', 
+        day: 'numeric' 
+      });
+      
+      console.log(`📅 ${formattedDate} (${currentDate.toISOString().split('T')[0]}): ${dayInvoices.length} facture(s), Total: ${totalTTC.toFixed(2)} €`);
       
       last7Days.push({
-        date: date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }),
-        montant: totalTTC // Total TTC du jour
+        date: formattedDate,
+        montant: totalTTC // Forcé à 0 si aucune facture
       });
     }
     
+    console.log('✅ Données graphique générées:', last7Days);
     return last7Days;
   };
 
