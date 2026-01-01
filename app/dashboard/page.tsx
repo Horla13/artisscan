@@ -117,13 +117,22 @@ export default function Dashboard() {
     }
   }, [analyzing]);
 
-  // Stats calculées depuis les factures
+  // Stats calculées depuis les factures - SOURCE UNIQUE
   const stats = {
     totalHT: invoices.reduce((sum, inv) => sum + inv.montant_ht, 0),
     totalTTC: invoices.reduce((sum, inv) => sum + inv.montant_ttc, 0),
     tvaRecuperable: invoices.reduce((sum, inv) => sum + (inv.montant_ttc - inv.montant_ht), 0),
     nombreFactures: invoices.length
   };
+
+  // Log des stats pour diagnostic
+  useEffect(() => {
+    console.log('📊 === STATS CALCULÉES ===');
+    console.log('Nombre de factures dans invoices:', invoices.length);
+    console.log('Total HT:', stats.totalHT, '€');
+    console.log('Total TTC:', stats.totalTTC, '€');
+    console.log('TVA récupérable:', stats.tvaRecuperable, '€');
+  }, [invoices]);
 
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION SIMPLIFIÉE
   const getLast7DaysData = () => {
@@ -196,34 +205,65 @@ export default function Dashboard() {
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  // Charger les factures depuis Supabase
+  // Charger les factures depuis Supabase - SOURCE UNIQUE DE DONNÉES
   const loadInvoices = async () => {
+    console.log('📥 === DÉBUT CHARGEMENT FACTURES SUPABASE ===');
     setLoadingInvoices(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('👤 User ID:', user?.id);
+      
       if (user) {
-      const { data, error } = await supabase
+        console.log('🔍 Requête Supabase: scans WHERE user_id =', user.id);
+        const { data, error } = await supabase
           .from('scans')
-        .select('*')
+          .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Erreur Supabase:', error);
+          throw error;
+        }
+        
+        console.log('✅ Factures reçues de Supabase:', data?.length || 0);
+        console.log('📋 Détail des factures:', data?.map(inv => ({
+          id: inv.id,
+          entreprise: inv.entreprise,
+          date_facture: inv.date_facture,
+          created_at: inv.created_at,
+          montant_ht: inv.montant_ht,
+          montant_ttc: inv.montant_ttc
+        })));
+        
         setInvoices(data || []);
+        console.log('💾 État invoices mis à jour avec', data?.length || 0, 'factures');
+      } else {
+        console.warn('⚠️ Aucun utilisateur connecté');
       }
     } catch (err) {
-      console.error('Erreur chargement factures:', err);
+      console.error('❌ Erreur chargement factures:', err);
     } finally {
       setLoadingInvoices(false);
+      console.log('✅ === FIN CHARGEMENT FACTURES ===');
     }
   };
 
-  // Charger au montage et changement de vue
+  // Charger au montage ET changement de vue
   useEffect(() => {
+    console.log('🔄 useEffect déclenché - currentView:', currentView);
     if (currentView === 'historique' || currentView === 'dashboard') {
+      console.log('📥 Chargement des factures depuis Supabase...');
       loadInvoices();
     }
   }, [currentView]);
+
+  // Charger les factures au montage initial
+  useEffect(() => {
+    console.log('🚀 Montage initial du Dashboard');
+    console.log('📥 Chargement initial des factures...');
+    loadInvoices();
+  }, []);
 
   // Tri des factures
   const getSortedInvoices = () => {
