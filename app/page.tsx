@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle } from 'lucide-react';
+import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle, Star, Check, Users } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -153,6 +153,248 @@ export default function Home() {
                 Export instantané
               </li>
             </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Section Témoignages */}
+      <section className="bg-slate-50 border-y border-slate-100">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 py-20">
+          <div className="text-center mb-16">
+            <h3 className="text-4xl font-bold text-slate-900 mb-4">Ce que disent nos artisans</h3>
+            <p className="text-lg text-slate-600">Des milliers d&apos;artisans nous font confiance au quotidien</p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Témoignage 1 */}
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 hover:shadow-lg transition-shadow">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-5 h-5 fill-orange-500 text-orange-500" />
+                ))}
+              </div>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                &quot;Je passe de 2h à 10 minutes pour ma compta mensuelle. L&apos;export CSV est parfait pour mon comptable, plus aucune saisie manuelle !&quot;
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 font-bold text-lg">JE</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Jean E.</p>
+                  <p className="text-sm text-slate-500">Plombier, Paris</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Témoignage 2 */}
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 hover:shadow-lg transition-shadow">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-5 h-5 fill-orange-500 text-orange-500" />
+                ))}
+              </div>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                &quot;Fini les tickets de caisse perdus ! Je scanne tout directement sur le chantier. La catégorisation automatique est géniale.&quot;
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 font-bold text-lg">ML</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Marc L.</p>
+                  <p className="text-sm text-slate-500">Électricien, Lyon</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Témoignage 3 */}
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 hover:shadow-lg transition-shadow">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-5 h-5 fill-orange-500 text-orange-500" />
+                ))}
+              </div>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                &quot;Une vraie révolution pour ma micro-entreprise. Simple, efficace et mon comptable adore recevoir mes factures déjà triées !&quot;
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 font-bold text-lg">SD</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Sophie D.</p>
+                  <p className="text-sm text-slate-500">Peintre, Marseille</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section Tarification */}
+      <section className="max-w-7xl mx-auto px-6 sm:px-8 py-20">
+        <div className="text-center mb-16">
+          <h3 className="text-4xl font-bold text-slate-900 mb-4">Tarifs simples et transparents</h3>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Choisissez la formule adaptée à votre activité. Sans engagement, résiliable à tout moment.
+          </p>
+        </div>
+        
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Plan Gratuit */}
+          <div className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg transition-shadow">
+            <h4 className="text-xl font-semibold text-slate-900 mb-2">Gratuit</h4>
+            <p className="text-sm text-slate-500 mb-6">Pour découvrir ArtisScan</p>
+            
+            <div className="mb-6">
+              <span className="text-4xl font-bold text-slate-900">0€</span>
+              <span className="text-slate-500">/mois</span>
+            </div>
+
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-600">5 scans par mois</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-600">Analyse IA basique</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-600">Calcul TVA automatique</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-600">Historique 30 jours</span>
+              </li>
+            </ul>
+
+            <Link 
+              href="/login"
+              className="block w-full text-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95"
+            >
+              Commencer
+            </Link>
+          </div>
+
+          {/* Plan Pro (Populaire) */}
+          <div className="bg-white rounded-2xl p-8 border-2 border-orange-500 hover:shadow-xl transition-shadow relative">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+              <span className="bg-orange-500 text-white text-sm font-semibold px-4 py-1 rounded-full">
+                Le plus populaire
+              </span>
+            </div>
+            
+            <h4 className="text-xl font-semibold text-slate-900 mb-2">Pro</h4>
+            <p className="text-sm text-slate-500 mb-6">Pour les artisans actifs</p>
+            
+            <div className="mb-6">
+              <span className="text-4xl font-bold text-slate-900">19€</span>
+              <span className="text-slate-500">/mois</span>
+            </div>
+
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Scans illimités</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Export CSV illimité</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Catégorisation IA automatique</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Historique illimité</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Graphiques & statistiques</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Support prioritaire</span>
+              </li>
+            </ul>
+
+            <Link 
+              href="/login"
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95 shadow-sm"
+            >
+              Essayer gratuitement
+            </Link>
+            <p className="text-xs text-center text-slate-500 mt-3">14 jours d&apos;essai gratuit</p>
+          </div>
+
+          {/* Plan Business */}
+          <div className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg transition-shadow">
+            <h4 className="text-xl font-semibold text-slate-900 mb-2">Business</h4>
+            <p className="text-sm text-slate-500 mb-6">Pour les équipes</p>
+            
+            <div className="mb-6">
+              <span className="text-4xl font-bold text-slate-900">49€</span>
+              <span className="text-slate-500">/mois</span>
+            </div>
+
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Tout du plan Pro</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Users className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Jusqu&apos;à 5 utilisateurs</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Support prioritaire 24/7</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Analyse de rentabilité chantier</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">API d&apos;intégration</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
+                <span className="text-slate-900 font-medium">Gestionnaire de compte dédié</span>
+              </li>
+            </ul>
+
+            <Link 
+              href="/login"
+              className="block w-full text-center bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95"
+            >
+              Nous contacter
+            </Link>
+          </div>
+        </div>
+
+        {/* FAQ Tarifs */}
+        <div className="mt-16 text-center">
+          <p className="text-slate-600 mb-4">
+            Des questions sur nos tarifs ?
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500">
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              Résiliation à tout moment
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              Paiement sécurisé
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              Facturation mensuelle ou annuelle
+            </span>
           </div>
         </div>
       </section>
