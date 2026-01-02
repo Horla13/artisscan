@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
-import { getUserProfile, canUserScan, canExportCSV, hasChantierAccess, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { getUserProfile, canUserScan, canExportCSV, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
 
 interface Invoice {
   id: string;
@@ -19,6 +21,7 @@ interface Invoice {
   nom_chantier?: string;
   project_id?: string;
   created_at: string;
+  moyen_paiement?: string;
 }
 
 interface Project {
@@ -28,7 +31,7 @@ interface Project {
   client: string;
   // @ts-ignore
   budget_alloue: number;
-  status: 'en_cours' | 'termine' | 'annule';
+  status: 'en_cours' | 'termine' | 'annule' | 'archive';
   date_debut: string;
   date_fin?: string;
   created_at: string;
@@ -62,12 +65,105 @@ export default function Dashboard() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [currentView, setCurrentView] = useState('dashboard');
+  const [showArchived, setShowArchived] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'montant_ht' | 'total_amount' | 'categorie'>('date_facture');
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+  const [companySiret, setCompanySiret] = useState('');
+  const [companyProfession, setCompanyProfession] = useState('');
+
+  // Charger les infos de l'entreprise depuis le localStorage au démarrage
+  useEffect(() => {
+    const savedLogo = localStorage.getItem('artisscan_company_logo');
+    const savedName = localStorage.getItem('artisscan_company_name');
+    const savedAddress = localStorage.getItem('artisscan_company_address');
+    const savedSiret = localStorage.getItem('artisscan_company_siret');
+    const savedProfession = localStorage.getItem('artisscan_company_profession');
+    
+    if (savedLogo) setCompanyLogo(savedLogo);
+    if (savedName) setCompanyName(savedName);
+    if (savedAddress) setCompanyAddress(savedAddress);
+    if (savedSiret) setCompanySiret(savedSiret);
+    if (savedProfession) setCompanyProfession(savedProfession);
+  }, []);
+
+  const handleLogout = async () => {
+    if (window.confirm('🔒 Souhaitez-vous vraiment vous déconnecter ?')) {
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        window.location.href = '/'; // Redirection vers l'accueil/login
+      } catch (err: any) {
+        showToastMessage(`Erreur: ${err.message}`, 'error');
+      }
+    }
+  };
+
+  // Helper pour formater les montants avec espaces (pas de /)
+  const formatCurrency = (amount: number): string => {
+    return amount.toLocaleString('fr-FR', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true 
+    }).replace(/\u202F/g, ' ').replace(/\u00A0/g, ' ') + ' €';
+  };
+
+  // Composants Skeleton Loaders
+  const ProjectCardSkeleton = () => (
+    <div className="card-clean rounded-2xl p-6 animate-pulse">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <div className="h-6 bg-slate-200 rounded w-3/4 mb-2"></div>
+          <div className="h-4 bg-slate-100 rounded w-1/2"></div>
+        </div>
+        <div className="h-6 w-20 bg-slate-200 rounded-full"></div>
+      </div>
+      <div className="space-y-4 mt-6">
+        <div className="h-4 bg-slate-200 rounded w-full"></div>
+        <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+        <div className="h-16 bg-slate-100 rounded-lg"></div>
+      </div>
+    </div>
+  );
+
+  const InvoiceCardSkeleton = () => (
+    <div className="card-clean rounded-xl p-4 animate-pulse">
+      <div className="flex items-center justify-between mb-3">
+        <div className="h-5 bg-slate-200 rounded w-1/3"></div>
+        <div className="h-4 w-16 bg-slate-100 rounded-full"></div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 bg-slate-100 rounded w-full"></div>
+        <div className="h-4 bg-slate-100 rounded w-2/3"></div>
+      </div>
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+        <div className="h-6 bg-slate-200 rounded w-24"></div>
+        <div className="h-4 w-12 bg-slate-100 rounded"></div>
+      </div>
+    </div>
+  );
+
+  const StatsCardSkeleton = () => (
+    <div className="card-clean rounded-2xl p-6 animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="h-4 bg-slate-200 rounded w-20 mb-2"></div>
+          <div className="h-8 bg-slate-200 rounded w-32 mb-2"></div>
+          <div className="h-3 bg-slate-100 rounded w-24"></div>
+        </div>
+        <div className="w-12 h-12 rounded-full bg-slate-100"></div>
+      </div>
+    </div>
+  );
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
@@ -77,11 +173,14 @@ export default function Dashboard() {
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // États pour la gestion des projets
+  // États pour la gestion des dossiers
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsStats, setProjectsStats] = useState<ProjectStats[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
-  const [projectFilterId, setProjectFilterId] = useState<string>('');
+  // Multi-sélection mois (Chronologie avancée)
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [showMonthSelector, setShowMonthSelector] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [comptableEmail, setComptableEmail] = useState('');
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [newProject, setNewProject] = useState({
     nom: '',
@@ -91,21 +190,60 @@ export default function Dashboard() {
   });
 
   // États pour la gestion des abonnements
-  const [userTier, setUserTier] = useState<SubscriptionTier>('free');
+  const [userTier, setUserTier] = useState<SubscriptionTier>('pro');
   const [canScan, setCanScan] = useState(true);
-  const [remainingScans, setRemainingScans] = useState(5);
-  const [nomChantier, setNomChantier] = useState('');
+  const [remainingScans, setRemainingScans] = useState(-1);
+  // (Dossiers supprimés : organisation automatique par mois)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  // Fonction pour tout rafraîchir (Données + Projets)
+  // États pour les filtres de l'historique (Bloc 3)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
+
+  // --- Chronologie (Mois/Année) ---
+  const getMonthKey = (raw: string | undefined) => {
+    if (!raw) return '';
+    if (typeof raw === 'string' && /^\d{4}-\d{2}/.test(raw)) return raw.substring(0, 7); // YYYY-MM
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  };
+
+  const getMonthLabel = (monthKey: string) => {
+    // monthKey = YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) return monthKey || 'Mois inconnu';
+    const d = new Date(`${monthKey}-01T00:00:00`);
+    const label = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(d);
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  };
+
+  const availableMonths = useMemo(() => {
+    const keys = invoices
+      .map((inv) => getMonthKey(inv.date_facture || inv.created_at))
+      .filter(Boolean);
+    return Array.from(new Set(keys)).sort((a, b) => b.localeCompare(a));
+  }, [invoices]);
+
+  // Par défaut: sélectionner le mois courant ou le plus récent
+  useEffect(() => {
+    if (selectedMonths.length > 0) return;
+    if (availableMonths.length === 0) return;
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const defaultMonth = availableMonths.includes(currentKey) ? currentKey : availableMonths[0];
+    setSelectedMonths([defaultMonth]);
+  }, [availableMonths, selectedMonths.length]);
+
+  // Fonction pour tout rafraîchir (Données)
   const refreshAllData = async () => {
     console.log('🔄 Rafraîchissement global des données demandé...');
     setLoadingInvoices(true);
     try {
       await Promise.all([
         loadInvoices(),
-        loadProjects(),
-        loadProjectsStats(),
         checkSubscriptionLimits()
       ]);
       showToastMessage('Données actualisées', 'success');
@@ -125,7 +263,11 @@ export default function Dashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
+        setUserEmail(session.user.email || null);
         await checkSubscriptionLimits();
+      } else {
+        // Rediriger vers login si pas de session
+        window.location.href = '/login';
       }
       
       setIsLoadingProfile(false);
@@ -134,9 +276,13 @@ export default function Dashboard() {
     initializeProfile();
 
     // Écouter les changements de session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        setUserEmail(session.user.email || null);
         checkSubscriptionLimits();
+      } else if (event === 'SIGNED_OUT') {
+        setUserEmail(null);
+        window.location.href = '/login';
       }
     });
 
@@ -148,21 +294,31 @@ export default function Dashboard() {
       const profile = await getUserProfile();
       if (profile) {
         setUserTier(profile.subscription_tier);
+        
+        // Rediriger vers checkout si l'abonnement n'est pas actif/trial
+        if (profile.subscription_tier !== 'pro' && 
+            profile.subscription_status !== 'active' && 
+            profile.subscription_status !== 'trialing') {
+          window.location.href = '/#tarification';
+          return;
+        }
+      } else {
+        // Pas de profil = pas d'abonnement
+        window.location.href = '/#tarification';
+        return;
       }
 
       const scanStatus = await canUserScan();
-      // Ne pas bloquer si les données sont undefined
-      setCanScan(scanStatus.canScan !== false); // true par défaut
-      setRemainingScans(scanStatus.remaining >= 0 ? scanStatus.remaining : 5);
+      setCanScan(scanStatus.canScan !== false);
+      setRemainingScans(scanStatus.remaining);
       if (scanStatus.tier) {
         setUserTier(scanStatus.tier);
       }
     } catch (error) {
       console.error('Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur, ne JAMAIS bloquer l'utilisateur
+      // En cas d'erreur de réseau, on laisse passer pour ne pas bloquer l'usage légitime
       setCanScan(true);
-      setRemainingScans(5);
-      setUserTier('free');
+      setUserTier('pro');
     } finally {
       setIsLoadingProfile(false);
     }
@@ -180,10 +336,52 @@ export default function Dashboard() {
     }
   }, [analyzing]);
 
-  // Filtrer les factures si un chantier est sélectionné
-  const filteredInvoices = projectFilterId
-    ? invoices.filter((inv) => inv.project_id === projectFilterId)
-    : invoices;
+  // Filtrer les factures (Chronologie + Recherche + Catégorie)
+  const filteredInvoices = invoices.filter((inv) => {
+    // 1. Filtre temporel multi-mois
+    const invMonthKey = getMonthKey(inv.date_facture || inv.created_at);
+    const matchMonth = selectedMonths.length === 0 || selectedMonths.includes(invMonthKey);
+    
+    // 2. Filtre par catégorie (Dropdown) - Version Robuste & Insensible à la casse
+    const matchCategory = !categoryFilter || (() => {
+      // Normalisation poussée : enlève TOUS les emojis et caractères spéciaux de ponctuation, puis minuscule
+      const normalize = (text: string) => {
+        if (!text) return '';
+        return text
+          .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F000}-\u{1F02B}\u{1F030}-\u{1F093}\u{1F1E6}-\u{1F1FF}\u{1F191}-\u{1F251}\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]/gu, '')
+          .trim()
+          .toLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Enlever les accents
+      };
+      
+      const filterNorm = normalize(categoryFilter);
+      const invCatNorm = normalize(inv.categorie || 'non classe');
+
+      // Si on filtre par "Autre", on montre "Autre" ET les catégories personnalisées
+      if (filterNorm === 'autre') {
+        const standards = ['materiaux', 'carburant', 'restaurant', 'outillage', 'fournitures', 'location', 'sous-traitance'];
+        return invCatNorm === 'autre' || !standards.includes(invCatNorm);
+      }
+
+      return invCatNorm === filterNorm;
+    })();
+    
+    // 3. Filtre par recherche (Barre de recherche)
+    const searchLower = searchQuery.toLowerCase().trim();
+    if (!searchLower) return matchMonth && matchCategory;
+
+    // On cherche dans TOUS les champs textuels pour une flexibilité maximale
+    const searchFields = [
+      inv.entreprise || '',
+      inv.description || '',
+      inv.categorie || '',
+      inv.nom_chantier || ''
+    ].map(f => f.toLowerCase());
+
+    const matchSearch = searchFields.some(field => field.includes(searchLower));
+
+    return matchMonth && matchCategory && matchSearch;
+  });
 
   // Fonction helper pour parser n'importe quel montant en nombre (Bloc 2)
   const parseAmount = (val: any) => {
@@ -194,11 +392,20 @@ export default function Dashboard() {
     return isNaN(num) ? 0 : num;
   };
 
+  // Formatage des montants pour affichage (Espace pour les milliers, signe € à la fin)
+  const formatDisplayAmount = (amount: number | string) => {
+    const num = typeof amount === 'string' ? parseAmount(amount) : amount;
+    return num.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }) + ' €';
+  };
+
   // Stats calculées depuis les factures filtrées
   const stats = {
-    totalHT: filteredInvoices.reduce((sum, inv) => sum + parseAmount(inv.montant_ht), 0),
-    totalTTC: filteredInvoices.reduce((sum, inv) => sum + parseAmount(inv.total_amount), 0),
-    tvaRecuperable: filteredInvoices.reduce((sum, inv) => {
+    totalHT: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.montant_ht), 0),
+    totalTTC: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.total_amount), 0),
+    tvaRecuperable: filteredInvoices.reduce((sum: number, inv: Invoice) => {
       const ttc = parseAmount(inv.total_amount);
       const ht = parseAmount(inv.montant_ht);
       return sum + (ttc - ht);
@@ -209,12 +416,12 @@ export default function Dashboard() {
   // Log des stats pour diagnostic
   useEffect(() => {
     console.log('📊 === STATS CALCULÉES ===');
-    console.log('Filtre chantier :', projectFilterId || 'Tous les chantiers');
+    console.log('Mois sélectionnés:', selectedMonths.length === 0 ? 'Tous' : selectedMonths.join(', '));
     console.log('Nombre de factures filtrées:', filteredInvoices.length);
     console.log('Total HT:', stats.totalHT, '€');
     console.log('Total TTC:', stats.totalTTC, '€');
     console.log('TVA récupérable:', stats.tvaRecuperable, '€');
-  }, [filteredInvoices, projectFilterId]);
+  }, [filteredInvoices, selectedMonths]);
 
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION DYNAMIQUE
   const getLast7DaysData = () => {
@@ -330,6 +537,7 @@ export default function Dashboard() {
 
   // Charger les projets depuis Supabase
   const loadProjects = async () => {
+    setLoadingProjects(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -348,6 +556,8 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.log('💡 Info: Erreur silencieuse chargement projets');
+    } finally {
+      setLoadingProjects(false);
     }
   };
 
@@ -389,7 +599,7 @@ export default function Dashboard() {
 
             // Robustesse maximale pour les calculs
             const invoicesList = scansData || [];
-            const budgetConsomme = invoicesList.reduce((sum, scan) => sum + (Number(scan?.total_amount) || 0), 0);
+            const budgetConsomme = invoicesList.reduce((sum: number, scan: any) => sum + (Number(scan?.total_amount) || 0), 0);
             
             // @ts-ignore
             const budgetAlloue = Number(project?.budget_alloue) || 0;
@@ -425,6 +635,35 @@ export default function Dashboard() {
   };
 
   // Créer un nouveau projet
+  // Archiver/Désarchiver un projet
+  const toggleArchiveProject = async (projectId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'archive' ? 'en_cours' : 'archive';
+    const actionText = newStatus === 'archive' ? 'archiver' : 'restaurer';
+    
+    // Confirmation avant archivage
+    if (window.confirm(`Êtes-vous sûr de vouloir ${actionText} ce projet ?`)) {
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({ status: newStatus })
+          .eq('id', projectId);
+
+        if (error) throw error;
+
+        showToastMessage(
+          newStatus === 'archive' ? '📦 Projet archivé avec succès' : '✅ Projet restauré',
+          'success'
+        );
+        
+        await loadProjects();
+        await loadProjectsStats();
+      } catch (err: any) {
+        console.error('Erreur archivage:', err);
+        showToastMessage(`Erreur: ${err.message}`, 'error');
+      }
+    }
+  };
+
   const createProject = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -465,7 +704,7 @@ export default function Dashboard() {
         throw error;
       }
 
-      showToastMessage('Projet créé avec succès !', 'success');
+      showToastMessage('Dossier créé avec succès !', 'success');
       // @ts-ignore
       setNewProject({ nom: '', client: '', budget_alloue: '' });
       
@@ -475,28 +714,24 @@ export default function Dashboard() {
       }, 1000);
     } catch (err: any) {
       console.error('❌ Erreur CAPTURÉE création projet:', err);
-      showToastMessage(`Erreur lors de la création du projet: ${err.message || 'Erreur inconnue'}`, 'error');
+      showToastMessage(`Erreur lors de la création du dossier: ${err.message || 'Erreur inconnue'}`, 'error');
     }
   };
 
-  // Charger au montage ET changement de vue
+  // Charger au changement de vue (Chronologie)
   useEffect(() => {
     console.log('🔄 useEffect déclenché - currentView:', currentView);
-    if (currentView === 'historique' || currentView === 'dashboard' || currentView === 'projets') {
+    if (currentView === 'historique' || currentView === 'dashboard') {
       console.log('📥 Chargement des factures depuis Supabase...');
       loadInvoices();
-      loadProjects();
-      loadProjectsStats();
     }
   }, [currentView]);
 
-  // Charger les factures et projets au montage initial
+  // Charger les factures au montage initial
   useEffect(() => {
     console.log('🚀 Montage initial du Dashboard');
-    console.log('📥 Chargement initial des factures et projets...');
+    console.log('📥 Chargement initial des factures...');
     loadInvoices();
-    loadProjects();
-    loadProjectsStats();
   }, []);
 
   // Tri des factures
@@ -525,10 +760,11 @@ export default function Dashboard() {
     }
   };
 
-  // Résumé Global (Bloc 2) - Inclut toutes les factures chargées
-  const globalSummary = {
-    budgetTotal: projectsStats.reduce((sum, p) => sum + (Number(p.budget_alloue) || 0), 0),
-    expensesTotal: invoices.reduce((sum, inv) => sum + parseAmount(inv.total_amount), 0),
+  // Résumé Chronologie (mois sélectionné via filtre)
+  const monthSummary = {
+    totalHT: stats.totalHT,
+    totalTTC: stats.totalTTC,
+    tva: stats.tvaRecuperable,
   };
 
   // Confirmer suppression
@@ -602,55 +838,63 @@ export default function Dashboard() {
       await loadProjectsStats();
       await loadInvoices();
       
-      showToastMessage(deleteAll ? 'Projet et factures supprimés !' : 'Projet supprimé (factures conservées) !', 'success');
+      showToastMessage(deleteAll ? 'Dossier et factures supprimés !' : 'Dossier supprimé (factures conservées) !', 'success');
       setShowDeleteProjectModal(false);
       setProjectToDelete(null);
       
-      if (projectFilterId === projectToDelete) {
-        setProjectFilterId('');
-      }
+      // Reset sélection si le projet supprimé était dans les mois affichés
+      setSelectedMonths([]);
     } catch (err) {
       console.error('Erreur suppression projet:', err);
-      showToastMessage('Erreur lors de la suppression du projet', 'error');
+      showToastMessage('Erreur lors de la suppression du dossier', 'error');
     }
   };
 
   // Export CSV
-  const exportToCSV = () => {
-    // ✅ CORRECTION 2: Dégrisé si Pro ou Business
-    const canExport = userTier === 'pro' || userTier === 'business';
+  const exportToCSV = (projectId?: string) => {
+    const canExport = userTier === 'pro';
     
     if (!canExport) {
-      showToastMessage('📊 Export CSV disponible uniquement en Pro et Business', 'error');
+      showToastMessage('📊 Export CSV disponible uniquement en plan PRO', 'error');
       return;
     }
 
-    if (invoices.length === 0) {
+    // Export = ce que l'utilisateur voit (filtre mois + recherche + catégorie)
+    const invoicesToExport = getSortedInvoices();
+
+    if (invoicesToExport.length === 0) {
       showToastMessage('❌ Aucune facture à exporter', 'error');
       return;
     }
 
-    const headers = ['Date Facture', 'Date Scan', 'Libellé', 'Catégorie', 'Montant HT', 'TVA', 'Montant TTC'];
-    const rows = invoices.map(inv => [
-      new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-      new Date(inv.created_at).toLocaleDateString('fr-FR'),
-      inv.entreprise,
-      inv.categorie || 'Non classé',
-      inv.montant_ht.toFixed(2),
-      (inv.total_amount - inv.montant_ht).toFixed(2),
-      inv.total_amount.toFixed(2)
-    ]);
+    const headers = ['Date Facture', 'Mois', 'Fournisseur', 'Catégorie', 'Description', 'Montant HT', 'Montant TVA', 'Montant TTC'];
+    const rows = invoicesToExport.map((inv: Invoice) => {
+      const monthKey = getMonthKey(inv.date_facture || inv.created_at);
+      return [
+        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        monthKey ? getMonthLabel(monthKey) : 'Mois inconnu',
+        `"${inv.entreprise}"`,
+        `"${inv.categorie || 'Non classé'}"`,
+        `"${inv.description || ''}"`,
+        inv.montant_ht.toFixed(2),
+        (inv.total_amount - inv.montant_ht).toFixed(2),
+        inv.total_amount.toFixed(2)
+      ];
+    });
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
+    const csvContent = "\uFEFF" + [
+      headers.join(';'),
+      ...rows.map((row: string[]) => row.join(';'))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `factures_${new Date().toISOString().split('T')[0]}.csv`);
+    const fileName = selectedMonths.length === 1
+      ? `ArtisScan_Export_${getMonthLabel(selectedMonths[0])}.csv`
+      : `ArtisScan_Export_Global_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute('download', fileName);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -659,12 +903,12 @@ export default function Dashboard() {
     showToastMessage('✅ Export CSV réussi !', 'success');
   };
 
-  // Export Excel (.xlsx)
+  // Export Excel (.xlsx) - Version Multi-Mois avec onglets
   const exportToExcel = () => {
-    const canExport = userTier === 'pro' || userTier === 'business';
+    const canExport = userTier === 'pro';
     
     if (!canExport) {
-      showToastMessage('📊 Export Excel disponible uniquement en Pro et Business', 'error');
+      showToastMessage('📊 Export Excel disponible uniquement en plan PRO', 'error');
       return;
     }
 
@@ -674,44 +918,433 @@ export default function Dashboard() {
       return;
     }
 
-    // Préparer les données
-    const data = sortedInvoices.map(inv => {
-      const project = projects.find(p => p.id === inv.project_id);
+    const wb = XLSX.utils.book_new();
+
+    // Fonction helper pour formater les données d'une facture
+    const formatInvoiceData = (inv: Invoice) => {
+      const monthKey = getMonthKey(inv.date_facture || inv.created_at);
+      const ht = parseAmount(inv.montant_ht);
+      const ttc = parseAmount(inv.total_amount);
+      const tvaAmount = ttc - ht;
+      const tvaPercent = ht > 0 ? Math.round((tvaAmount / ht) * 100) : 0;
+      
       return {
         'Date Facture': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-        'Date Transmission': new Date(inv.created_at).toLocaleDateString('fr-FR'),
-        'Nom du Projet': project?.name || 'Sans projet',
-        'Client': project?.client || 'Sans client',
-        'Libellé': inv.entreprise,
+        'Mois': monthKey ? getMonthLabel(monthKey) : 'Mois inconnu',
+        'Fournisseur': inv.entreprise,
         'Catégorie': inv.categorie || 'Non classé',
-        'Montant HT': inv.montant_ht,
-        'TVA': inv.total_amount - inv.montant_ht,
-        'Montant TTC': inv.total_amount
+        'Description': inv.description || '',
+        'Moyen de paiement': inv.moyen_paiement || '-',
+        'Montant HT (€)': ht,
+        'TVA (%)': tvaPercent + '%',
+        'Montant TVA (€)': tvaAmount,
+        'Montant TTC (€)': ttc
+      };
+    };
+
+    // Fonction helper pour ajouter une ligne de TOTAL
+    const addTotalRow = (data: any[]) => {
+      const totalHT = data.reduce((sum: number, row: any) => sum + (parseAmount(row['Montant HT (€)']) || 0), 0);
+      const totalTVA = data.reduce((sum: number, row: any) => sum + (parseAmount(row['Montant TVA (€)']) || 0), 0);
+      const totalTTC = data.reduce((sum: number, row: any) => sum + (parseAmount(row['Montant TTC (€)']) || 0), 0);
+      
+      return [
+        ...data,
+        {
+          'Date Facture': '',
+          'Mois': '',
+          'Fournisseur': '',
+          'Catégorie': '',
+          'Description': '',
+          'Moyen de paiement': '',
+          'Montant HT (€)': 0,
+          'TVA (%)': '',
+          'Montant TVA (€)': 0,
+          'Montant TTC (€)': 0
+        }, // Ligne vide simulée
+        {
+          'Date Facture': 'TOTAL',
+          'Mois': '',
+          'Fournisseur': '',
+          'Catégorie': '',
+          'Description': '',
+          'Moyen de paiement': '',
+          'Montant HT (€)': totalHT,
+          'TVA (%)': '',
+          'Montant TVA (€)': totalTVA,
+          'Montant TTC (€)': totalTTC
+        }
+      ];
+    };
+
+    // Si plusieurs mois sélectionnés : 1 onglet par mois + 1 récapitulatif
+    if (selectedMonths.length > 1) {
+      // Onglet récapitulatif
+      const recapData = selectedMonths.map(mk => {
+        const monthInvoices = sortedInvoices.filter(inv => getMonthKey(inv.date_facture || inv.created_at) === mk);
+        const totalHT = monthInvoices.reduce((sum, inv) => sum + parseAmount(inv.montant_ht), 0);
+        const totalTTC = monthInvoices.reduce((sum, inv) => sum + parseAmount(inv.total_amount), 0);
+        const totalTVA = totalTTC - totalHT;
+        return {
+          'Mois': getMonthLabel(mk),
+          'Factures': monthInvoices.length,
+          'Total HT (€)': totalHT,
+          'Total TVA (€)': totalTVA,
+          'Total TTC (€)': totalTTC
+        };
+      });
+      const wsRecap = XLSX.utils.json_to_sheet(recapData);
+      wsRecap['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, wsRecap, '📊 Récapitulatif');
+
+      // 1 onglet par mois
+      selectedMonths.forEach(mk => {
+        const monthInvoices = sortedInvoices.filter(inv => getMonthKey(inv.date_facture || inv.created_at) === mk);
+        if (monthInvoices.length > 0) {
+          const data = addTotalRow(monthInvoices.map(formatInvoiceData));
+          const ws = XLSX.utils.json_to_sheet(data);
+          ws['!cols'] = [
+            { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, 
+            { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, 
+            { wch: 14 }, { wch: 14 }
+          ];
+          const sheetName = `📅 ${getMonthLabel(mk)}`.substring(0, 31);
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        }
+      });
+    } else {
+      // 1 seul mois ou aucun filtre : export classique
+      const data = addTotalRow(sortedInvoices.map(formatInvoiceData));
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, 
+        { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, 
+        { wch: 14 }, { wch: 14 }
+      ];
+      const sheetName = selectedMonths.length === 1 
+        ? `📅 ${getMonthLabel(selectedMonths[0])}`.substring(0, 31)
+        : 'Toutes les factures';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    // Ajouter les infos de l'entreprise si configurées
+    if (companyName) {
+      wb.Props = {
+        Title: `Bilan ArtisScan - ${companyName}`,
+        Author: companyName,
+        Company: companyName
+      };
+    }
+
+    const fileName = selectedMonths.length > 1
+      ? `ArtisScan_Export_${selectedMonths.length}mois_${new Date().toISOString().split('T')[0]}.xlsx`
+      : `ArtisScan_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    XLSX.writeFile(wb, fileName);
+    showToastMessage('✅ Export Excel Pro réussi !', 'success');
+  };
+
+  // Générer Bilan PDF Global - Version Sublime Finale
+  const generateGlobalPDF = () => {
+    if (userTier !== 'pro') {
+      showToastMessage('📊 Export PDF disponible uniquement en plan PRO', 'error');
+      return;
+    }
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const sortedInvoices = getSortedInvoices();
+    
+    // 1. Logo et En-tête
+    if (companyLogo) {
+      try {
+        doc.addImage(companyLogo, 'PNG', 14, 10, 28, 18);
+      } catch (e) {
+        console.error('Erreur logo PDF Global:', e);
+      }
+    }
+
+    // Infos Entreprise
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    const companyInfoY = companyLogo ? 32 : 15;
+    if (companyName) doc.text(companyName.toUpperCase(), 14, companyInfoY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    let currentY = companyInfoY + 5;
+    if (companyProfession) {
+      doc.text(companyProfession, 14, currentY);
+      currentY += 4;
+    }
+    if (companyAddress) {
+      doc.text(companyAddress, 14, currentY);
+      currentY += 4;
+    }
+    if (companySiret) doc.text(`SIRET: ${companySiret}`, 14, currentY);
+    
+    // Branding ArtisScan
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(249, 115, 22);
+    doc.text('ArtisScan', pageWidth - 14, 20, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text('RÉCAPITULATIF GLOBAL DES DÉPENSES', pageWidth - 14, 25, { align: 'right' });
+
+    doc.setDrawColor(241, 245, 249);
+    doc.line(14, 48, pageWidth - 14, 48);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`RÉCAPITULATIF GLOBAL AU ${new Date().toLocaleDateString('fr-FR')}`, 14, 60);
+
+    // 2. Tableau Global
+    const headers = [['DATE', 'FOURNISSEUR', 'MOIS', 'CATÉGORIE', 'TTC']];
+    const tableData = sortedInvoices.map((inv: Invoice) => {
+      const monthKey = getMonthKey(inv.date_facture || inv.created_at);
+      return [
+        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        inv.entreprise,
+        monthKey ? getMonthLabel(monthKey) : 'Mois inconnu',
+        inv.categorie || 'Non classé',
+        formatPDFCurrency(parseAmount(inv.total_amount))
+      ];
+    });
+
+    const totalTTC = sortedInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.total_amount), 0);
+    tableData.push(['', '', '', 'TOTAL GLOBAL TTC', formatPDFCurrency(totalTTC)]);
+
+    autoTable(doc, {
+      startY: 70,
+      head: [['DATE', 'FOURNISSEUR', 'MOIS', 'CATÉGORIE', 'TTC']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [249, 115, 22], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 8 },
+      footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 22 },
+        4: { halign: 'right', fontStyle: 'bold', cellWidth: 40 }
+      }
+    });
+
+    // Pied de page
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('ArtisScan - Document généré automatiquement. Copie certifiée conforme.', pageWidth / 2, 285, { align: 'center' });
+
+    doc.save(`ArtisScan_Bilan_Global_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToastMessage('✅ PDF Global généré !', 'success');
+  };
+
+  // Générer Bilan PDF par Projet (Bloc 3 - Version Sublime)
+  // Helper pour formater les montants dans le PDF (ex: 7 000,00 € sans slash)
+  const formatPDFCurrency = (amount: number) => {
+    const formatted = amount.toLocaleString('fr-FR', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+    // Remplacer tous les caractères d'espace non-breaking par des espaces normaux
+    return formatted.replace(/\u202F/g, ' ').replace(/\u00A0/g, ' ') + ' €';
+  };
+
+  // Générer Bilan PDF par Projet (Bloc 3 - Version Sublime Finale)
+  const generateProjectPDF = (projectStats: ProjectStats) => {
+    if (userTier !== 'pro') {
+      showToastMessage('📊 Export PDF disponible uniquement en plan PRO', 'error');
+      return;
+    }
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // 1. Logo et En-tête Entreprise
+    if (companyLogo) {
+      try {
+        doc.addImage(companyLogo, 'PNG', 14, 10, 28, 18);
+      } catch (e) {
+        console.error('Erreur logo PDF:', e);
+      }
+    }
+    
+    // Infos Entreprise (Haut Gauche, en dessous du logo pour éviter chevauchement)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    const companyInfoY = companyLogo ? 32 : 15;
+    if (companyName) doc.text(companyName.toUpperCase(), 14, companyInfoY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    let currentY = companyInfoY + 5;
+    if (companyProfession) {
+      doc.text(companyProfession, 14, currentY);
+      currentY += 4;
+    }
+    if (companyAddress) {
+      doc.text(companyAddress, 14, currentY);
+      currentY += 4;
+    }
+    if (companySiret) doc.text(`SIRET: ${companySiret}`, 14, currentY);
+    
+    // Branding ArtisScan (Haut Droite)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(249, 115, 22);
+    doc.text('ArtisScan', pageWidth - 14, 20, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text('EXPERT COMPTABILITÉ UNIVERSEL', pageWidth - 14, 25, { align: 'right' });
+
+    doc.setDrawColor(241, 245, 249);
+    doc.line(14, 48, pageWidth - 14, 48);
+
+    // 2. Titre du Bilan
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`RÉCAPITULATIF DE DÉPENSES : ${projectStats.name.toUpperCase()}`, 14, 60);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`CLIENT : ${projectStats.client.toUpperCase()}`, 14, 68);
+    doc.text(`DATE DU RAPPORT : ${new Date().toLocaleDateString('fr-FR')}`, 14, 74);
+
+    // 3. Bloc RÉSUMÉ FINANCIER
+    const startY = 82;
+    doc.setFillColor(249, 115, 22); // Orange ArtisScan
+    doc.roundedRect(14, startY, pageWidth - 28, 25, 2, 2, 'F');
+    
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('BUDGET ALLOUÉ', 25, startY + 8);
+    doc.text('DÉPENSÉ (TTC)', 85, startY + 8);
+    doc.text('MARGE RESTANTE', 145, startY + 8);
+    
+    doc.setFontSize(13);
+    doc.text(formatPDFCurrency(projectStats.budget_alloue), 25, startY + 18);
+    doc.text(formatPDFCurrency(projectStats.total_expenses || 0), 85, startY + 18);
+    doc.text(formatPDFCurrency(projectStats.budget_restant ?? 0), 145, startY + 18);
+
+    // 4. Tableau des dépenses
+    const projectInvoices = invoices.filter(inv => inv.project_id === projectStats.id)
+      .sort((a, b) => new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime());
+    
+    const tableData = projectInvoices.map((inv: Invoice) => [
+      new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+      inv.entreprise,
+      inv.categorie || 'Non classé',
+      inv.description || '-',
+      formatPDFCurrency(parseAmount(inv.montant_ht)),
+      formatPDFCurrency(parseAmount(inv.total_amount))
+    ]);
+
+    const totalTTC = projectInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.total_amount), 0);
+    tableData.push(['', '', '', 'TOTAL DÉPENSÉ TTC', '', formatPDFCurrency(totalTTC)]);
+
+    autoTable(doc, {
+      startY: startY + 35,
+      head: [['DATE', 'FOURNISSEUR', 'CATÉGORIE', 'DESCRIPTION', 'HT', 'TTC']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [249, 115, 22], 
+        textColor: 255, 
+        fontStyle: 'bold', 
+        halign: 'center',
+        fontSize: 8
+      },
+      footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 20 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 'auto' },
+        3: { cellWidth: 'auto' },
+        4: { halign: 'right', cellWidth: 35 },
+        5: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
+      }
+    });
+
+    // 5. Pied de page
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('ArtisScan Expert - Document généré par le logiciel ArtisScan. Copie certifiée conforme.', pageWidth / 2, 285, { align: 'center' });
+
+    doc.save(`ArtisScan_Bilan_${projectStats.name.replace(/\s+/g, '_')}.pdf`);
+    showToastMessage('✅ Bilan PDF professionnel généré !', 'success');
+  };
+
+  // Nouvelle fonction pour export Excel par projet
+  const exportProjectToExcel = (projectStats: ProjectStats) => {
+    if (userTier !== 'pro') {
+      showToastMessage('📊 Export Excel disponible uniquement en plan PRO', 'error');
+      return;
+    }
+    const projectInvoices = invoices.filter(inv => inv.project_id === projectStats.id);
+    if (projectInvoices.length === 0) {
+      showToastMessage('❌ Aucune facture pour ce projet', 'error');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const data = projectInvoices.map((inv: Invoice) => {
+      const ht = parseAmount(inv.montant_ht);
+      const ttc = parseAmount(inv.total_amount);
+      const tvaAmount = ttc - ht;
+      const tvaPercent = ht > 0 ? Math.round((tvaAmount / ht) * 100) : 0;
+      
+      return {
+        'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        'Fournisseur': inv.entreprise,
+        'Catégorie': inv.categorie || 'Non classé',
+        'Description': inv.description || '',
+        'HT (€)': ht,
+        'TVA (%)': tvaPercent + '%',
+        'Montant TVA (€)': tvaAmount,
+        'TTC (€)': ttc
       };
     });
 
-    // Créer le classeur
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Factures');
-
-    // Formatage des colonnes (Largeur auto)
-    const colWidths = [
-      { wch: 15 }, // Date Facture
-      { wch: 18 }, // Date Transmission
-      { wch: 25 }, // Nom du Projet
-      { wch: 20 }, // Client
-      { wch: 25 }, // Libellé
-      { wch: 15 }, // Catégorie
-      { wch: 12 }, // Montant HT
-      { wch: 10 }, // TVA
-      { wch: 12 }  // Montant TTC
+    // Ajouter ligne total
+    const totalHT = data.reduce((sum: number, row: any) => sum + (row['HT (€)'] || 0), 0);
+    const totalTTC = data.reduce((sum: number, row: any) => sum + (row['TTC (€)'] || 0), 0);
+    const totalTVA = data.reduce((sum: number, row: any) => sum + (row['Montant TVA (€)'] || 0), 0);
+    
+    const finalData = [
+      ...data,
+      {
+        'Date': '',
+        'Fournisseur': '',
+        'Catégorie': '',
+        'Description': '',
+        'HT (€)': 0,
+        'TVA (%)': '',
+        'Montant TVA (€)': 0,
+        'TTC (€)': 0
+      }, // Ligne vide simulée
+      {
+        'Date': 'TOTAL',
+        'Fournisseur': '',
+        'Catégorie': '',
+        'Description': '',
+        'HT (€)': totalHT,
+        'TVA (%)': '',
+        'Montant TVA (€)': totalTVA,
+        'TTC (€)': totalTTC
+      }
     ];
-    ws['!cols'] = colWidths;
 
-    // Générer le fichier et le télécharger
-    XLSX.writeFile(wb, `factures_${new Date().toISOString().split('T')[0]}.xlsx`);
-    showToastMessage('✅ Export Excel réussi !', 'success');
+    const ws = XLSX.utils.json_to_sheet(finalData);
+    ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 35 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Récapitulatif Dépenses');
+    XLSX.writeFile(wb, `ArtisScan_Excel_${projectStats.name.replace(/\s+/g, '_')}.xlsx`);
+    showToastMessage('✅ Excel du dossier généré !', 'success');
   };
 
   // Compression d'image optimisée
@@ -856,6 +1489,10 @@ export default function Dashboard() {
       }
 
       // Préparer les données pour l'insertion
+      const finalCategory = pendingInvoiceData.categorie === '📝 Autre' 
+        ? (customCategory.trim() || '📝 Autre') 
+        : pendingInvoiceData.categorie;
+
       const invoiceData = {
         user_id: user.id,
         entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
@@ -863,9 +1500,10 @@ export default function Dashboard() {
         total_amount: Number(totalAmount) || 0,
         date_facture: pendingInvoiceData.date || new Date().toISOString(),
         description: pendingInvoiceData.description || '',
-        categorie: pendingInvoiceData.categorie || 'Non classé',
-        nom_chantier: nomChantier || null,
-        project_id: selectedProjectId || null,
+        categorie: finalCategory || 'Non classé',
+        nom_chantier: null,
+        project_id: null,
+        moyen_paiement: pendingInvoiceData.moyen_paiement || 'Non spécifié',
       };
 
       console.log('📤 Envoi données à Supabase:', invoiceData);
@@ -891,7 +1529,7 @@ export default function Dashboard() {
       // Fermer la modale
       setShowValidationModal(false);
       setPendingInvoiceData(null);
-      setSelectedProjectId('');
+      setCustomCategory('');
 
       // Toast de succès
       showToastMessage('✅ Facture enregistrée !', 'success');
@@ -904,14 +1542,12 @@ export default function Dashboard() {
       // ✅ Rafraîchissement immédiat + Reload pour compteur
       console.log('🔄 Rafraîchissement des données...');
       await loadInvoices();
-      await loadProjectsStats(); // ✅ Rafraîchir les stats des projets
       await checkSubscriptionLimits();
       console.log('✅ Données rafraîchies');
       
-      // ✅ Force le rechargement complet pour garantir la mise à jour du compteur
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500); // Délai pour voir le toast de succès
+      // ✅ REDIRECTION VERS L'HISTORIQUE (BLOC 4 FINITIONS)
+      setCurrentView('historique');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (err: any) {
       console.error('❌ Erreur sauvegarde:', err);
@@ -933,165 +1569,226 @@ export default function Dashboard() {
   };
 
     return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-40">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">ArtisScan Expert</h1>
-              <p className="text-sm text-slate-500 mt-1">Gestion comptable intelligente</p>
+            <div className="flex items-center gap-3">
+              {/* Logo Graphique ArtisScan - BRANDING VERROUILLÉ */}
+              <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative group transition-transform active:scale-95">
+                <ScanLine className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                <Zap className="w-3.5 h-3.5 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
+              </div>
+              
+              <div className="flex flex-col justify-center">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xl font-normal text-slate-900 tracking-tight leading-none">
+                    <span className="font-black">Artis</span>Scan
+                  </h1>
+                </div>
+                <p className="text-[8px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none">Gestion Intelligente</p>
+              </div>
             </div>
             
             <div className="flex items-center gap-4">
-              {/* Badge du plan */}
+              {/* Badge du plan - PRO Uniquement */}
               {!isLoadingProfile && (
                 <div className="hidden sm:block">
-                  {userTier === 'free' ? (
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 mb-1">
-                        <span className="text-sm font-semibold">Plan Gratuit</span>
-                      </div>
-                      {remainingScans >= 0 && (
-                        <span className="text-xs text-slate-500">{remainingScans}/5 scans restants</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${getTierBadgeColor(userTier)}`}>
-                      <Crown className="w-4 h-4" />
-                      <span className="text-sm font-semibold">Plan {getTierDisplayName(userTier)}</span>
-                    </div>
-                  )}
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
+                    <Crown className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">{getTierDisplayName(userTier)}</span>
+                  </div>
                 </div>
               )}
 
-              {/* Bouton Paramètres (Roue crantée) */}
+              {/* Bouton Paramètres (Engrenage) */}
               <button
                 onClick={() => setCurrentView('parametres')}
-                className={`p-2.5 rounded-xl transition-all ${
+                className={`p-2.5 rounded-xl transition-all border shadow-sm active:scale-95 ${
                   currentView === 'parametres' 
-                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200' 
-                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-orange-600 border border-slate-200'
+                    ? 'bg-orange-500 text-white border-orange-400 shadow-orange-200' 
+                    : 'bg-white text-slate-400 hover:text-slate-600 border-slate-200'
                 }`}
-                title="Paramètres et Mode Test"
+                title="Paramètres"
               >
                 <Settings className={`w-6 h-6 ${currentView === 'parametres' ? 'animate-spin-slow' : ''}`} />
               </button>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium text-slate-500">Afficher les dépenses pour</label>
             <div className="flex items-center gap-2">
-              <select
-                value={projectFilterId}
-                onChange={(e) => setProjectFilterId(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white text-sm"
-              >
-                <option value="">Tous les chantiers</option>
-                {projects?.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name} ({project.client})
-                  </option>
-                ))}
-              </select>
+              <label className="text-sm font-medium text-slate-500">Période(s)</label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowMonthSelector(!showMonthSelector)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white text-sm font-bold shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                >
+                  <Calendar className="w-4 h-4 text-orange-500" />
+                  {selectedMonths.length === 0 
+                    ? 'Tous les mois' 
+                    : selectedMonths.length === 1 
+                      ? getMonthLabel(selectedMonths[0])
+                      : `${selectedMonths.length} mois sélectionnés`}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showMonthSelector ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown multi-sélection */}
+                {showMonthSelector && (
+                  <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-80 overflow-y-auto">
+                    <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Sélection de mois</span>
+                      <button
+                        onClick={() => setShowMonthSelector(false)}
+                        className="p-1 hover:bg-slate-100 rounded transition-colors"
+                      >
+                        <X className="w-4 h-4 text-slate-400" />
+                      </button>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {/* Option "Tous" */}
+                      <label className="flex items-center gap-3 p-2 hover:bg-orange-50 rounded-lg cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={selectedMonths.length === 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMonths([]);
+                            }
+                          }}
+                          className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500"
+                        />
+                        <span className="text-sm font-bold text-slate-700">Tous les mois</span>
+                      </label>
+                      <div className="h-px bg-slate-100 my-2"></div>
+                      {/* Liste des mois */}
+                      {availableMonths.map((monthKey) => (
+                        <label
+                          key={monthKey}
+                          className="flex items-center gap-3 p-2 hover:bg-orange-50 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedMonths.includes(monthKey)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedMonths([...selectedMonths, monthKey]);
+                              } else {
+                                setSelectedMonths(selectedMonths.filter(m => m !== monthKey));
+                              }
+                            }}
+                            className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500"
+                          />
+                          <span className="text-sm font-medium text-slate-700">{getMonthLabel(monthKey)}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="p-3 border-t border-slate-100 flex gap-2">
+                      <button
+                        onClick={() => setSelectedMonths([])}
+                        className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                      >
+                        Réinitialiser
+                      </button>
+                      <button
+                        onClick={() => setShowMonthSelector(false)}
+                        className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
+                      >
+                        Appliquer
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button 
                 onClick={refreshAllData}
                 disabled={loadingInvoices}
-                className="p-2 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 hover:text-orange-600 transition-all disabled:opacity-50"
+                className="p-2 bg-white border border-slate-200 text-slate-400 rounded-lg hover:bg-slate-50 hover:text-orange-600 transition-all disabled:opacity-50 shadow-sm active:scale-95"
                 title="Forcer le rafraîchissement Supabase"
               >
                 <Clock className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
               </button>
             </div>
-            {projectFilterId && (
+            {selectedMonths.length > 0 && (
               <button
-                onClick={() => setProjectFilterId('')}
-                className="text-sm text-orange-500 underline underline-offset-4"
+                onClick={() => setSelectedMonths([])}
+                className="text-sm text-orange-500 underline underline-offset-4 font-medium"
               >
                 Tout afficher
               </button>
-            )}
-            {(!projects || projects?.length === 0) && (
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-slate-500">Aucun chantier créé.</p>
-                <button
-                  onClick={() => setCurrentView('parametres')}
-                  className="text-xs text-orange-600 font-semibold hover:underline"
-                >
-                  + Créer mon premier chantier
-                </button>
-              </div>
             )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6 pb-24">
+      <main className="max-w-7xl mx-auto px-4 py-6 pb-28">
+        <div className="space-y-6">
         {/* DASHBOARD */}
         {currentView === 'dashboard' && (
           <div className="space-y-6 fade-in">
-            {/* Résumé Global (Bloc 2) - Gris Anthracite Élégant */}
-            <div className="bg-[#1a1c2e] rounded-3xl p-6 text-white overflow-hidden relative border border-slate-800 shadow-xl">
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <TrendingUp className="w-32 h-32 rotate-12" />
+            {/* Résumé Chronologie (mois sélectionné) - DESIGN CLAIR MODERNE */}
+            <div className="bg-white rounded-3xl p-6 text-slate-900 overflow-hidden relative border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
+                <TrendingUp className="w-32 h-32 rotate-12 text-slate-900" />
               </div>
               <div className="relative z-10">
-                <h3 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Vue d'ensemble des chantiers</h3>
+                <h3 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-4">Vue d'ensemble de l'activité</h3>
                 <div className="grid grid-cols-2 gap-8">
                   <div>
-                    <p className="text-3xl font-black mb-1">
-                      {globalSummary.budgetTotal.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
+                    <p className="text-3xl font-black mb-1 text-slate-900">
+                      {monthSummary.totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
                     </p>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Budget Total Engagé</p>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Total HT (mois)</p>
                   </div>
                   <div>
-                    <p className={`text-3xl font-black mb-1 ${globalSummary.expensesTotal > globalSummary.budgetTotal ? 'text-red-400 animate-pulse' : 'text-orange-400'}`}>
-                      {globalSummary.expensesTotal.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
+                    <p className="text-3xl font-black mb-1 text-orange-500">
+                      {monthSummary.totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
                     </p>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Dépenses Totales Réelles</p>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Total TTC (mois)</p>
                   </div>
                 </div>
-                {globalSummary.budgetTotal > 0 && (
-                  <div className="mt-6">
-                    <div className="flex justify-between text-[10px] font-bold uppercase mb-2">
-                      <span className="text-slate-400">Consommation globale</span>
-                      <span className={globalSummary.expensesTotal > globalSummary.budgetTotal ? 'text-red-400' : 'text-orange-400'}>
-                        {((globalSummary.expensesTotal / globalSummary.budgetTotal) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-1000 ${
-                          (globalSummary.expensesTotal / globalSummary.budgetTotal) >= 1 ? 'bg-red-500' : 
-                          (globalSummary.expensesTotal / globalSummary.budgetTotal) >= 0.9 ? 'bg-orange-500' : 
-                          'bg-green-500'
-                        }`}
-                        style={{ width: `${Math.min((globalSummary.expensesTotal / globalSummary.budgetTotal) * 100, 100)}%` }}
-                      />
-                    </div>
+                <div className="mt-6">
+                  <div className="flex justify-between text-[10px] font-bold uppercase mb-2">
+                    <span className="text-slate-500">TVA récupérable (mois)</span>
+                    <span className="text-orange-500 font-black">
+                      {monthSummary.tva.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
+                    </span>
                   </div>
-                )}
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 shadow-inner">
+                    <div
+                      className="h-full bg-orange-500 transition-all duration-700"
+                      style={{ width: `${Math.min((monthSummary.totalTTC > 0 ? (monthSummary.tva / monthSummary.totalTTC) : 0) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Stats principales - 3 cartes */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {loadingInvoices ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StatsCardSkeleton />
+                <StatsCardSkeleton />
+                <StatsCardSkeleton />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Carte 1 : Total HT */}
-              <div className="card-clean rounded-2xl p-6">
+              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500 mb-1">Total HT</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                    <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Total HT</p>
+                    <p className="text-3xl font-black text-slate-900">
                       {stats.totalHT.toLocaleString('fr-FR', { 
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                       })} €
                     </p>
-                    <p className="text-xs text-slate-400 mt-2">{stats.nombreFactures} factures</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">{stats.nombreFactures} docs</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#ff6600">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -1100,48 +1797,49 @@ export default function Dashboard() {
               </div>
 
               {/* Carte 2 : TVA récupérable */}
-              <div className="card-clean rounded-2xl p-6">
+              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500 mb-1">TVA récupérable</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                    <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">TVA récupérable</p>
+                    <p className="text-3xl font-black text-slate-900">
                       {stats.tvaRecuperable.toLocaleString('fr-FR', { 
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                       })} €
                     </p>
-                    <p className="text-xs text-slate-400 mt-2">TVA cumulée</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">TVA cumulée</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6" style={{ color: '#ff6600' }} />
+                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
+                    <TrendingUp className="w-6 h-6 text-orange-500" />
                   </div>
                 </div>
               </div>
 
-              {/* Carte 3 : Total TTC (HARMONISÉE) */}
-              <div className="card-clean rounded-2xl p-6">
+              {/* Carte 3 : Total TTC */}
+              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500 mb-1">Total TTC</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                    <p className="text-[10px] font-black text-orange-500 mb-1 uppercase tracking-widest">Total TTC</p>
+                    <p className="text-3xl font-black text-slate-900">
                       {stats.totalTTC.toLocaleString('fr-FR', { 
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                       })} €
                     </p>
-                    <p className="text-xs text-slate-400 mt-2">Total à payer</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">Total à payer</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
-                    <Receipt className="w-6 h-6" style={{ color: '#ff6600' }} />
+                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
+                    <Receipt className="w-6 h-6 text-orange-500" />
                   </div>
                 </div>
               </div>
             </div>
+            )}
 
             {/* Graphique 7 derniers jours (TTC) */}
-            <div className="card-clean rounded-2xl p-6 relative">
+            <div className="card-clean rounded-3xl p-6 relative bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Dépenses TTC des 7 derniers jours</h3>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dépenses des 7 derniers jours</h3>
                 {chartData.every(d => d.montant === 0) && (
                   <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-full font-bold uppercase tracking-wider">
                     Aucune dépense cette semaine
@@ -1179,58 +1877,31 @@ export default function Dashboard() {
             </div>
 
             {/* Section Scanner */}
-            <div className="card-clean rounded-2xl p-8 text-center">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-50 flex items-center justify-center">
-                <ScanLine className="w-10 h-10 text-slate-400" />
+            <div className="card-clean rounded-3xl p-8 text-center bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
+                <ScanLine className="w-10 h-10 text-orange-500" />
               </div>
-              <h2 className="text-lg font-semibold text-slate-900 mb-2">Scanner une facture</h2>
+              <h2 className="text-xl font-black text-slate-900 mb-2">Nouvelle Facture</h2>
               <p className="text-sm text-slate-500 mb-6">
-                Prenez une photo ou sélectionnez depuis votre galerie
+                Scannez vos documents pour une analyse IA instantanée
               </p>
               
-              {/* Champ Chantier pour Business */}
-              {hasChantierAccess(userTier) && (
-                <div className="mb-6 max-w-md mx-auto">
-                  <label htmlFor="nomChantier" className="block text-sm font-medium text-slate-700 mb-2 text-left">
-                    Nom du Chantier (optionnel)
-                  </label>
-                  <input
-                    id="nomChantier"
-                    type="text"
-                    value={nomChantier}
-                    onChange={(e) => setNomChantier(e.target.value)}
-                    placeholder="Ex: Rénovation Appartement Paris 15"
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-white text-slate-900"
-                  />
-                  <p className="text-xs text-slate-500 mt-2 text-left">
-                    Permet de filtrer et analyser la rentabilité par chantier
-                  </p>
-          </div>
-        )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-                capture="environment"
-                onChange={handleAnalyze}
-            className="hidden"
-          />
+              {/* (Suppression des dossiers : classement automatique par mois) */}
 
           <button
                 onClick={triggerFileInput}
                   disabled={analyzing}
-                className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-full font-semibold text-base shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all active:scale-95"
                 >
                   {analyzing ? (
                   <span className="flex items-center justify-center">
-                    <div className="spinner w-5 h-5 mr-3"></div>
+                    <div className="spinner w-5 h-5 mr-3 border-white/30 border-t-white"></div>
                     {loadingMessage}
                   </span>
                 ) : (
-                  <span className="flex items-center justify-center">
-                    <Camera className="w-5 h-5 mr-2" />
-                    Prendre une photo
+                  <span className="flex items-center justify-center gap-2">
+                    <Camera className="w-6 h-6" />
+                    NUMÉRISER MAINTENANT
                   </span>
                   )}
           </button>
@@ -1253,26 +1924,28 @@ export default function Dashboard() {
                     <span className="text-sm font-semibold text-slate-900">{result.entreprise || 'N/A'}</span>
                   </div>
                   {result.categorie && (
-                    <div className="flex justify-between py-2 border-b border-slate-100">
+                    <div className="flex justify-between py-2 border-b border-slate-100 items-center">
                       <span className="text-sm font-medium text-slate-600">Catégorie</span>
-                      <span className="text-sm font-semibold text-orange-600">{result.categorie}</span>
+                      <span className="px-2 py-1 text-xs font-bold bg-orange-50 text-orange-700 rounded-lg border border-orange-100">
+                        {result.categorie}
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between py-2 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-600">Montant HT</span>
-                    <span className="text-sm font-semibold text-slate-900">
+                    <span className="text-sm font-bold text-slate-600">Montant HT</span>
+                    <span className="text-sm font-black text-slate-900">
                       {result.montant_ht ? `${result.montant_ht.toFixed(2)} €` : 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-600">Montant TTC</span>
-                    <span className="text-sm font-semibold text-slate-900">
+                    <span className="text-sm font-bold text-slate-600">Montant TTC</span>
+                    <span className="text-sm font-black text-slate-900">
                       {result.total_amount ? `${result.total_amount.toFixed(2)} €` : 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-600">TVA</span>
-                    <span className="text-sm font-semibold text-orange-600">
+                    <span className="text-sm font-bold text-slate-600">TVA</span>
+                    <span className="text-sm font-black text-orange-500">
                       {result.total_amount && result.montant_ht 
                         ? `${(result.total_amount - result.montant_ht).toFixed(2)} €` 
                         : 'N/A'}
@@ -1299,40 +1972,102 @@ export default function Dashboard() {
         {/* HISTORIQUE */}
         {currentView === 'historique' && (
           <div className="fade-in space-y-4">
-            {/* Header avec export et tri */}
+            {/* Header avec action */}
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Historique des factures</h2>
-              <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historique</h2>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={exportToCSV}
-                  disabled={invoices.length === 0 || (userTier === 'free')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium text-sm ${
-                    invoices.length === 0 || userTier === 'free'
+                  onClick={() => exportToCSV()}
+                  disabled={invoices.length === 0}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
+                    invoices.length === 0
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
                   }`}
-                  title={userTier === 'free' ? 'Export CSV disponible en Pro et Business' : 'Exporter en CSV'}
+                  title="Exporter en CSV"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   CSV
                 </button>
                 <button
                   onClick={exportToExcel}
-                  disabled={invoices.length === 0 || (userTier === 'free')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium text-sm ${
-                    invoices.length === 0 || userTier === 'free'
+                  disabled={invoices.length === 0}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
+                    invoices.length === 0
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
                   }`}
-                  title={userTier === 'free' ? 'Export Excel disponible en Pro et Business' : 'Exporter en Excel'}
+                  title="Exporter en Excel"
                 >
-                  <Download className="w-4 h-4" />
-                  Excel
+                  <Download className="w-3.5 h-3.5" />
+                  Excel Pro
+                </button>
+                <button
+                  onClick={generateGlobalPDF}
+                  disabled={invoices.length === 0}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
+                    invoices.length === 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-orange-600 text-white hover:bg-orange-700 shadow-sm'
+                  }`}
+                  title="Générer PDF Global"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  PDF Global
                 </button>
               </div>
             </div>
+
+            {/* Barre de Recherche et Filtres (Bloc 3) */}
+            <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              {/* Recherche */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Rechercher une facture (nom, description, catégorie...)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-base sm:text-sm"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <X className="h-5 w-5 text-slate-400 hover:text-slate-600" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtres Dropdowns */}
+              <div className="grid grid-cols-1 gap-3">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-medium transition-all"
+                  >
+                    <option value="">Toutes les catégories</option>
+                    <option value="🧱 Matériaux">🧱 Matériaux</option>
+                    <option value="⛽ Carburant">⛽ Carburant</option>
+                    <option value="🍴 Restaurant">🍴 Restaurant</option>
+                    <option value="🛠️ Outillage">🛠️ Outillage</option>
+                    <option value="📦 Fournitures">📦 Fournitures</option>
+                    <option value="🚚 Location">🚚 Location</option>
+                    <option value="🤝 Sous-traitance">🤝 Sous-traitance</option>
+                    <option value="📝 Autre">📝 Autre</option>
+                  </select>
+                </div>
+              </div>
+            </div>
               
-            {/* Filtres de tri améliorés */}
+            {/* Filtres de tri */}
             <div className="flex flex-wrap gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-slate-400" />
@@ -1366,271 +2101,136 @@ export default function Dashboard() {
 
               <button
                 onClick={() => setSortBy('categorie')}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                className={`hidden md:block px-4 py-1.5 rounded-lg text-sm font-bold transition-all border ${
                   sortBy === 'categorie' 
                     ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200' 
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                📁 Par Catégorie
+                📂 Par Catégorie
               </button>
             </div>
 
             {loadingInvoices ? (
-              <div className="card-clean rounded-2xl p-8 text-center">
-                <div className="spinner w-8 h-8 mx-auto"></div>
-                <p className="text-slate-500 mt-4">Chargement...</p>
+              <div className="space-y-3">
+                <InvoiceCardSkeleton />
+                <InvoiceCardSkeleton />
+                <InvoiceCardSkeleton />
+                <InvoiceCardSkeleton />
+              </div>
+            ) : filteredInvoices.length === 0 ? (
+              <div className="card-clean rounded-2xl p-8 text-center bg-white border-dashed border-2 border-slate-200">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <X className="w-8 h-8 text-slate-300" />
                 </div>
-            ) : invoices.length === 0 ? (
-              <div className="card-clean rounded-2xl p-8 text-center">
-                <Clock className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucune facture</h3>
-                <p className="text-slate-500">Vos factures scannées apparaîtront ici</p>
-              </div>
-            ) : (
-                  <div className="space-y-3">
-                {getSortedInvoices().map((invoice) => (
-                  <div key={invoice.id} className="card-clean rounded-xl p-5 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-semibold text-slate-900 text-lg">{invoice.entreprise}</h4>
-                          {invoice.categorie && (
-                            <span className="inline-block px-2 py-1 text-xs font-medium bg-orange-50 text-orange-700 rounded">
-                              {invoice.categorie}
-                      </span>
-                          )}
-                    </div>
-                        <div className="flex flex-col gap-1">
-                          <p className="text-xs font-semibold text-slate-600">
-                            Facture du : {new Date(invoice.date_facture).toLocaleDateString('fr-FR')}
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            Transmise le : {new Date(invoice.created_at).toLocaleDateString('fr-FR')} à {new Date(invoice.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                    </div>
-                      <button
-                        onClick={() => confirmDelete(invoice.id)}
-                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </button>
-                    </div>
-
-                    {/* ✅ Affichage HT et TTC côte à côte */}
-                    <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-3">
-                      <div className="flex-1">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-0.5">Montant HT</span>
-                        <span className="font-bold text-slate-700">
-                          {(invoice.montant_ht || 0).toLocaleString('fr-FR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          })} €
-                        </span>
-                      </div>
-                      
-                      <div className="w-px h-8 bg-slate-200"></div>
-
-                      <div className="flex-1">
-                        <span className="text-[10px] text-orange-400 uppercase font-bold tracking-wider block mb-0.5">Montant TTC</span>
-                        <span className="font-black text-slate-900 text-lg">
-                          {(invoice.total_amount || 0).toLocaleString('fr-FR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          })} €
-                        </span>
-                      </div>
-
-                      <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-0.5">TVA Récupérée</span>
-                        <span className="font-semibold text-orange-600 italic">
-                          {((invoice.total_amount || 0) - (invoice.montant_ht || 0)).toLocaleString('fr-FR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          })} €
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* ✅ Description cachée sur mobile pour gagner de l'espace */}
-                    {invoice.description && (
-                      <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded hidden md:block">
-                        <p className="text-xs text-blue-700 font-medium mb-1">DESCRIPTION</p>
-                        <p className="text-sm text-slate-700">
-                          {invoice.description}
-                        </p>
-                </div>
-              )}
-
-                    {/* Nom du chantier si présent */}
-                    {invoice.nom_chantier && (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                        <span className="font-medium">Chantier:</span>
-                        <span>{invoice.nom_chantier}</span>
-            </div>
-          )}
-        </div>
-                ))}
-              </div>
-            )}
-            </div>
-          )}
-
-        {/* PROJETS / CHANTIERS */}
-        {currentView === 'projets' && (
-          <div className="fade-in space-y-6">
-            {(() => {
-              console.log('🔍 Rendu de la vue Projets - Nb stats:', projectsStats?.length);
-              return null;
-            })()}
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Gestion des Projets</h2>
-              <button
-                onClick={() => setShowCreateProjectModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Nouveau Projet
-              </button>
-            </div>
-
-            {/* Stats des projets */}
-            {(projectsStats?.length ?? 0) > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {projectsStats?.map((project) => (
-                  <div 
-                    key={project.id} 
-                    className={`card-clean rounded-2xl p-6 cursor-pointer transition-all hover:border-orange-300 hover:shadow-md ${
-                      projectFilterId === project.id ? 'border-orange-500 ring-2 ring-orange-500/10' : ''
-                    }`}
-                    onClick={() => {
-                      setProjectFilterId(project.id === projectFilterId ? '' : project.id);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                      showToastMessage(
-                        project.id === projectFilterId ? 'Affichage de tous les chantiers' : `Filtrage sur : ${project.name}`, 
-                        'success'
-                      );
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-slate-900 mb-1">{project.name}</h3>
-                        <p className="text-sm text-slate-500">Client : {project.client}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          project.status === 'en_cours' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {project.status === 'en_cours' ? '🟢 En cours' : 'Terminé'}
-                        </div>
-                        <button
-                          onClick={(e) => confirmDeleteProject(e, project.id)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
-                          title="Supprimer le projet"
-                        >
-                          <Trash2 className="w-4 h-4 text-slate-300 group-hover:text-red-500 transition-colors" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Section Budget & Progression */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500 font-medium">Budget total</span>
-                        <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                          {/* @ts-ignore */}
-                          {project.budget_alloue?.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
-                        </span>
-                      </div>
-
-                      {/* Barre de progression avec indicateurs */}
-                      <div className="relative pt-2">
-                        <div className="flex justify-between items-end mb-2">
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Utilisé</span>
-                            <div className={`text-xl font-black leading-none ${
-                              (project.pourcentage_consomme ?? 0) > 90 ? 'text-red-600 animate-pulse' : 
-                              (project.pourcentage_consomme ?? 0) >= 70 ? 'text-orange-500' : 
-                              'text-green-600'
-                            }`}>
-                              {project.pourcentage_consomme?.toFixed(0)}%
-                              {(project.pourcentage_consomme ?? 0) > 90 && <AlertCircle className="w-4 h-4 inline ml-1 mb-1" />}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Reste à dépenser</span>
-                            <div className={`text-sm font-bold leading-none ${
-                              (project.budget_restant ?? 0) < 0 ? 'text-red-600 animate-pulse' : 'text-slate-900'
-                            }`}>
-                              {(project.budget_restant ?? 0) < 0 
-                                ? `-${Math.abs(project.budget_restant ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} € ⚠️` 
-                                : `${project.budget_restant?.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Rail de la barre (Fond gris plus visible pour voir la barre même à 0%) */}
-                        <div className="w-full h-4 bg-slate-200 rounded-full overflow-hidden border border-slate-300 p-0.5 shadow-inner">
-                          {/* Remplissage de la barre (avec une largeur minimum de 2px si > 0) */}
-                          <div
-                            className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm ${
-                              (project.pourcentage_consomme ?? 0) > 90 ? 'bg-red-500' : 
-                              (project.pourcentage_consomme ?? 0) >= 70 ? 'bg-orange-500' : 
-                              'bg-green-500'
-                            }`}
-                            style={{ 
-                              width: `${Math.min(project.pourcentage_consomme ?? 0, 100)}%`,
-                              minWidth: (project.pourcentage_consomme ?? 0) > 0 ? '4px' : '0px'
-                            }}
-                          />
-                        </div>
-                        {/* Indicateur visuel si 0% pour confirmer que la barre est là */}
-                        {(project.pourcentage_consomme ?? 0) === 0 && (
-                          <div className="mt-1 flex justify-center">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter italic">Aucune dépense enregistrée</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Détails et Actions */}
-                      <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1.5 text-slate-500">
-                            <ScanLine className="w-4 h-4" />
-                            <span className="text-xs font-bold">{project.nombre_factures} doc(s)</span>
-                          </div>
-                          <div className="h-4 w-px bg-slate-200"></div>
-                          <div className="flex items-center gap-1.5 text-slate-500">
-                            <Receipt className="w-4 h-4" />
-                            <span className="text-xs font-bold">
-                              Dépensé: {(project.total_expenses || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="text-[10px] font-black px-2 py-1 bg-slate-900 text-white rounded uppercase tracking-tighter">
-                          ID: {project.id.split('-')[0]}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="card-clean rounded-2xl p-12 text-center">
-                <FolderKanban className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucun projet actif</h3>
-                <p className="text-slate-500 mb-6">
-                  Créez votre premier projet pour suivre vos budgets et dépenses par chantier
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Aucun résultat trouvé</h3>
+                <p className="text-sm text-slate-500 mb-6">
+                  Modifiez vos filtres ou votre recherche pour trouver ce que vous cherchez.
                 </p>
                 <button
-                  onClick={() => setShowCreateProjectModal(true)}
-                  className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('');
+                    setSelectedMonths([]);
+                  }}
+                  className="px-6 py-2 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-all shadow-md shadow-orange-100"
                 >
-                  + Créer mon premier projet
+                  Réinitialiser tous les filtres
                 </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-widest px-1">
+                  <span>{filteredInvoices.length} facture(s) trouvée(s)</span>
+                  {selectedMonths.length > 0 && (
+                    <span className="text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">
+                      {selectedMonths.length} mois
+                    </span>
+                  )}
+                </div>
+                {(() => {
+                  const sorted = getSortedInvoices();
+                  const groups: { monthKey: string; invoices: Invoice[] }[] = [];
+
+                  for (const inv of sorted) {
+                    const mk = getMonthKey(inv.date_facture || inv.created_at) || 'unknown';
+                    const last = groups[groups.length - 1];
+                    if (!last || last.monthKey !== mk) groups.push({ monthKey: mk, invoices: [] });
+                    groups[groups.length - 1].invoices.push(inv);
+                  }
+
+                  return groups.map((g) => (
+                    <div key={g.monthKey} className="space-y-3">
+                      <div className="mt-6 first:mt-0 px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-600 text-[10px] font-black uppercase tracking-widest">
+                        {getMonthLabel(g.monthKey)}
+                      </div>
+
+                      {g.invoices.map((invoice) => (
+                        <div key={invoice.id} className="card-clean rounded-2xl p-5 bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-black text-slate-900 text-lg tracking-tight">{invoice.entreprise}</h4>
+                                {invoice.categorie && (
+                                  <span className="inline-block px-2.5 py-1 text-[10px] font-black bg-orange-50 text-orange-600 rounded-lg border border-orange-100 uppercase tracking-wider">
+                                    {invoice.categorie}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <p className="text-xs font-bold text-slate-500">
+                                  Facture du : {new Date(invoice.date_facture).toLocaleDateString('fr-FR')}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
+                                  Transmise le : {new Date(invoice.created_at).toLocaleDateString('fr-FR')} à {new Date(invoice.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => confirmDelete(invoice.id)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-3">
+                            <div className="flex-1">
+                              <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">Montant HT</span>
+                              <span className="font-black text-slate-900 text-base">
+                                {(invoice.montant_ht || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                              </span>
+                            </div>
+
+                            <div className="w-px h-8 bg-slate-200"></div>
+
+                            <div className="flex-1">
+                              <span className="text-[10px] text-orange-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
+                              <span className="font-black text-orange-500 text-lg">
+                                {(invoice.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                              </span>
+                            </div>
+
+                            <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
+                              <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">TVA Récupérée</span>
+                              <span className="font-black text-orange-500 italic text-base">
+                                {((invoice.total_amount || 0) - (invoice.montant_ht || 0)).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                              </span>
+                            </div>
+                          </div>
+
+                          {invoice.description && (
+                            <div className="mt-3 p-3 bg-orange-50 border-l-4 border-orange-400 rounded hidden md:block">
+                              <p className="text-xs text-orange-700 font-medium mb-1">DESCRIPTION</p>
+                              <p className="text-sm text-slate-700">{invoice.description}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -1638,231 +2238,260 @@ export default function Dashboard() {
 
         {/* PARAMÈTRES */}
         {currentView === 'parametres' && (
-          <div className="fade-in space-y-4">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Paramètres</h2>
+          <div className="fade-in space-y-6">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Paramètres</h2>
             
-            {/* Informations sur le plan actuel */}
-            <div className="card-clean rounded-2xl p-6">
-              <h3 className="font-semibold text-slate-900 mb-4">Votre Abonnement</h3>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm text-slate-600 mb-1">Plan actuel</p>
-                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full ${getTierBadgeColor(userTier)}`}>
-                    <Crown className="w-4 h-4" />
-                    <span className="font-semibold">{getTierDisplayName(userTier)}</span>
+            {/* Logo de l'entreprise */}
+            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              <h3 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2 uppercase tracking-tight">
+                <LayoutDashboard className="w-4 h-4 text-orange-500" />
+                Identité de l'entreprise
+              </h3>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Personnalisez vos rapports professionnels</p>
+              
+              <div className="space-y-6">
+                {/* Logo Section */}
+                <div className="flex items-center gap-6 pb-6 border-b border-slate-100">
+                  <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 relative group">
+                    {companyLogo ? (
+                      <>
+                        <img src={companyLogo} alt="Logo" className="w-full h-full object-contain" />
+                        <button 
+                          onClick={() => {
+                            setCompanyLogo(null);
+                            localStorage.removeItem('artisscan_company_logo');
+                          }}
+                          className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold"
+                        >
+                          SUPPRIMER
+                        </button>
+                      </>
+                    ) : (
+                      <LayoutDashboard className="w-8 h-8 text-slate-300" />
+                    )}
                   </div>
-        </div>
-                {userTier === 'free' && (
-                  <Link
-                    href="/#tarification"
-                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
-                  >
-                    Passer à Pro
-                  </Link>
-                )}
-              </div>
-              {userTier === 'free' && (
-                <p className="text-sm text-slate-500">
-                  {remainingScans >= 0 ? `${remainingScans} scans restants ce mois` : 'Limite de scans atteinte'}
-                </p>
-          )}
-        </div>
-
-        {/* Gérer mes chantiers */}
-        <div className="card-clean rounded-2xl p-6 border border-slate-100 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
-                <Plus className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Gérer mes chantiers</h3>
-                <p className="text-sm text-slate-500">
-                  Ajoutez vos chantiers pour suivre précisément vos dépenses.
-                </p>
-              </div>
-            </div>
-            {projects?.length > 0 ? (
-              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                {projects?.length} chantier{projects?.length > 1 ? 's' : ''}
-              </span>
-            ) : (
-              <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
-                Aucun chantier
-              </span>
-            )}
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Nom du chantier *</label>
-              <input
-                type="text"
-                value={newProject.nom}
-                onChange={(e) => setNewProject({ ...newProject, nom: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Ex: Rénovation Paris 15"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Client *</label>
-              <input
-                type="text"
-                value={newProject.client}
-                onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Ex: M. Dupont"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Budget alloué (€) *</label>
-              <input
-                type="number"
-                step="0.01"
-                // @ts-ignore
-                value={newProject.budget_alloue}
-                // @ts-ignore
-                onChange={(e) => setNewProject({ ...newProject, budget_alloue: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Ex: 50000.00"
-              />
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={createProject}
-              // @ts-ignore
-              disabled={!newProject.nom || !newProject.client || !newProject.budget_alloue}
-              className="flex-1 px-5 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Créer ce chantier
-            </button>
-            <button
-              onClick={() => {
-                // @ts-ignore
-                setNewProject({ nom: '', client: '', budget_alloue: '' });
-              }}
-              className="flex-1 px-5 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors"
-            >
-              Réinitialiser
-            </button>
-          </div>
-          {projects?.length > 0 && (
-            <div className="pt-4 border-t border-slate-100 grid gap-3">
-              {projects?.map((project) => (
-                <div key={project.id} className="flex items-center justify-between gap-3 text-sm bg-slate-50 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="font-semibold text-slate-900">{project.name}</p>
-                    <p className="text-xs text-slate-500">Client : {project.client}</p>
+                  
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      id="logo-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            setCompanyLogo(result);
+                            localStorage.setItem('artisscan_company_logo', result);
+                            showToastMessage('✅ Logo mis à jour !', 'success');
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label 
+                      htmlFor="logo-upload"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-sm transition-all active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {companyLogo ? 'Changer le logo' : 'Télécharger votre Logo'}
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-black">Format: PNG/JPG (MAX 500KB)</p>
                   </div>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {/* @ts-ignore */}
-                    {project.budget_alloue?.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-            {/* Simulateur de Test - Mode Développeur */}
-            <div className="card-clean rounded-2xl p-6 border-2 border-amber-200 bg-amber-50">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-5 h-5 text-amber-600" />
-                <h3 className="font-semibold text-slate-900">Mode Test (Développeur)</h3>
+                {/* Formulaire Entreprise */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom de l'entreprise</label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => {
+                        setCompanyName(e.target.value);
+                        localStorage.setItem('artisscan_company_name', e.target.value);
+                      }}
+                      placeholder="Ex: Russo Plomberie"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SIRET</label>
+                    <input
+                      type="text"
+                      value={companySiret}
+                      onChange={(e) => {
+                        setCompanySiret(e.target.value);
+                        localStorage.setItem('artisscan_company_siret', e.target.value);
+                      }}
+                      placeholder="842 123 456 00012"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Métier (Ex: Plombier, Boulanger)</label>
+                    <input
+                      type="text"
+                      value={companyProfession}
+                      onChange={(e) => {
+                        setCompanyProfession(e.target.value);
+                        localStorage.setItem('artisscan_company_profession', e.target.value);
+                      }}
+                      placeholder="Votre métier"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Adresse professionnelle</label>
+                    <input
+                      type="text"
+                      value={companyAddress}
+                      onChange={(e) => {
+                        setCompanyAddress(e.target.value);
+                        localStorage.setItem('artisscan_company_address', e.target.value);
+                      }}
+                      placeholder="Ex: 12 rue de la Paix, 75002 Paris"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                </div>
               </div>
-              <p className="text-sm text-slate-600 mb-4">
-                Testez les différents plans d'abonnement en simulant un changement de tier
+            </div>
+
+            {/* Mon Compte & Déconnexion (accès rapide) */}
+            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm">
+              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight flex items-center gap-2">
+                <Plus className="w-4 h-4 text-orange-500 rotate-45" />
+                Mon Compte
+              </h3>
+              
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">E-mail de connexion</span>
+                  <span className="text-sm font-bold text-slate-900">{userEmail || 'Non connecté'}</span>
+                </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all text-xs font-black uppercase tracking-widest border border-red-100 active:scale-95"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Déconnexion
+                </button>
+              </div>
+            </div>
+
+            {/* Informations sur le plan actuel */}
+            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight">Votre Abonnement</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Plan actuel</p>
+                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
+                    <Crown className="w-4 h-4" />
+                    <span className="font-black uppercase text-xs tracking-wider">{getTierDisplayName(userTier)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Organisation automatique */}
+            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm">
+              <h3 className="text-sm font-black text-slate-900 mb-2 uppercase tracking-tight">Chronologie</h3>
+              <p className="text-sm text-slate-600">
+                Vos factures sont automatiquement groupées par <span className="font-bold">mois</span> selon la date de facture extraite.
+              </p>
+              <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-widest">
+                Aucune gestion manuelle : tout est classé par mois.
+              </p>
+            </div>
+            {/* Mode Test (Simulation Pro) */}
+            <div className="card-clean rounded-3xl p-6 border-2 border-amber-100 bg-amber-50/50 shadow-inner">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Mode Test (Simulation)</h3>
+              </div>
+              <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-4">
+                Testez le statut Pro instantanément
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
                     await updateSubscriptionTier('free');
                     await checkSubscriptionLimits();
-                    showToastMessage('Plan changé en FREE', 'success');
+                    showToastMessage('Statut : INACTIF', 'success');
                   }}
-                  className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 px-3 py-2 bg-white hover:bg-slate-50 text-slate-400 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
                 >
-                  FREE
+                  INACTIF
                 </button>
                 <button
                   onClick={async () => {
                     await updateSubscriptionTier('pro');
                     await checkSubscriptionLimits();
-                    showToastMessage('Plan changé en PRO 🎉', 'success');
+                    showToastMessage('Statut : PRO (Test) 🎉', 'success');
                   }}
-                  className="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-orange-100 active:scale-95"
                 >
                   PRO
                 </button>
-                <button
-                  onClick={async () => {
-                    await updateSubscriptionTier('business');
-                    await checkSubscriptionLimits();
-                    showToastMessage('Plan changé en BUSINESS 👑', 'success');
-                  }}
-                  className="flex-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  BUSINESS
-                </button>
               </div>
-              <p className="text-xs text-amber-700 mt-3">
-                ⚠️ Cette section est uniquement pour tester les fonctionnalités. À supprimer en production.
-                </p>
-              </div>
+              <p className="text-[9px] font-bold text-amber-500 mt-3 uppercase tracking-tighter">
+                ⚠️ Uniquement pour le test. À supprimer en production.
+              </p>
+            </div>
 
-            <div className="card-clean rounded-2xl p-6">
-              <h3 className="font-semibold text-slate-900 mb-4">Export & Données</h3>
+            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight">Export & Données</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
-                  onClick={exportToCSV}
-                  disabled={invoices.length === 0 || userTier === 'free'}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors font-medium ${
-                    invoices.length === 0 || userTier === 'free'
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
+                  onClick={() => exportToCSV()}
+                  disabled={invoices.length === 0}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all font-black text-xs uppercase tracking-widest ${
+                    invoices.length === 0
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
+                      : 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-100'
                   }`}
-                  title={userTier === 'free' ? 'Export CSV disponible en Pro et Business' : 'Exporter en CSV'}
+                  title="Exporter en CSV"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4" />
                   Exporter (CSV)
                 </button>
                 <button
                   onClick={exportToExcel}
-                  disabled={invoices.length === 0 || userTier === 'free'}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors font-medium ${
-                    invoices.length === 0 || userTier === 'free'
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+                  disabled={invoices.length === 0}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all font-black text-xs uppercase tracking-widest ${
+                    invoices.length === 0
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
+                      : 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-100'
                   }`}
-                  title={userTier === 'free' ? 'Export Excel disponible en Pro et Business' : 'Exporter en Excel'}
+                  title="Exporter en Excel"
                 >
-                  <Download className="w-5 h-5" />
-                  Exporter (Excel)
+                  <Download className="w-4 h-4" />
+                  Exporter (Excel Pro)
                 </button>
               </div>
-              {userTier === 'free' ? (
-                <p className="text-sm text-amber-600 mt-3 font-medium text-center">
-                  ⚠️ Export disponible uniquement en plan Pro ou Business
-                </p>
-              ) : (
-                <p className="text-sm text-slate-500 mt-3 text-center">
-                  Formats CSV et Excel compatibles avec votre comptable
-                </p>
-              )}
+              <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-widest text-center">
+                Formats CSV et Excel compatibles comptabilité
+              </p>
             </div>
 
-            <div className="card-clean rounded-2xl p-6">
-              <h3 className="font-semibold text-slate-900 mb-2">À propos</h3>
-              <p className="text-sm text-slate-600">
-                ArtisScan Expert v1.0
-              </p>
-              <p className="text-xs text-slate-400 mt-2">
-                Analyse intelligente de factures avec IA
-              </p>
-            </div>
+            {/* (Section À propos supprimée) */}
           </div>
         )}
+        </div>
       </main>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleAnalyze}
+        className="hidden"
+      />
 
       {/* Modale de limitation Free */}
       {showLimitModal && (
@@ -1918,16 +2547,112 @@ export default function Dashboard() {
             </div>
       )}
 
+      {/* Modale Envoi au Comptable */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full slide-up shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Mail className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Envoyer au comptable</h3>
+                  <p className="text-xs text-slate-500 font-medium">Export automatique par email</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEmailModal(false);
+                  setComptableEmail('');
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <Package className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-orange-900">
+                  <p className="font-bold mb-1">Export préparé :</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• <strong>{selectedMonths.length} mois</strong> sélectionné(s)</li>
+                    <li>• <strong>{filteredInvoices.length} factures</strong> incluses</li>
+                    <li>• Format : {selectedMonths.length > 1 ? 'Excel multi-onglets' : 'Excel standard'}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Email du comptable
+                </label>
+                <input
+                  type="email"
+                  value={comptableEmail}
+                  onChange={(e) => setComptableEmail(e.target.value)}
+                  placeholder="comptable@exemple.fr"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowEmailModal(false);
+                  setComptableEmail('');
+                }}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-bold text-sm"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  if (!comptableEmail || !comptableEmail.includes('@')) {
+                    showToastMessage('❌ Email invalide', 'error');
+                    return;
+                  }
+                  
+                  // Générer l'export
+                  exportToExcel();
+                  
+                  // Simuler l'envoi (en production : API backend pour email)
+                  showToastMessage(`📧 Export envoyé à ${comptableEmail}`, 'success');
+                  setShowEmailModal(false);
+                  setComptableEmail('');
+                }}
+                disabled={!comptableEmail}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Mail className="w-4 h-4" />
+                Envoyer
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-400 text-center mt-4 font-medium">
+              💡 Le fichier Excel sera téléchargé sur votre appareil et devra être transmis manuellement pour le moment.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Modale de validation des données scannées */}
       {showValidationModal && pendingInvoiceData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full slide-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full slide-up max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Vérification de la facture</h3>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Vérification</h3>
               <button
                 onClick={() => {
                   setShowValidationModal(false);
                   setPendingInvoiceData(null);
+                  setCustomCategory('');
                 }}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
@@ -1942,7 +2667,8 @@ export default function Dashboard() {
             <div className="space-y-4">
               {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-orange-500" />
                   Date de la facture
                 </label>
                 <input
@@ -1952,13 +2678,14 @@ export default function Dashboard() {
                     ...pendingInvoiceData,
                     date: e.target.value
                   })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                 />
               </div>
 
               {/* Nom du fournisseur / Entreprise */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <LayoutDashboard className="w-4 h-4 text-orange-500" />
                   Nom du fournisseur
                 </label>
                 <input
@@ -1968,14 +2695,15 @@ export default function Dashboard() {
                     ...pendingInvoiceData,
                     entreprise: e.target.value
                   })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="Nom de l'entreprise"
                 />
               </div>
 
               {/* Montant HT */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-orange-500" />
                   Montant HT (€)
                 </label>
                 <input
@@ -1986,15 +2714,15 @@ export default function Dashboard() {
                     ...pendingInvoiceData,
                     montant_ht: e.target.value
                   })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="0.00"
                 />
               </div>
 
               {/* TVA calculée automatiquement */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  TVA (€) - Calculée automatiquement
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                  TVA (Calculée)
                 </label>
                 <input
                   type="text"
@@ -2002,13 +2730,14 @@ export default function Dashboard() {
                     ? (parseFloat(pendingInvoiceData.total_amount) - parseFloat(pendingInvoiceData.montant_ht)).toFixed(2)
                     : '0.00'}
                   readOnly
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-600"
+                  className="w-full px-4 py-3 bg-slate-100/50 border border-slate-200 rounded-xl text-slate-500 text-sm font-bold italic"
                 />
               </div>
 
               {/* Montant TTC */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-bold text-orange-600 mb-2 flex items-center gap-2">
+                  <Receipt className="w-4 h-4" />
                   Montant TTC (€)
                 </label>
                 <input
@@ -2019,74 +2748,106 @@ export default function Dashboard() {
                     ...pendingInvoiceData,
                     total_amount: e.target.value
                   })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-orange-50/30 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-lg font-black text-slate-900"
                   placeholder="0.00"
                 />
               </div>
 
               {/* Catégorie */}
-              {pendingInvoiceData.categorie && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Catégorie
-                  </label>
-                  <input
-                    type="text"
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-orange-500" />
+                  Type de dépense
+                </label>
+                <div className="relative">
+                  <select
                     value={pendingInvoiceData.categorie || ''}
                     onChange={(e) => setPendingInvoiceData({
                       ...pendingInvoiceData,
                       categorie: e.target.value
                     })}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="Ex: Matériaux, Carburant..."
-                  />
+                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                  >
+                    <option value="">-- Sélectionner une catégorie --</option>
+                    <option value="🧱 Matériaux">🧱 Matériaux</option>
+                    <option value="⛽ Carburant">⛽ Carburant</option>
+                    <option value="🍴 Restaurant">🍴 Restaurant</option>
+                    <option value="🛠️ Outillage">🛠️ Outillage</option>
+                    <option value="📦 Fournitures">📦 Fournitures</option>
+                    <option value="🚚 Location">🚚 Location</option>
+                    <option value="🤝 Sous-traitance">🤝 Sous-traitance</option>
+                    <option value="📝 Autre">📝 Autre (Saisie libre...)</option>
+                  </select>
                 </div>
-              )}
 
-              {/* Sélection du Projet/Chantier */}
-              <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
-                <label className="block text-sm font-semibold text-orange-900 mb-2 flex items-center gap-2">
-                  <FolderKanban className="w-4 h-4" />
-                  Affecter à un chantier (Marge & Suivi)
-                </label>
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white text-sm font-medium"
-                >
-                  <option value="">-- Sélectionner un chantier --</option>
-                  {projects?.filter(p => p?.status === 'en_cours')?.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      🏗️ {project.name} ({project.client})
-                    </option>
-                  ))}
-                </select>
-                {(!projects || projects?.filter(p => p?.status === 'en_cours')?.length === 0) && (
-                  <p className="text-xs text-amber-700 mt-2 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Aucun chantier actif. Créez-en un dans les paramètres.
-                  </p>
+                {/* Champ dynamique si "Autre" est sélectionné */}
+                {pendingInvoiceData.categorie === '📝 Autre' && (
+                  <div className="mt-3 fade-in">
+                    <label className="block text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1.5 ml-1">
+                      Spécifiez votre catégorie
+                    </label>
+                    <input
+                      type="text"
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="Ex: Assurance, Électricité, Publicité..."
+                      className="w-full px-4 py-2.5 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-orange-50/20 text-sm font-medium"
+                      autoFocus
+                    />
+                  </div>
                 )}
               </div>
 
+              {/* (Dossiers supprimés) */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">
+                  Classement automatique par mois (date de facture)
+                </p>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Vous n'avez plus besoin de créer/choisir un dossier : l'application regroupe tout par mois.
+                </p>
+              </div>
+
               {/* Description */}
-              {pendingInvoiceData.description && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={pendingInvoiceData.description || ''}
-                    onChange={(e) => setPendingInvoiceData({
-                      ...pendingInvoiceData,
-                      description: e.target.value
-                    })}
-                    rows={3}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                    placeholder="Description de la facture..."
-                  />
-                      </div>
-              )}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description / Libellé IA
+                </label>
+                <textarea
+                  value={pendingInvoiceData.description || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    description: e.target.value
+                  })}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm resize-none"
+                  placeholder="Détails de la facture..."
+                />
+              </div>
+
+              {/* Moyen de Paiement */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <LayoutDashboard className="w-4 h-4 text-orange-500" />
+                  Moyen de paiement
+                </label>
+                <select
+                  value={pendingInvoiceData.moyen_paiement || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    moyen_paiement: e.target.value
+                  })}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                >
+                  <option value="">-- Choisir un moyen de paiement --</option>
+                  <option value="Carte Bancaire">💳 Carte Bancaire</option>
+                  <option value="Virement">🏦 Virement</option>
+                  <option value="Espèces">💵 Espèces</option>
+                  <option value="Chèque">✍️ Chèque</option>
+                  <option value="Prélèvement">🔄 Prélèvement</option>
+                  <option value="Autre">📝 Autre</option>
+                </select>
+              </div>
                     </div>
 
             {/* Bouton de validation */}
@@ -2137,141 +2898,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Modale de confirmation suppression projet */}
-      {showDeleteProjectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full slide-up border border-red-100 shadow-2xl">
-            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4 mx-auto">
-              <Trash2 className="w-6 h-6 text-red-500" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2 text-center">Supprimer le projet ?</h3>
-            <p className="text-sm text-slate-600 mb-6 text-center">
-              Que souhaites-tu faire des données de ce chantier ?
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => deleteProject(false)}
-                className="w-full px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium text-sm flex items-center justify-center gap-2"
-              >
-                <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-                Supprimer uniquement le chantier
-              </button>
-              
-              <button
-                onClick={() => deleteProject(true)}
-                className="w-full px-4 py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors font-bold text-sm flex items-center justify-center gap-2 border border-red-100"
-              >
-                <AlertCircle className="w-4 h-4" />
-                Tout supprimer (Chantier + Factures)
-              </button>
-
-              <div className="h-px bg-slate-100 my-1"></div>
-
-              <button
-                onClick={() => setShowDeleteProjectModal(false)}
-                className="w-full px-4 py-2 text-slate-400 hover:text-slate-600 transition-colors text-sm font-medium"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modale de création de projet */}
-      {showCreateProjectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full slide-up">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Créer un nouveau projet</h3>
-              <button
-                onClick={() => {
-                  setShowCreateProjectModal(false);
-                  // @ts-ignore
-                  setNewProject({ nom: '', client: '', budget_alloue: '' });
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-slate-500" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Nom du projet */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nom du projet / chantier *
-                </label>
-                <input
-                  type="text"
-                  value={newProject.nom}
-                  onChange={(e) => setNewProject({ ...newProject, nom: e.target.value })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="Ex: Rénovation Appartement Paris 15"
-                  required
-                />
-              </div>
-
-              {/* Client */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Client *
-                </label>
-                <input
-                  type="text"
-                  value={newProject.client}
-                  onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="Ex: M. Dupont"
-                  required
-                />
-              </div>
-
-              {/* Budget alloué */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Budget alloué (€) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  // @ts-ignore
-                  value={newProject.budget_alloue}
-                  // @ts-ignore
-                  onChange={(e) => setNewProject({ ...newProject, budget_alloue: e.target.value })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="Ex: 50000.00"
-                  required
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Le budget total prévu pour ce projet
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowCreateProjectModal(false);
-                  // @ts-ignore
-                  setNewProject({ nom: '', client: '', budget_alloue: '' });
-                }}
-                className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={createProject}
-                // @ts-ignore
-                disabled={!newProject.nom || !newProject.client || !newProject.budget_alloue}
-                className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Créer le projet
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* (Gestion manuelle des dossiers supprimée : Chronologie automatique par mois) */}
 
       {/* Toast de confirmation */}
       {showToast && (
@@ -2280,27 +2907,69 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Bottom Navigation */}
-      <nav className="bottom-nav">
+      {/* Bouton flottant Export multi-mois */}
+      {selectedMonths.length > 0 && (
+        <div className="fixed bottom-24 right-6 z-40 flex flex-col gap-3">
+          <button
+            onClick={() => {
+              if (selectedMonths.length === 1) {
+                // Export simple
+                generateGlobalPDF();
+              } else {
+                // Export multi-mois (ZIP ou Excel multi-onglets)
+                exportToExcel();
+              }
+            }}
+            disabled={filteredInvoices.length === 0}
+            className="group relative bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-4 rounded-2xl shadow-2xl hover:shadow-orange-300 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-white"
+          >
+            <div className="flex items-center gap-3">
+              <Package className="w-5 h-5" />
+              <div className="text-left">
+                <div className="text-xs font-black uppercase tracking-wider">Exporter</div>
+                <div className="text-[10px] font-medium opacity-90">
+                  {selectedMonths.length} mois • {filteredInvoices.length} docs
+                </div>
+              </div>
+            </div>
+            {/* Badge compteur */}
+            <div className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2 border-white shadow-lg">
+              {selectedMonths.length}
+            </div>
+          </button>
+
+          <button
+            onClick={() => setShowEmailModal(true)}
+            disabled={filteredInvoices.length === 0}
+            className="bg-white text-slate-700 px-6 py-3 rounded-2xl shadow-xl hover:shadow-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 flex items-center gap-2"
+          >
+            <Mail className="w-4 h-4 text-orange-500" />
+            <span className="text-xs font-bold">Envoyer au comptable</span>
+          </button>
+        </div>
+      )}
+
+            {/* Bottom Navigation */}
+      <nav className="bottom-nav bg-white/95 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto px-2">
           <div className="flex items-center justify-around py-2">
         <button
               onClick={() => setCurrentView('dashboard')}
-              className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
+              className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
                 currentView === 'dashboard' 
-                  ? 'text-orange-600' 
-                  : 'text-slate-400'
+                  ? 'text-orange-500 scale-105' 
+                  : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <LayoutDashboard className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium">Dashboard</span>
+              <LayoutDashboard className={`w-6 h-6 mb-1 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
+              <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'dashboard' ? 'font-black' : 'font-bold'}`}>Dashboard</span>
             </button>
 
             {/* Scanner central plus gros */}
             <button
               onClick={triggerFileInput}
               disabled={analyzing}
-              className="flex flex-col items-center justify-center -mt-6 bg-orange-500 text-white rounded-full p-4 shadow-lg hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50"
+              className="flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 active:scale-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white"
             >
               {analyzing ? (
                 <div className="spinner w-8 h-8 border-white border-opacity-20" style={{ borderTopColor: 'white' }}></div>
@@ -2311,27 +2980,17 @@ export default function Dashboard() {
 
             <button
               onClick={() => setCurrentView('historique')}
-              className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
+              className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
                 currentView === 'historique' 
-                  ? 'text-orange-600' 
-                  : 'text-slate-400'
+                  ? 'text-orange-500 scale-105' 
+                  : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <Clock className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium">Historique</span>
+              <Clock className={`w-6 h-6 mb-1 transition-transform ${currentView === 'historique' ? 'scale-110' : ''}`} strokeWidth={currentView === 'historique' ? 2.5 : 2} />
+              <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'historique' ? 'font-black' : 'font-bold'}`}>Historique</span>
             </button>
 
-            <button
-              onClick={() => setCurrentView('projets')}
-              className={`flex flex-col items-center justify-center py-2 px-3 transition-colors ${
-                currentView === 'projets' 
-                  ? 'text-orange-600' 
-                  : 'text-slate-400'
-              }`}
-            >
-              <FolderKanban className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium">Projets</span>
-            </button>
+            {/* Onglet Dossiers supprimé : organisation automatique par mois */}
           </div>
     </div>
       </nav>

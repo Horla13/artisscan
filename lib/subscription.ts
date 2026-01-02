@@ -1,10 +1,12 @@
 import { supabase } from './supabase';
 
-export type SubscriptionTier = 'free' | 'pro' | 'business';
+export type SubscriptionTier = 'free' | 'pro';
 
 export interface UserProfile {
   id: string;
   subscription_tier: SubscriptionTier;
+  subscription_status?: string;
+  stripe_customer_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -20,7 +22,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     // Sélectionner uniquement les colonnes nécessaires
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, subscription_tier, created_at, updated_at')
+      .select('id, subscription_tier, subscription_status, stripe_customer_id, created_at, updated_at')
       .eq('id', user.id)
       .single();
 
@@ -50,35 +52,15 @@ export async function canUserScan(): Promise<{ canScan: boolean; remaining: numb
     const profile = await getUserProfile();
     const tier = profile?.subscription_tier || 'free';
 
-    // Pro et Business peuvent scanner sans limite
-    if (tier === 'pro' || tier === 'business') {
-      return { canScan: true, remaining: -1, tier };
+    // Pro peut scanner sans limite
+    if (tier === 'pro' || profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing') {
+      return { canScan: true, remaining: -1, tier: 'pro' };
     }
 
-    // Free: limité à 5 scans
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { canScan: true, remaining: 5, tier }; // Par défaut, autoriser
-
-    const { count, error } = await supabase
-      .from('scans')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('Erreur comptage scans:', error);
-      // En cas d'erreur, autoriser par défaut
-      return { canScan: true, remaining: 5, tier };
-    }
-
-    const invoiceCount = count || 0;
-    const remaining = Math.max(0, 5 - invoiceCount);
-    const canScan = invoiceCount < 5;
-
-    return { canScan, remaining, tier };
+    return { canScan: false, remaining: 0, tier: 'free' };
   } catch (err) {
     console.error('Erreur canUserScan:', err);
-    // En cas d'erreur, autoriser par défaut (ne jamais bloquer)
-    return { canScan: true, remaining: 5, tier: 'free' };
+    return { canScan: false, remaining: 0, tier: 'free' };
   }
 }
 
@@ -95,6 +77,7 @@ export async function updateSubscriptionTier(newTier: SubscriptionTier): Promise
       .upsert({
         id: user.id,
         subscription_tier: newTier,
+        subscription_status: newTier === 'pro' ? 'active' : 'none',
         updated_at: new Date().toISOString()
       });
 
@@ -114,37 +97,20 @@ export async function updateSubscriptionTier(newTier: SubscriptionTier): Promise
  * Vérifie si l'utilisateur a accès à l'export CSV
  */
 export function canExportCSV(tier: SubscriptionTier): boolean {
-  return tier === 'pro' || tier === 'business';
-}
-
-/**
- * Vérifie si l'utilisateur a accès aux champs chantier
- */
-export function hasChantierAccess(tier: SubscriptionTier): boolean {
-  return tier === 'business';
+  return tier === 'pro';
 }
 
 /**
  * Retourne le nom affiché du plan
  */
 export function getTierDisplayName(tier: SubscriptionTier): string {
-  const names: Record<SubscriptionTier, string> = {
-    free: 'Gratuit',
-    pro: 'Pro',
-    business: 'Business'
-  };
-  return names[tier];
+  return tier === 'pro' ? 'PRO (Essai gratuit)' : 'Inactif';
 }
 
 /**
  * Retourne la couleur du badge selon le tier
  */
 export function getTierBadgeColor(tier: SubscriptionTier): string {
-  const colors: Record<SubscriptionTier, string> = {
-    free: 'bg-slate-100 text-slate-600',
-    pro: 'bg-orange-500 text-white',
-    business: 'bg-slate-900 text-white'
-  };
-  return colors[tier];
+  return tier === 'pro' ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-slate-100 text-slate-400';
 }
 

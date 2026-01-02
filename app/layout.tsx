@@ -42,13 +42,15 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
-        {/* Couleur de la barre de statut iOS - Gris ardoise */}
-        <meta name="theme-color" content="#1e293b" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        {/* Couleur de la barre de statut iOS - Clair Moderne */}
+        <meta name="theme-color" content="#f8fafc" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         
         {/* Meta tags pour iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="ArtisScan" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="application-name" content="ArtisScan" />
         
         {/* Viewport optimisé pour mobile */}
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />

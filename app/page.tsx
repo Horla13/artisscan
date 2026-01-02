@@ -1,17 +1,58 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle, Star, Check, Users } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle, Star, Check, ScanLine, Zap } from 'lucide-react';
 
 export default function Home() {
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const startCheckout = async () => {
+    try {
+      setCheckoutLoading(true);
+      
+      // Récupérer l'utilisateur actuel s'il est déjà connecté
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          billingCycle,
+          userId: session?.user?.id 
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Erreur paiement');
+      }
+      if (!data?.url) {
+        throw new Error('URL Stripe manquante');
+      }
+      window.location.href = data.url;
+    } catch (e: any) {
+      alert(e?.message || 'Erreur lors du paiement.');
+      setCheckoutLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
       {/* Barre de navigation */}
       <nav className="w-full border-b border-slate-100 sticky top-0 bg-white z-50">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center">
-              <Camera className="w-6 h-6 text-orange-600" />
+            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative">
+              <ScanLine className="w-6 h-6 text-white" />
+              <Zap className="w-3.5 h-3.5 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">ArtisScan</h1>
+            <div className="flex flex-col leading-none">
+              <span className="text-2xl font-normal text-slate-900 tracking-tight"><span className="font-black">Artis</span>Scan</span>
+              <span className="text-[8px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none">Gestion Intelligente</span>
+            </div>
           </div>
           <Link 
             href="/login"
@@ -30,27 +71,23 @@ export default function Home() {
           <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-orange-500 rounded-full blur-3xl"></div>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-100 rounded-full mb-6">
-          <Sparkles className="w-4 h-4 text-orange-600" />
-          <span className="text-sm font-medium text-orange-700">Propulsé par l'Intelligence Artificielle</span>
-        </div>
-
         <h2 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 max-w-5xl leading-tight">
           ArtisScan : La comptabilité<br />
-          <span className="text-orange-600">de chantier en un clic</span>
+          <span className="text-orange-600">des artisans en un clic</span>
         </h2>
         
         <p className="text-xl md:text-2xl text-slate-600 mb-8 max-w-3xl leading-relaxed">
-          Scannez vos factures, extrayez la TVA automatiquement et exportez tout en CSV pour votre comptable. Simple. Rapide. Professionnel.
+          Scannez vos factures, extrayez la TVA automatiquement et exportez en PDF / Excel / CSV. Une app universelle pour tous les artisans : bâtiment, boulangerie, food-trucks, ateliers, services.
         </p>
 
         <div className="flex items-center justify-center mb-12">
-          <Link 
-            href="/login"
-            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
+          <button
+            onClick={startCheckout}
+            disabled={checkoutLoading}
+            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Commencer gratuitement
-          </Link>
+            {checkoutLoading ? 'Redirection…' : 'Commencer maintenant'}
+          </button>
         </div>
 
         {/* Badges de confiance */}
@@ -75,7 +112,7 @@ export default function Home() {
         <div className="text-center mb-16">
           <h3 className="text-4xl font-bold text-slate-900 mb-4">Tout ce dont vous avez besoin</h3>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Une solution complète pour gérer vos factures de chantier en quelques secondes
+            Une solution complète pour gérer vos factures par dossier ou catégorie en quelques secondes
           </p>
         </div>
         
@@ -195,7 +232,7 @@ export default function Home() {
                 ))}
               </div>
               <p className="text-slate-700 leading-relaxed mb-6">
-                &quot;Fini les tickets de caisse perdus ! Je scanne tout directement sur le chantier. La catégorisation automatique est géniale.&quot;
+                &quot;Fini les tickets de caisse perdus ! Je scanne tout directement sur place. La catégorisation automatique est géniale.&quot;
               </p>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
@@ -233,147 +270,100 @@ export default function Home() {
       </section>
 
       {/* Section Tarification */}
-      <section className="max-w-7xl mx-auto px-6 sm:px-8 py-20">
-        <div className="text-center mb-16">
-          <h3 className="text-4xl font-bold text-slate-900 mb-4">Tarifs simples et transparents</h3>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Choisissez la formule adaptée à votre activité. Sans engagement, résiliable à tout moment.
+      <section className="max-w-7xl mx-auto px-6 sm:px-8 py-20" id="tarification">
+        <div className="text-center mb-12">
+          <h3 className="text-4xl font-bold text-slate-900 mb-4">Un tarif simple pour tous</h3>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10">
+            Une seule offre complète. Sans engagement, résiliable à tout moment.
           </p>
+
+          {/* Sélecteur Mois/Année */}
+          <div className="flex items-center justify-center gap-4 mb-12">
+            <span className={`text-sm font-bold ${billingCycle === 'monthly' ? 'text-slate-900' : 'text-slate-400'}`}>Mensuel</span>
+            <button 
+              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
+              className="relative w-14 h-7 bg-slate-200 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+            >
+              <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${billingCycle === 'yearly' ? 'translate-x-7' : ''}`} />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-bold ${billingCycle === 'yearly' ? 'text-slate-900' : 'text-slate-400'}`}>Annuel</span>
+              <span className="bg-green-100 text-green-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider shadow-sm">
+                -25% ou 2 mois gratuits
+              </span>
+            </div>
+          </div>
         </div>
         
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Plan Gratuit */}
-          <div className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg transition-shadow">
-            <h4 className="text-xl font-semibold text-slate-900 mb-2">Gratuit</h4>
-            <p className="text-sm text-slate-500 mb-6">Pour découvrir ArtisScan</p>
-            
-            <div className="mb-6">
-              <span className="text-4xl font-bold text-slate-900">0€</span>
-              <span className="text-slate-500">/mois</span>
-            </div>
-
-            <ul className="space-y-4 mb-8">
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-600">5 scans par mois</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-600">Analyse IA basique</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-600">Calcul TVA automatique</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-600">Historique 30 jours</span>
-              </li>
-            </ul>
-
-            <Link 
-              href="/login"
-              className="block w-full text-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95"
-            >
-              Commencer
-            </Link>
-          </div>
-
-          {/* Plan Pro (Populaire) */}
-          <div className="bg-white rounded-2xl p-8 border-2 border-orange-500 hover:shadow-xl transition-shadow relative">
+        <div className="flex justify-center">
+          {/* Plan Unique : ArtisScan Pro */}
+          <div className="bg-white rounded-3xl p-8 md:p-12 border-2 border-orange-500 shadow-xl shadow-orange-100 relative max-w-lg w-full">
             <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-              <span className="bg-orange-500 text-white text-sm font-semibold px-4 py-1 rounded-full">
-                Le plus populaire
+              <span className="bg-orange-500 text-white text-[10px] font-black uppercase tracking-[0.2em] px-6 py-1.5 rounded-full shadow-lg">
+                OFFRE ILLIMITÉE
               </span>
             </div>
             
-            <h4 className="text-xl font-semibold text-slate-900 mb-2">Pro</h4>
-            <p className="text-sm text-slate-500 mb-6">Pour les artisans actifs</p>
+            <div className="text-center mb-10">
+              <h4 className="text-2xl font-black text-slate-900 mb-2">ArtisScan Pro</h4>
+              <p className="text-slate-500 font-medium">Pour tous les artisans et commerçants</p>
+            </div>
             
-            <div className="mb-6">
-              <span className="text-4xl font-bold text-slate-900">19€</span>
-              <span className="text-slate-500">/mois</span>
+            <div className="text-center mb-10">
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-5xl font-black text-slate-900">
+                  {billingCycle === 'monthly' ? '19,90' : '14,90'}€
+                </span>
+                <div className="text-left">
+                  <p className="text-slate-500 font-bold leading-none">/mois</p>
+                  {billingCycle === 'yearly' && (
+                    <p className="text-[10px] text-green-600 font-black uppercase tracking-tighter mt-1">Facturé 179€/an</p>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <ul className="space-y-4 mb-8">
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Scans illimités</span>
+            <ul className="space-y-5 mb-10">
+              <li className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
+                  <Check className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="text-slate-900 font-bold">Scans illimités (IA Haute Précision)</span>
               </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Export CSV illimité</span>
+              <li className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
+                  <Check className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="text-slate-900 font-bold">Export PDF / Excel / CSV illimité</span>
               </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Catégorisation IA automatique</span>
+              <li className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
+                  <Check className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="text-slate-900 font-bold">Calcul TVA & Catégorisation auto</span>
               </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Historique illimité</span>
+              <li className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
+                  <Check className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="text-slate-900 font-bold">Gestion des dossiers & archives</span>
               </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Graphiques & statistiques</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Support prioritaire</span>
+              <li className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
+                  <Check className="w-4 h-4 text-orange-600" />
+                </div>
+                <span className="text-slate-900 font-bold">Support prioritaire 7j/7</span>
               </li>
             </ul>
 
-            <Link 
-              href="/login"
-              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95 shadow-sm"
+            <button
+              onClick={startCheckout}
+              disabled={checkoutLoading}
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-[0.1em] py-5 rounded-2xl transition-all duration-200 active:scale-95 shadow-lg shadow-orange-200 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Essayer gratuitement
-            </Link>
-            <p className="text-xs text-center text-slate-500 mt-3">14 jours d&apos;essai gratuit</p>
-          </div>
-
-          {/* Plan Business */}
-          <div className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg transition-shadow">
-            <h4 className="text-xl font-semibold text-slate-900 mb-2">Business</h4>
-            <p className="text-sm text-slate-500 mb-6">Pour les équipes</p>
-            
-            <div className="mb-6">
-              <span className="text-4xl font-bold text-slate-900">49€</span>
-              <span className="text-slate-500">/mois</span>
-            </div>
-
-            <ul className="space-y-4 mb-8">
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Tout du plan Pro</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Users className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Jusqu&apos;à 5 utilisateurs</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Support prioritaire 24/7</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Analyse de rentabilité chantier</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">API d&apos;intégration</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-slate-900 mt-0.5 flex-shrink-0" />
-                <span className="text-slate-900 font-medium">Gestionnaire de compte dédié</span>
-              </li>
-            </ul>
-
-            <Link 
-              href="/login"
-              className="block w-full text-center bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition-all duration-200 active:scale-95"
-            >
-              Nous contacter
-            </Link>
+              {checkoutLoading ? 'Redirection…' : "Démarrer l'essai gratuit"}
+            </button>
+            <p className="text-xs text-center text-slate-400 mt-4 font-bold uppercase tracking-widest italic">14 jours d'essai gratuit • Sans engagement</p>
           </div>
         </div>
 
@@ -451,14 +441,15 @@ export default function Home() {
           <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto">
             Rejoignez les artisans qui ont déjà divisé leur temps de paperasse par 10
           </p>
-          <Link 
-            href="/login"
-            className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-12 py-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
+          <button
+            onClick={startCheckout}
+            disabled={checkoutLoading}
+            className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-12 py-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Commencer maintenant →
-          </Link>
+            {checkoutLoading ? 'Redirection…' : 'Commencer maintenant →'}
+          </button>
           <p className="text-sm text-slate-500 mt-6">
-            Sans engagement • Sans carte bancaire • Export illimité
+            Sans engagement • Export illimité
           </p>
         </div>
       </section>
@@ -467,15 +458,16 @@ export default function Home() {
       <footer className="border-t border-slate-100 bg-white">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
-                <Camera className="w-5 h-5 text-orange-600" />
-              </div>
-              <span className="font-semibold text-slate-900">ArtisScan Expert</span>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center relative">
+              <ScanLine className="w-5 h-5 text-white" />
+              <Zap className="w-3 h-3 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
             </div>
-            <p className="text-sm text-slate-500">
-              © 2024 ArtisScan. Gestion comptable intelligente pour artisans.
-            </p>
+            <span className="font-semibold text-slate-900"><span className="font-black">Artis</span>Scan</span>
+          </div>
+          <p className="text-sm text-slate-500">
+            © 2024 ArtisScan. Gestion Intelligente universelle pour artisans.
+          </p>
           </div>
         </div>
       </footer>
