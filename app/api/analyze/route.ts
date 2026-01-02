@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 - entreprise : le nom de l'entreprise/fournisseur
 - date : la date de la facture (format YYYY-MM-DD si possible)
 - montant_ht : le montant hors taxes (nombre uniquement, sans symbole)
-- montant_ttc : le montant toutes taxes comprises (nombre uniquement, sans symbole)
+- total_amount : le montant toutes taxes comprises (nombre uniquement, sans symbole)
 - description : une brève description des services/produits
 - categorie : classe la facture dans une de ces catégories : "Matériaux", "Carburant", "Restaurant", "Outillage", "Sous-traitance", "Fournitures", "Location", "Autre"
 
@@ -98,7 +98,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
   "entreprise": "string",
   "date": "YYYY-MM-DD",
   "montant_ht": number,
-  "montant_ttc": number,
+  "total_amount": number,
   "description": "string",
   "categorie": "string"
 }`,
@@ -171,7 +171,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
 
     // Appliquer le nettoyage aux montants
     extractedData.montant_ht = cleanAmount(extractedData.montant_ht || extractedData.montantHT);
-    extractedData.montant_ttc = cleanAmount(extractedData.montant_ttc || extractedData.montantTTC);
+    extractedData.total_amount = cleanAmount(extractedData.total_amount || extractedData.totalAmount || extractedData.montant_ttc || extractedData.montantTTC);
 
     // Assurer que la catégorie est présente
     if (!extractedData.categorie) {

@@ -152,6 +152,15 @@ body {
   animation: spin 0.8s linear infinite;
 }
 
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
 /* Suppression de tous les effets glassmorphism */
 .no-blur {
   backdrop-filter: none !important;
