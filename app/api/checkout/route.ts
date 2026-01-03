@@ -23,13 +23,6 @@ export async function POST(req: NextRequest) {
     const billingCycle = (body?.billingCycle as BillingCycle) || 'monthly';
     const userId = body?.userId;
 
-    if (!userId || userId === '') {
-      return NextResponse.json(
-        { error: "Identification utilisateur requise pour le paiement." },
-        { status: 400 }
-      );
-    }
-
     const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
     const yearlyPriceId = process.env.STRIPE_PRICE_ID_YEARLY?.trim();
     if (!monthlyPriceId || !yearlyPriceId) {
@@ -50,21 +43,29 @@ export async function POST(req: NextRequest) {
 
     const baseUrl = getBaseUrl(req);
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionOptions: any = {
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         trial_period_days: 14,
       },
-      client_reference_id: userId,
-      customer_email: body?.userEmail,
+      customer_email: body?.userEmail || undefined,
       metadata: {
-        supabase_user_id: userId,
+        supabase_user_id: userId || '',
+        supabase_user_email: body?.userEmail || '',
       },
-      success_url: `${baseUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      // Redirection finale : on revient sur la Landing Page avec le session_id
+      success_url: `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
-    });
+    };
+
+    // N'ajouter client_reference_id que si l'utilisateur est connecté (Bulldozer mode)
+    if (userId && userId !== '') {
+      sessionOptions.client_reference_id = userId;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionOptions);
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {

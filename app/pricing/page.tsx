@@ -10,27 +10,15 @@ function PricingContent() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isWelcome, setIsWelcome] = useState(false);
-  const [isAutoTriggered, setIsAutoTriggered] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 1. Charger la session initiale et écouter les changements
+  // 1. Charger la session uniquement pour l'affichage (pas de redirection bloquante)
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
-        
-        // 2. Déclenchement automatique si on revient du signup
-        const auto = searchParams.get('auto');
-        const savedCycle = localStorage.getItem('artisscan_pending_plan');
-        
-        if (auto === 'true' && savedCycle && !isAutoTriggered) {
-          console.log(`🚀 Déclenchement automatique pour le plan: ${savedCycle}`);
-          setIsAutoTriggered(true);
-          localStorage.removeItem('artisscan_pending_plan');
-          startCheckout(savedCycle as 'monthly' | 'yearly');
-        }
       }
     };
 
@@ -45,46 +33,31 @@ function PricingContent() {
     }
 
     return () => subscription.unsubscribe();
-  }, [searchParams, isAutoTriggered]);
+  }, [searchParams]);
 
-  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly', retryCount = 0) => {
+  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
     try {
       setCheckoutLoading(true);
       const cycle = forcedCycle || billingCycle;
       
-      // VÉRIFICATION DE FORCE : On demande l'utilisateur à Supabase au clic
+      // On récupère la session si elle existe (Bulldozer mode: no redirection)
       const { data: { session } } = await supabase.auth.getSession();
       
-      // SI PAS DE SESSION : Sauvegarde du choix et redirection Signup
-      if (!session?.user?.id) {
-        if (retryCount < 1) {
-          console.log(`⚠️ Session non trouvée, tentative de récupération...`);
-          await new Promise(resolve => setTimeout(resolve, 800));
-          return startCheckout(cycle, retryCount + 1);
-        }
-        
-        console.log("📝 Sauvegarde du plan et redirection vers l'inscription");
-        localStorage.setItem('artisscan_pending_plan', cycle);
-        router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing?auto=true`);
-        return;
-      }
-
-      console.log(`[CHECKOUT] Lancement pour l'utilisateur: ${session.user.id}`);
+      console.log(`[CHECKOUT] Lancement direct pour le cycle: ${cycle} (User: ${session?.user?.id || 'GUEST'})`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session.user.id,
-          userEmail: session.user.email
+          userId: session?.user?.id || null, 
+          userEmail: session?.user?.email || null
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       
       if (!res.ok) {
-        // Alerte non bloquante pour l'affichage, mais nécessaire pour le debug
         console.error('Erreur API Stripe:', data?.error);
         throw new Error(data?.error || 'Erreur lors de la création du paiement.');
       }
@@ -94,12 +67,8 @@ function PricingContent() {
       window.location.href = data.url;
     } catch (e: any) {
       console.error('Erreur startCheckout:', e);
-      // On n'affiche l'alerte que si ce n'est pas une erreur de clé manquante en local
-      if (!e.message.includes('STRIPE_SECRET_KEY')) {
-        alert(e?.message || 'Une erreur est survenue.');
-      } else {
-        console.warn("⚠️ Mode local : Clé Stripe manquante, mais le flux est validé.");
-      }
+      // Alerte informative
+      alert(e?.message || 'Une erreur est survenue lors de la redirection vers Stripe.');
       setCheckoutLoading(false);
     }
   };
