@@ -1695,12 +1695,21 @@ export default function Dashboard() {
 
     try {
       // Sauvegarder dans Supabase
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
       
+      if (authError) {
+        console.error('❌ Erreur auth:', authError.message);
+        showToastMessage('❌ Erreur d\'authentification', 'error');
+        return;
+      }
+
       if (!user) {
+        console.error('❌ Utilisateur non connecté');
         showToastMessage('❌ Utilisateur non connecté', 'error');
         return;
       }
+
+      console.log('✅ User ID récupéré:', user.id);
 
       // Validation des données
       const montantHT = parseFloat(pendingInvoiceData.montant_ht);
@@ -1716,6 +1725,9 @@ export default function Dashboard() {
         return;
       }
 
+      // Calcul de la TVA
+      const tva = montantTTC - montantHT;
+
       // Préparer les données pour l'insertion
       const finalCategory = pendingInvoiceData.categorie === '📝 Autre' 
         ? (customCategory.trim() || '📝 Autre') 
@@ -1723,12 +1735,13 @@ export default function Dashboard() {
 
       const invoiceData = {
         user_id: user.id,
-        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         montant_ht: Number(montantHT) || 0,
         montant_ttc: Number(montantTTC) || 0,
-        date_facture: pendingInvoiceData.date || new Date().toISOString(),
-        description: pendingInvoiceData.description || '',
+        tva: Number(tva) || 0,
         categorie: finalCategory || 'Non classé',
+        description: pendingInvoiceData.description || '',
+        date_facture: pendingInvoiceData.date || new Date().toISOString(),
+        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         folder_id: pendingInvoiceData.folder_id || null,
       };
 
@@ -1740,16 +1753,17 @@ export default function Dashboard() {
         .select();
 
       if (error) {
-        console.error('❌ Erreur Supabase:', error);
-        if (error.code === '400' || error.code === 'PGRST116') {
-          showToastMessage(`❌ Erreur 400: ${error.message || 'Données invalides'}. Vérifiez les champs.`, 'error');
-        } else {
-          showToastMessage(`❌ Erreur: ${error.message || 'Erreur base de données'}`, 'error');
-        }
+        console.error('❌ ERREUR SUPABASE COMPLÈTE:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        showToastMessage(`❌ Erreur: ${error.message}`, 'error');
         return;
       }
 
-      console.log('✅ Facture enregistrée:', data);
+      console.log('✅ Facture enregistrée avec succès:', data);
 
       // Fermer la modale
       setShowValidationModal(false);
@@ -1775,8 +1789,11 @@ export default function Dashboard() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (err: any) {
-      console.error('❌ Erreur sauvegarde:', err);
-      // ✅ CORRECTION 4: Message d'erreur détaillé
+      console.error('❌ ERREUR SAUVEGARDE COMPLÈTE:', {
+        message: err.message,
+        stack: err.stack,
+        error: err
+      });
       showToastMessage(`❌ Erreur: ${err.message || 'Erreur lors de l\'enregistrement'}`, 'error');
     }
   };
