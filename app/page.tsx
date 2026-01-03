@@ -61,7 +61,7 @@ export default function Home() {
               </div>
             ) : (
               <Link 
-                href="/login"
+                href="/login?redirect=/dashboard"
                 className="text-slate-700 hover:text-slate-900 font-black uppercase tracking-widest text-xs px-4 py-2 transition-colors duration-200 flex items-center gap-2"
               >
                 <LogIn className="w-4 h-4" />

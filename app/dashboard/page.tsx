@@ -82,6 +82,7 @@ export default function Dashboard() {
   const [companyAddress, setCompanyAddress] = useState('');
   const [companySiret, setCompanySiret] = useState('');
   const [companyProfession, setCompanyProfession] = useState('');
+  const [activationPending, setActivationPending] = useState(false);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -317,6 +318,7 @@ export default function Dashboard() {
         }
 
         setUserTier('pro');
+        setActivationPending(true);
         setIsLoadingProfile(false);
         return;
       }
@@ -334,18 +336,15 @@ export default function Dashboard() {
           profile.subscription_status === 'trialing';
 
         if (!isActuallyPro) {
-          console.log('⚠️ Accès PRO non validé, redirection vers tarifs...');
-          window.location.href = '/pricing';
-          return;
+          console.log('⚠️ Accès PRO en cours d’activation...');
+          setActivationPending(true);
+        } else {
+          setActivationPending(false);
+          console.log('✅ Accès PRO validé');
         }
-        
-        console.log('✅ Accès PRO validé');
       } else {
-        // Pas de profil = pas d'abonnement
-        if (!isSuccessReturn) {
-          window.location.href = '/pricing';
-          return;
-        }
+        // Pas de profil = activation en cours
+        setActivationPending(true);
       }
 
       const scanStatus = await canUserScan();
@@ -1602,7 +1601,27 @@ export default function Dashboard() {
     setShowUploadMenu(true);
   };
 
+  // Affichage d'attente pendant l'activation PRO
+  if (activationPending || isLoadingProfile) {
     return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
+        <div className="bg-white border border-slate-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-4 animate-fade-in">
+          <div className="flex items-center justify-center gap-3 text-orange-500 font-black text-lg uppercase tracking-widest">
+            <Zap className="w-6 h-6" />
+            Activation de votre abonnement...
+          </div>
+          <p className="text-slate-600 text-sm">
+            Merci pour votre paiement. Nous synchronisons votre accès Pro. Cette étape ne prend que quelques secondes.
+          </p>
+          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div className="h-full bg-orange-500 animate-pulse" style={{ width: '70%' }}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
