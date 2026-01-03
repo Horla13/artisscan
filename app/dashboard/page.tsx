@@ -295,6 +295,22 @@ export default function Dashboard() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Polling doux pendant l'activation pour détecter plan='pro' dès que la DB est synchro
+  useEffect(() => {
+    if (!activationPending) return;
+
+    const interval = setInterval(async () => {
+      const profile = await getUserProfile();
+      if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
+        setActivationPending(false);
+        setUserTier('pro');
+        router.push('/dashboard');
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [activationPending, router]);
+
   const checkSubscriptionLimits = async () => {
     try {
       const profile = await getUserProfile();

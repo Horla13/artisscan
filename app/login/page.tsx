@@ -67,6 +67,7 @@ function LoginForm() {
         password,
         // Désactive tout email automatique Supabase : on ne veut que l'email après paiement
         options: {
+          // Pas d'email de confirmation Supabase (on gère l'email après paiement)
           emailRedirectTo: undefined,
         },
       })
