@@ -39,6 +39,15 @@ interface Project {
   updated_at: string;
 }
 
+interface Folder {
+  id: string;
+  user_id: string;
+  name: string;
+  reference: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface ProjectStats {
   id: string;
   name: string;
@@ -70,6 +79,13 @@ export default function Dashboard() {
   const [showArchived, setShowArchived] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  
+  // États pour les dossiers personnalisés
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
+  const [folderName, setFolderName] = useState('');
+  const [folderReference, setFolderReference] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -250,6 +266,7 @@ export default function Dashboard() {
     try {
       await Promise.all([
         loadInvoices(),
+        loadFolders(),
         checkSubscriptionLimits()
       ]);
       showToastMessage('Données actualisées', 'success');
@@ -670,6 +687,82 @@ export default function Dashboard() {
     } finally {
       setLoadingInvoices(false);
       console.log('✅ === FIN CHARGEMENT FACTURES ===');
+    }
+  };
+
+  // ===== GESTION DES DOSSIERS PERSONNALISÉS =====
+  const loadFolders = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setFolders(data || []);
+    } catch (err) {
+      console.error('Erreur chargement dossiers:', err);
+    }
+  };
+
+  const createFolder = async () => {
+    if (!folderName.trim()) {
+      showToastMessage('❌ Le nom du dossier est requis', 'error');
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToastMessage('❌ Utilisateur non connecté', 'error');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('folders')
+        .insert([{
+          user_id: user.id,
+          name: folderName.trim(),
+          reference: folderReference.trim()
+        }])
+        .select();
+
+      if (error) throw error;
+
+      showToastMessage('✅ Dossier créé !', 'success');
+      setFolderName('');
+      setFolderReference('');
+      setShowFolderModal(false);
+      loadFolders();
+    } catch (err: any) {
+      console.error('Erreur création dossier:', err);
+      showToastMessage(`❌ ${err.message}`, 'error');
+    }
+  };
+
+  const deleteFolder = async (folderId: string) => {
+    if (!confirm('Supprimer ce dossier ? Les factures ne seront pas supprimées.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('folders')
+        .delete()
+        .eq('id', folderId);
+
+      if (error) throw error;
+
+      showToastMessage('✅ Dossier supprimé', 'success');
+      loadFolders();
+      if (selectedFolder?.id === folderId) {
+        setSelectedFolder(null);
+      }
+    } catch (err: any) {
+      console.error('Erreur suppression dossier:', err);
+      showToastMessage(`❌ ${err.message}`, 'error');
     }
   };
 
@@ -2406,6 +2499,111 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* DOSSIERS PERSONNALISÉS */}
+        {currentView === 'folders' && (
+          <div className="fade-in">
+            {!selectedFolder ? (
+              <>
+                {/* Header avec bouton création */}
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Mes Dossiers</h2>
+                  </div>
+                  <button
+                    onClick={() => setShowFolderModal(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95 shadow-md"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Créer un dossier
+                  </button>
+                </div>
+
+                {/* Liste des dossiers */}
+                {folders.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+                    <Folder className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-bold text-slate-900 mb-2">Aucun dossier</h3>
+                    <p className="text-slate-500 mb-6">Créez votre premier dossier pour organiser vos factures</p>
+                    <button
+                      onClick={() => setShowFolderModal(true)}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Créer un dossier
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {folders.map(folder => (
+                      <div
+                        key={folder.id}
+                        className="bg-white rounded-2xl border-2 border-slate-200 p-6 hover:border-orange-400 hover:shadow-xl transition-all group cursor-pointer"
+                        onClick={() => setSelectedFolder(folder)}
+                      >
+                        <div className="flex items-start gap-4 mb-4">
+                          <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                            <Folder className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-black text-slate-900 truncate group-hover:text-orange-600 transition-colors">
+                              {folder.name}
+                            </h3>
+                            {folder.reference && (
+                              <p className="text-sm text-slate-500 mt-1 truncate">
+                                Réf: {folder.reference}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteFolder(folder.id);
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Vue détaillée d'un dossier */}
+                <button
+                  onClick={() => setSelectedFolder(null)}
+                  className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium mb-6 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                  Retour aux dossiers
+                </button>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                      <Folder className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-black text-slate-900">{selectedFolder.name}</h1>
+                      {selectedFolder.reference && (
+                        <p className="text-slate-500 mt-1">Réf: {selectedFolder.reference}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-orange-800">
+                    <strong>Note:</strong> La liaison des factures aux dossiers sera bientôt disponible. Pour l'instant, vous pouvez créer et organiser vos dossiers.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* PARAMÈTRES - Design Pro */}
         {currentView === 'parametres' && (
           <div className="fade-in max-w-4xl mx-auto">
@@ -3057,6 +3255,81 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Modale création de dossier */}
+      {showFolderModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full slide-up shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
+                  <Folder className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900">Nouveau dossier</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setFolderName('');
+                  setFolderReference('');
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Nom du dossier *
+                </label>
+                <input
+                  type="text"
+                  value={folderName}
+                  onChange={(e) => setFolderName(e.target.value)}
+                  placeholder="Ex: Chantier Dupont, Comptabilité 2024..."
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Référence comptable
+                </label>
+                <input
+                  type="text"
+                  value={folderReference}
+                  onChange={(e) => setFolderReference(e.target.value)}
+                  placeholder="Ex: REF-2024-001, DUPONT-2024..."
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setFolderName('');
+                  setFolderReference('');
+                }}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={createFolder}
+                disabled={!folderName.trim()}
+                className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Créer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* (Gestion manuelle des dossiers supprimée : Chronologie automatique par mois) */}
 
       {/* Toast de confirmation */}
@@ -3150,11 +3423,15 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => window.location.href = '/dashboard/folders'}
-              className="flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl text-slate-400 hover:text-slate-600"
+              onClick={() => setCurrentView('folders')}
+              className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
+                currentView === 'folders' 
+                  ? 'text-orange-500 scale-105' 
+                  : 'text-slate-400 hover:text-slate-600'
+                }`}
             >
-              <Folder className="w-6 h-6 mb-1 transition-transform" strokeWidth={2} />
-              <span className="text-[10px] uppercase tracking-widest font-bold">Dossiers</span>
+              <Folder className={`w-6 h-6 mb-1 transition-transform ${currentView === 'folders' ? 'scale-110' : ''}`} strokeWidth={currentView === 'folders' ? 2.5 : 2} />
+              <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'folders' ? 'font-black' : 'font-bold'}`}>Dossiers</span>
             </button>
 
             {/* Onglet Dossiers supprimé : organisation automatique par mois */}
