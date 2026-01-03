@@ -1072,7 +1072,6 @@ export default function Dashboard() {
         'Fournisseur': inv.entreprise,
         'Catégorie': inv.categorie || 'Non classé',
         'Description': inv.description || '',
-        'Moyen de paiement': inv.moyen_paiement || '-',
         'Montant HT (€)': ht,
         'TVA (%)': tvaPercent + '%',
         'Montant TVA (€)': tvaAmount,
@@ -1094,7 +1093,6 @@ export default function Dashboard() {
           'Fournisseur': '',
           'Catégorie': '',
           'Description': '',
-          'Moyen de paiement': '',
           'Montant HT (€)': 0,
           'TVA (%)': '',
           'Montant TVA (€)': 0,
@@ -1106,7 +1104,6 @@ export default function Dashboard() {
           'Fournisseur': '',
           'Catégorie': '',
           'Description': '',
-          'Moyen de paiement': '',
           'Montant HT (€)': totalHT,
           'TVA (%)': '',
           'Montant TVA (€)': totalTVA,
@@ -1641,7 +1638,6 @@ export default function Dashboard() {
         categorie: finalCategory || 'Non classé',
         nom_chantier: null,
         project_id: null,
-        moyen_paiement: pendingInvoiceData.moyen_paiement || 'Non spécifié',
       };
 
       console.log('📤 Envoi données à Supabase:', invoiceData);
@@ -2998,16 +2994,6 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* (Dossiers supprimés) */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">
-                  Classement automatique par mois (date de facture)
-                </p>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Vous n'avez plus besoin de créer/choisir un dossier : l'application regroupe tout par mois.
-                </p>
-              </div>
-
               {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -3023,30 +3009,6 @@ export default function Dashboard() {
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm resize-none"
                   placeholder="Détails de la facture..."
                 />
-              </div>
-
-              {/* Moyen de Paiement */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                  <LayoutDashboard className="w-4 h-4 text-orange-500" />
-                  Moyen de paiement
-                </label>
-                <select
-                  value={pendingInvoiceData.moyen_paiement || ''}
-                  onChange={(e) => setPendingInvoiceData({
-                    ...pendingInvoiceData,
-                    moyen_paiement: e.target.value
-                  })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
-                >
-                  <option value="">-- Choisir un moyen de paiement --</option>
-                  <option value="Carte Bancaire">💳 Carte Bancaire</option>
-                  <option value="Virement">🏦 Virement</option>
-                  <option value="Espèces">💵 Espèces</option>
-                  <option value="Chèque">✍️ Chèque</option>
-                  <option value="Prélèvement">🔄 Prélèvement</option>
-                  <option value="Autre">📝 Autre</option>
-                </select>
               </div>
                     </div>
 
