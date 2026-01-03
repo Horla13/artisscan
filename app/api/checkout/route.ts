@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
         supabase_user_email: body?.userEmail || '',
       },
       // Redirection finale : on revient sur la Landing Page avec le session_id
-      success_url: `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      // Retour direct vers le dashboard après paiement
+      success_url: `${baseUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
     };
