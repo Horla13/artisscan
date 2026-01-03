@@ -1729,6 +1729,7 @@ export default function Dashboard() {
         date_facture: pendingInvoiceData.date || new Date().toISOString(),
         description: pendingInvoiceData.description || '',
         categorie: finalCategory || 'Non classé',
+        folder_id: pendingInvoiceData.folder_id || null,
       };
 
       console.log('📤 Envoi données à Supabase:', invoiceData);
@@ -3204,6 +3205,34 @@ export default function Dashboard() {
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm resize-none"
                   placeholder="Détails de la facture..."
                 />
+              </div>
+
+              {/* Dossier de destination */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-orange-500" />
+                  Dossier de destination
+                </label>
+                <select
+                  value={pendingInvoiceData.folder_id || ''}
+                  onChange={(e) => setPendingInvoiceData({
+                    ...pendingInvoiceData,
+                    folder_id: e.target.value
+                  })}
+                  className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                >
+                  <option value="">-- Aucun dossier (par défaut) --</option>
+                  {folders.map(folder => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name} {folder.reference ? `(${folder.reference})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {folders.length === 0 && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Aucun dossier créé. Créez-en un depuis l'onglet "Dossiers".
+                  </p>
+                )}
               </div>
                     </div>
 
