@@ -40,7 +40,13 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string;
         const userEmail = session.customer_details?.email || session.metadata?.supabase_user_email;
+        const userId = session.client_reference_id || session.metadata?.supabase_user_id;
         const nowIso = new Date().toISOString();
+
+        console.log('🔔 WEBHOOK STRIPE REÇU: checkout.session.completed');
+        console.log('📧 Email client:', userEmail);
+        console.log('🆔 Customer ID:', customerId);
+        console.log('👤 User ID:', userId);
 
         if (!userEmail) {
           console.error('❌ Webhook: email introuvable, impossible de mettre à jour le profil.');
@@ -56,19 +62,18 @@ export async function POST(req: NextRequest) {
           updated_at: nowIso,
         };
 
+        console.log('📝 Tentative UPSERT avec données:', updateData);
+
         // Upsert par email (service_role pour contourner RLS)
-        const { error: upsertError } = await supabase
+        const { data: upsertData, error: upsertError } = await supabase
           .from('profiles')
           .upsert(updateData, { onConflict: 'email' });
 
         if (upsertError) {
-          console.error('❌ Erreur update/upsert profil:', upsertError);
+          console.error('❌ ERREUR UPSERT profil:', JSON.stringify(upsertError));
         } else {
-          console.log(`✅ Profil PRO upserté via email pour ${userEmail}`);
-        }
-
-        if (upsertError) {
-          console.error('❌ Erreur update/upsert profil:', upsertError);
+          console.log(`✅ SUCCÈS: Profil PRO upserté via email pour ${userEmail}`);
+          console.log('✅ Données retournées:', upsertData);
         }
         
         // Envoi de l'email de confirmation via Resend (seul email envoyé)

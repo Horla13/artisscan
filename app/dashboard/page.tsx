@@ -1628,13 +1628,34 @@ export default function Dashboard() {
   // Affichage d'attente pendant l'activation PRO
   if (activationPending || isLoadingProfile) {
     const forceCheck = async () => {
+      console.log('🔄 Force refresh session + vérification profil');
+      
+      // 1. Rafraîchir la session Supabase
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.error('❌ Erreur refresh session:', error);
+        } else {
+          console.log('✅ Session rafraîchie:', data);
+        }
+      } catch (err) {
+        console.error('❌ Erreur refresh:', err);
+      }
+      
+      // 2. Vérifier le profil
       const profile = await getUserProfile();
+      console.log('📊 Profil récupéré:', profile);
+      
       if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
+        console.log('✅ Profil PRO détecté, activation confirmée');
         setActivationPending(false);
         setUserTier('pro');
       } else {
+        console.warn('⚠️ Profil pas encore PRO, réessayez dans un instant');
         showToastMessage('Activation en cours, réessayez dans un instant', 'error');
       }
+      
+      // 3. Forcer la redirection
       router.push('/dashboard');
       router.refresh?.();
     };
