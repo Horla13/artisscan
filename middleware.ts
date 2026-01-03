@@ -10,8 +10,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  console.log('🔍 Middleware: Protection Dashboard activée pour', pathname)
-  console.log('🍪 Cookies disponibles:', req.cookies.getAll().map(c => c.name))
+  console.log('🔍 Middleware: Protection /dashboard')
 
   let res = NextResponse.next({
     request: {
@@ -26,16 +25,16 @@ export async function middleware(req: NextRequest) {
       {
         cookies: {
           get(name: string) {
-            const value = req.cookies.get(name)?.value
-            console.log(`📖 Cookie READ: ${name} = ${value ? 'PRESENT' : 'ABSENT'}`)
-            return value
+            return req.cookies.get(name)?.value
           },
           set(name: string, value: string, options: any) {
+            // Mettre à jour les cookies de la requête
             req.cookies.set({
               name,
               value,
               ...options,
             })
+            // Mettre à jour les cookies de la réponse
             res = NextResponse.next({
               request: {
                 headers: req.headers,
@@ -46,14 +45,15 @@ export async function middleware(req: NextRequest) {
               value,
               ...options,
             })
-            console.log(`✍️ Cookie SET: ${name}`)
           },
           remove(name: string, options: any) {
+            // Supprimer des cookies de la requête
             req.cookies.set({
               name,
               value: '',
               ...options,
             })
+            // Supprimer des cookies de la réponse
             res = NextResponse.next({
               request: {
                 headers: req.headers,
@@ -64,61 +64,46 @@ export async function middleware(req: NextRequest) {
               value: '',
               ...options,
             })
-            console.log(`🗑️ Cookie REMOVE: ${name}`)
           },
         },
       }
     )
 
-    // Vérification utilisateur avec getUser (méthode serveur sécurisée)
-    console.log('🔐 Tentative getUser()...')
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // 1. Essayer de récupérer la session (plus permissif que getUser)
+    console.log('🔐 Tentative getSession()...')
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-    if (authError) {
-      console.error('❌ Erreur getUser():', authError.message, authError.status)
+    if (sessionError) {
+      console.log('⚠️ Erreur getSession():', sessionError.message)
     }
 
-    if (!user) {
-      console.log('🚫 Aucun utilisateur trouvé → Redirection /login')
-      const redirectUrl = new URL('/login', req.url)
-      redirectUrl.searchParams.set('redirect', pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
+    // 2. Si pas de session, essayer getUser (plus strict)
+    if (!session) {
+      console.log('📡 Pas de session, tentative getUser()...')
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    console.log('✅ Utilisateur trouvé:', user.id, user.email)
+      if (userError) {
+        console.log('❌ Erreur getUser():', userError.message, userError.status)
+      }
 
-    // Vérifier le plan dans profiles
-    console.log('📊 Vérification du plan dans profiles...')
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('plan, subscription_tier, subscription_status, email')
-      .eq('id', user.id)
-      .single()
+      if (!user) {
+        console.log('🚫 Aucun utilisateur trouvé → Redirection /login')
+        const redirectUrl = new URL('/login', req.url)
+        redirectUrl.searchParams.set('redirect', pathname)
+        return NextResponse.redirect(redirectUrl)
+      }
 
-    if (profileError) {
-      console.log('⚠️ Erreur récupération profil:', profileError.message)
-      console.log('⚠️ Accès autorisé par défaut (mode graceful)')
+      console.log('✅ Utilisateur trouvé via getUser():', user.email)
       return res
     }
 
-    console.log('📋 Profil récupéré:', JSON.stringify(profile))
-
-    const isPro = profile?.plan === 'pro' || 
-                  profile?.subscription_tier === 'pro' || 
-                  profile?.subscription_status === 'active'
-
-    if (isPro) {
-      console.log('🎉 Utilisateur PRO confirmé → Accès Dashboard autorisé')
-      return res
-    }
-
-    // Pas encore PRO mais connecté = on laisse passer (écran d'activation)
-    console.log('⏳ Utilisateur non-PRO mais connecté → Accès autorisé (écran activation)')
+    console.log('✅ Session active:', session.user.email)
     return res
 
   } catch (err: any) {
     console.error('💥 Exception middleware:', err.message)
-    console.log('⚠️ Accès autorisé par défaut (erreur)')
+    // En cas d'erreur, laisser passer (mode graceful)
+    console.log('⚠️ Erreur, accès autorisé par défaut')
     return res
   }
 }
