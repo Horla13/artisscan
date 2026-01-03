@@ -330,7 +330,7 @@ export default function Dashboard() {
 
         if (!isActuallyPro) {
           console.log('⚠️ Accès PRO non validé, redirection vers tarifs...');
-          window.location.href = '/#tarification';
+          window.location.href = '/pricing';
           return;
         }
         
@@ -338,7 +338,7 @@ export default function Dashboard() {
       } else {
         // Pas de profil = pas d'abonnement
         if (!isSuccessReturn) {
-          window.location.href = '/#tarification';
+          window.location.href = '/pricing';
           return;
         }
       }

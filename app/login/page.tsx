@@ -35,8 +35,12 @@ function LoginForm() {
 
       // Redirection intelligente après login
       const cycle = searchParams.get('cycle')
-      if (cycle) {
-        router.push(`/#tarification`)
+      const redirectTo = searchParams.get('redirect')
+      
+      if (redirectTo) {
+        router.push(redirectTo)
+      } else if (cycle) {
+        router.push(`/pricing?cycle=${cycle}`)
       } else {
         router.push('/dashboard')
       }
@@ -66,12 +70,8 @@ function LoginForm() {
       if (error) throw error
 
       // Après l'inscription, on redirige vers les tarifs pour le choix du plan
-      const cycle = searchParams.get('cycle')
-      if (cycle) {
-        router.push(`/#tarification`)
-      } else {
-        router.push('/#tarification')
-      }
+      const redirectTo = searchParams.get('redirect') || '/pricing'
+      router.push(redirectTo)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {

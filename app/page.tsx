@@ -9,44 +9,9 @@ export default function Home() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
-    try {
-      setCheckoutLoading(true);
-      const cycle = forcedCycle || billingCycle;
-      
-      // Récupérer l'utilisateur actuel s'il est déjà connecté
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        // Si pas connecté, direction l'inscription
-        window.location.href = `/login?mode=signup&cycle=${cycle}`;
-        return;
-      }
-
-      console.log(`[CHECKOUT] Initialisation pour cycle: ${cycle} (User: ${session.user.id})`);
-
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          billingCycle: cycle,
-          userId: session?.user?.id,
-          userEmail: session?.user?.email
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || 'Erreur paiement');
-      }
-      if (!data?.url) {
-        throw new Error('URL Stripe manquante');
-      }
-      window.location.href = data.url;
-    } catch (e: any) {
-      alert(e?.message || 'Erreur lors du paiement.');
-      setCheckoutLoading(false);
-    }
+  const startSignup = (cycle?: 'monthly' | 'yearly') => {
+    const c = cycle || billingCycle;
+    window.location.href = `/login?mode=signup&cycle=${c}&redirect=/pricing`;
   };
 
   return (
@@ -92,11 +57,10 @@ export default function Home() {
 
         <div className="flex items-center justify-center mb-12">
           <button
-            onClick={() => startCheckout()}
-            disabled={checkoutLoading}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => startSignup()}
+            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
           >
-            {checkoutLoading ? 'Redirection…' : 'Commencer maintenant'}
+            Commencer maintenant
           </button>
         </div>
 
@@ -338,14 +302,10 @@ export default function Home() {
             </ul>
 
             <button
-              onClick={() => {
-                setBillingCycle('monthly');
-                startCheckout('monthly');
-              }}
-              disabled={checkoutLoading}
-              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+              onClick={() => startSignup('monthly')}
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg text-sm"
             >
-              {checkoutLoading ? 'Redirection…' : "Commencer l'essai de 14 jours"}
+              Commencer l'essai de 14 jours
             </button>
             <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
           </div>
@@ -405,14 +365,10 @@ export default function Home() {
             </ul>
 
             <button
-              onClick={() => {
-                setBillingCycle('yearly');
-                startCheckout('yearly');
-              }}
-              disabled={checkoutLoading}
-              className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+              onClick={() => startSignup('yearly')}
+              className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl text-sm"
             >
-              {checkoutLoading ? 'Redirection…' : "Commencer l'essai de 14 jours"}
+              Commencer l'essai de 14 jours
             </button>
             <p className="text-xs text-center text-slate-500 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
           </div>
@@ -493,11 +449,10 @@ export default function Home() {
             Rejoignez les artisans qui ont déjà divisé leur temps de paperasse par 10
           </p>
           <button
-            onClick={() => startCheckout()}
-            disabled={checkoutLoading}
-            className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-12 py-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => startSignup()}
+            className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-12 py-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
           >
-            {checkoutLoading ? 'Redirection…' : 'Commencer maintenant →'}
+            Commencer maintenant →
           </button>
           <p className="text-sm text-slate-500 mt-6">
             Sans engagement • Export illimité
