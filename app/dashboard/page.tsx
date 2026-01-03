@@ -83,6 +83,7 @@ export default function Dashboard() {
   const [companySiret, setCompanySiret] = useState('');
   const [companyProfession, setCompanyProfession] = useState('');
   const [activationPending, setActivationPending] = useState(false);
+  const [showForceAccess, setShowForceAccess] = useState(false);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -308,7 +309,14 @@ export default function Dashboard() {
       }
     }, 2000);
 
-    return () => clearInterval(interval);
+    const timer = setTimeout(() => {
+      setShowForceAccess(true);
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timer);
+    };
   }, [activationPending, router]);
 
   const checkSubscriptionLimits = async () => {
@@ -1619,6 +1627,17 @@ export default function Dashboard() {
 
   // Affichage d'attente pendant l'activation PRO
   if (activationPending || isLoadingProfile) {
+    const forceCheck = async () => {
+      const profile = await getUserProfile();
+      if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
+        setActivationPending(false);
+        setUserTier('pro');
+        router.push('/dashboard');
+      } else {
+        showToastMessage('Activation en cours, réessayez dans un instant', 'error');
+      }
+    };
+
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
         <div className="bg-white border border-slate-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-4 animate-fade-in">
@@ -1632,6 +1651,14 @@ export default function Dashboard() {
           <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
             <div className="h-full bg-orange-500 animate-pulse" style={{ width: '70%' }}></div>
           </div>
+          {showForceAccess && (
+            <button
+              onClick={forceCheck}
+              className="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md active:scale-95 transition-all"
+            >
+              Accéder au Dashboard
+            </button>
+          )}
         </div>
       </div>
     );
