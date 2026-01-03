@@ -69,9 +69,10 @@ function LoginForm() {
 
       if (error) throw error
 
-      // Après l'inscription, on redirige vers les tarifs pour le choix du plan
+      // Après l'inscription, on redirige vers les tarifs avec un message de bienvenue
       const redirectTo = searchParams.get('redirect') || '/pricing'
-      router.push(redirectTo)
+      const separator = redirectTo.includes('?') ? '&' : '?'
+      router.push(`${redirectTo}${separator}status=welcome`)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {

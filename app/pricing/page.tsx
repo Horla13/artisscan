@@ -8,21 +8,53 @@ import { Check, CheckCircle, ScanLine, Zap } from 'lucide-react';
 function PricingContent() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [isWelcome, setIsWelcome] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get('status') === 'welcome') {
+      setIsWelcome(true);
+    }
+  }, [searchParams]);
+
+  // Listener pour détecter la connexion immédiate
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`[AUTH] Événement: ${event}`);
+      if (session?.user) {
+        setUser(session.user);
+      } else {
+        setUser(null);
+      }
+    });
+
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setUser(session.user);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
     try {
       setCheckoutLoading(true);
       const cycle = forcedCycle || billingCycle;
       
+      // Vérification de la session en temps réel
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        // Normalement l'utilisateur doit être connecté avant d'arriver ici
+        console.log("⚠️ Pas de session, redirection vers signup...");
         router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
         return;
       }
+
+      console.log(`[CHECKOUT] Initialisation pour ${session.user.email} (Cycle: ${cycle})`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
@@ -30,7 +62,7 @@ function PricingContent() {
         body: JSON.stringify({ 
           billingCycle: cycle,
           userId: session.user.id,
-          userEmail: session.user.email
+          userEmail: session.user.email // Passage de l'email pour Stripe
         }),
       });
 
@@ -48,7 +80,23 @@ function PricingContent() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans py-20 px-6">
       <div className="max-w-7xl mx-auto">
+        {/* En-tête de page dynamique */}
         <div className="flex flex-col items-center mb-16">
+          {isWelcome && (
+            <div className="mb-8 px-8 py-4 bg-green-50 border border-green-100 text-green-700 rounded-3xl shadow-sm text-center animate-bounce-short">
+              <div className="flex items-center justify-center gap-3 mb-1">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-black uppercase tracking-wider">Compte créé avec succès !</span>
+              </div>
+              <p className="text-sm font-medium opacity-80">Finalisez votre inscription en choisissant votre plan ArtisScan Pro.</p>
+            </div>
+          )}
+          {user && !isWelcome && (
+            <div className="mb-8 px-6 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-black uppercase tracking-widest animate-fade-in flex items-center gap-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+              Connecté : {user.email}
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative">
               <ScanLine className="w-8 h-8 text-white" />

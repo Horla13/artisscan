@@ -1,13 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle, Star, Check, ScanLine, Zap } from 'lucide-react';
+import { Camera, FileText, TrendingUp, Download, Sparkles, CheckCircle, Star, Check, ScanLine, Zap, LogIn, LayoutDashboard } from 'lucide-react';
 
 export default function Home() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Vérifier la session initiale
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserEmail(session?.user?.email || null);
+    });
+
+    // Écouter les changements d'auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const startSignup = (cycle?: 'monthly' | 'yearly') => {
     const c = cycle || billingCycle;
@@ -29,12 +44,31 @@ export default function Home() {
               <span className="text-[8px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none">Gestion Intelligente</span>
             </div>
           </div>
-          <Link 
-            href="/login"
-            className="text-slate-700 hover:text-slate-900 font-medium px-4 py-2 transition-colors duration-200"
-          >
-            Connexion
-          </Link>
+          
+          <div className="flex items-center gap-4">
+            {userEmail ? (
+              <div className="flex items-center gap-4 animate-fade-in">
+                <span className="hidden md:block text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                  {userEmail}
+                </span>
+                <Link 
+                  href="/dashboard"
+                  className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-black uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Link>
+              </div>
+            ) : (
+              <Link 
+                href="/login"
+                className="text-slate-700 hover:text-slate-900 font-black uppercase tracking-widest text-xs px-4 py-2 transition-colors duration-200 flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Connexion
+              </Link>
+            )}
+          </div>
         </div>
       </nav>
 
