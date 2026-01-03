@@ -304,13 +304,24 @@ export default function Dashboard() {
     console.log('🔄 Démarrage du polling automatique (vérification toutes les 2s)');
 
     const interval = setInterval(async () => {
-      console.log('🔍 Vérification statut PRO...');
+      console.log('🔍 Polling: Vérification statut PRO...');
       
       try {
         const profile = await getUserProfile();
+        console.log('📊 Polling: Profil récupéré:', profile);
         
-        if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
-          console.log('✅ Statut PRO détecté en base de données !');
+        // Vérification insensible à la casse
+        const planLower = profile?.plan?.toLowerCase();
+        const tierLower = profile?.subscription_tier?.toLowerCase();
+        const statusLower = profile?.subscription_status?.toLowerCase();
+        
+        const isPro = planLower === 'pro' || 
+                      tierLower === 'pro' || 
+                      statusLower === 'active' ||
+                      statusLower === 'trialing';
+        
+        if (profile && isPro) {
+          console.log('✅ Statut PRO détecté (plan:', profile.plan, 'tier:', profile.subscription_tier, 'status:', profile.subscription_status, ')');
           
           // 1. Rafraîchir la session Supabase (VITAL)
           console.log('📡 Rafraîchissement de la session Supabase...');
@@ -328,6 +339,8 @@ export default function Dashboard() {
           setActivationPending(false);
           setUserTier('pro');
           window.location.href = '/dashboard';
+        } else {
+          console.log('⏳ Polling: Pas encore PRO, réessai dans 2s...');
         }
       } catch (err) {
         console.error('❌ Erreur polling:', err);
@@ -336,6 +349,7 @@ export default function Dashboard() {
 
     // Bouton de secours après 10 secondes
     const timer = setTimeout(() => {
+      console.log('⏰ 10 secondes écoulées, affichage bouton secours');
       setShowForceAccess(true);
     }, 10000);
 
@@ -350,17 +364,17 @@ export default function Dashboard() {
       const params = new URLSearchParams(window.location.search);
       const sessionId = params.get('session_id');
 
-      console.log('🔍 Vérification session utilisateur...');
+      console.log('🔍 checkSubscriptionLimits: Vérification utilisateur...');
 
       // Si retour de Stripe avec session_id, afficher l'écran d'activation
       if (sessionId) {
         console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ')');
         
-        // Mise à jour préventive du profil
+        // Mise à jour préventive du profil (toujours en minuscules)
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await supabase.from('profiles').update({ 
-            plan: 'pro',
+            plan: 'pro', // Toujours en minuscules
             updated_at: new Date().toISOString()
           }).eq('id', user.id);
         }
@@ -374,7 +388,7 @@ export default function Dashboard() {
       }
 
       // ✅ MODE PRO-ONLY: Tout utilisateur connecté est PRO
-      console.log('✅ Utilisateur connecté → Accès PRO complet');
+      console.log('✅ MODE PRO-ONLY: Utilisateur connecté → Accès PRO complet');
       
       setUserTier('pro');
       setCanScan(true);
@@ -383,7 +397,8 @@ export default function Dashboard() {
 
     } catch (error) {
       console.error('❌ Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur, on donne quand même l'accès PRO
+      // En cas d'erreur, on donne quand même l'accès PRO (mode PRO-only)
+      console.log('⚠️ Erreur mais accès PRO accordé par défaut');
       setUserTier('pro');
       setCanScan(true);
       setRemainingScans(-1);
