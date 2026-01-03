@@ -48,27 +48,33 @@ function PricingContent() {
       // VÉRIFICATION IMMÉDIATE : On récupère la session brute
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session?.user) {
+      // FALLBACK : Si pas de session, on regarde si l'email est dans l'URL (post-signup immédiat)
+      const urlEmail = searchParams.get('email');
+      
+      if (!session?.user && !urlEmail) {
         if (retryCount < 2) {
           console.log(`⚠️ Session non détectée (essai ${retryCount + 1}), attente 1s...`);
           await new Promise(resolve => setTimeout(resolve, 1000));
           return startCheckout(cycle, retryCount + 1);
         }
         
-        console.log("❌ Pas de session détectée, redirection forcée");
+        console.log("❌ Pas de session ni d'email détecté, redirection forcée");
         router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
         return;
       }
 
-      console.log(`[CHECKOUT] Session trouvée pour ${session.user.email}. Lancement Stripe...`);
+      const checkoutEmail = session?.user?.email || urlEmail;
+      const checkoutUserId = session?.user?.id || ''; // Stripe accepte un ID vide si email présent
+
+      console.log(`[CHECKOUT] Session trouvée pour ${checkoutEmail}. Lancement Stripe...`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session.user.id,
-          userEmail: session.user.email
+          userId: checkoutUserId,
+          userEmail: checkoutEmail
         }),
       });
 

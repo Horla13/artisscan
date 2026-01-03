@@ -62,23 +62,21 @@ function LoginForm() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error, data } = await supabase.auth.signUp({
         email,
         password,
       })
 
       if (error) throw error
 
+      console.log("✅ Inscription réussie, redirection immédiate vers les tarifs");
+      
       // Forcer le rafraîchissement des composants pour reconnaître la nouvelle session
       router.refresh()
 
-      // Petit délai pour laisser le cookie de session s'enregistrer
-      setTimeout(() => {
-        // Après l'inscription, on redirige vers les tarifs avec un message de bienvenue
-        const redirectTo = searchParams.get('redirect') || '/pricing'
-        const separator = redirectTo.includes('?') ? '&' : '?'
-        router.push(`${redirectTo}${separator}status=welcome`)
-      }, 500)
+      // Redirection immédiate vers les tarifs avec l'email dans l'URL pour bypasser la latence session
+      const cycle = searchParams.get('cycle') || 'monthly'
+      router.push(`/pricing?mode=signup&status=welcome&cycle=${cycle}&email=${encodeURIComponent(email)}`)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {

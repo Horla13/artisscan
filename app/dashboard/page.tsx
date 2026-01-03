@@ -1309,7 +1309,7 @@ export default function Dashboard() {
     // 5. Pied de page
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text('ArtisScan Expert - Document généré par le logiciel ArtisScan. Copie certifiée conforme.', pageWidth / 2, 285, { align: 'center' });
+    doc.text('ArtisScan - Document généré par le logiciel ArtisScan. Copie certifiée conforme.', pageWidth / 2, 285, { align: 'center' });
 
     doc.save(`ArtisScan_Bilan_${projectStats.name.replace(/\s+/g, '_')}.pdf`);
     showToastMessage('✅ Bilan PDF professionnel généré !', 'success');
@@ -2992,7 +2992,7 @@ export default function Dashboard() {
                 currentView === 'historique' 
                   ? 'text-orange-500 scale-105' 
                   : 'text-slate-400 hover:text-slate-600'
-              }`}
+                }`}
             >
               <Clock className={`w-6 h-6 mb-1 transition-transform ${currentView === 'historique' ? 'scale-110' : ''}`} strokeWidth={currentView === 'historique' ? 2.5 : 2} />
               <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'historique' ? 'font-black' : 'font-bold'}`}>Historique</span>
