@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder, Percent } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder, Percent, Archive, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -1006,21 +1006,220 @@ export default function Dashboard() {
     if (!invoiceToDelete) return;
     
     try {
-      const { error } = await supabase
+      console.log('🗑️ Tentative de suppression de la facture:', invoiceToDelete);
+      
+      const { data, error } = await supabase
         .from('scans')
         .delete()
-        .eq('id', invoiceToDelete);
+        .eq('id', invoiceToDelete)
+        .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erreur suppression:', error);
+        throw error;
+      }
+      
+      console.log('✅ Facture supprimée:', data);
       
       await loadInvoices();
-      showToastMessage('Facture supprimée !', 'success');
+      showToastMessage('✅ Facture supprimée !', 'success');
       setShowDeleteModal(false);
       setInvoiceToDelete(null);
     } catch (err) {
-      console.error('Erreur suppression:', err);
-      showToastMessage('Erreur lors de la suppression', 'error');
+      console.error('❌ Erreur complète:', err);
+      showToastMessage('❌ Erreur lors de la suppression', 'error');
     }
+  };
+
+  // Archiver une facture
+  const archiveInvoice = async (id: string) => {
+    try {
+      console.log('📦 Archivage de la facture:', id);
+      
+      const { error } = await supabase
+        .from('scans')
+        .update({ archived: true })
+        .eq('id', id);
+      
+      if (error) {
+        console.error('❌ Erreur archivage:', error);
+        throw error;
+      }
+      
+      console.log('✅ Facture archivée');
+      
+      await loadInvoices();
+      showToastMessage('📦 Facture archivée !', 'success');
+    } catch (err) {
+      console.error('❌ Erreur archivage:', err);
+      showToastMessage('❌ Erreur lors de l\'archivage', 'error');
+    }
+  };
+
+  // Export CSV d'une facture individuelle
+  const exportInvoiceCSV = (invoice: Invoice) => {
+    const headers = ['Date Facture', 'Fournisseur', 'Montant HT', 'TVA', 'Montant TTC', 'Catégorie', 'Description'];
+    const tvaAmount = (invoice.total_amount - invoice.montant_ht).toFixed(2);
+    
+    const row = [
+      new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
+      `"${invoice.entreprise}"`,
+      invoice.montant_ht.toFixed(2),
+      tvaAmount,
+      invoice.total_amount.toFixed(2),
+      `"${invoice.categorie || 'Non classé'}"`,
+      `"${invoice.description || ''}"`
+    ];
+
+    const csvContent = "\uFEFF" + [headers.join(';'), row.join(';')].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `facture_${invoice.entreprise}_${new Date(invoice.date_facture).toLocaleDateString('fr-FR').replace(/\//g, '-')}.csv`;
+    link.click();
+    
+    showToastMessage('📊 Export CSV téléchargé !', 'success');
+  };
+
+  // Export Excel d'une facture individuelle
+  const exportInvoiceExcel = (invoice: Invoice) => {
+    const tvaAmount = invoice.total_amount - invoice.montant_ht;
+    
+    const data = [{
+      'Date Facture': new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
+      'Fournisseur': invoice.entreprise,
+      'Montant HT (€)': invoice.montant_ht,
+      'TVA (€)': tvaAmount,
+      'Montant TTC (€)': invoice.total_amount,
+      'Catégorie': invoice.categorie || 'Non classé',
+      'Description': invoice.description || ''
+    }];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Facture');
+    
+    XLSX.writeFile(wb, `facture_${invoice.entreprise}_${new Date(invoice.date_facture).toLocaleDateString('fr-FR').replace(/\//g, '-')}.xlsx`);
+    
+    showToastMessage('📊 Export Excel téléchargé !', 'success');
+  };
+
+  // Export PDF d'une facture individuelle
+  const exportInvoicePDF = (invoice: Invoice) => {
+    const doc = new jsPDF();
+    
+    // Logo ArtisScan en haut
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(249, 115, 22); // Orange
+    doc.text('ArtisScan', 20, 25);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139); // Slate
+    doc.text('GESTION INTELLIGENTE', 20, 32);
+    
+    // Ligne de séparation
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(20, 40, 190, 40);
+    
+    // Titre
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Facture', 20, 55);
+    
+    // Informations de la facture
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    
+    const tvaAmount = invoice.total_amount - invoice.montant_ht;
+    const tvaPercent = invoice.montant_ht > 0 ? Math.round((tvaAmount / invoice.montant_ht) * 100) : 0;
+    
+    let yPos = 70;
+    
+    // Fournisseur
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fournisseur:', 20, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(invoice.entreprise, 70, yPos);
+    yPos += 10;
+    
+    // Date
+    doc.setFont('helvetica', 'bold');
+    doc.text('Date:', 20, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(new Date(invoice.date_facture).toLocaleDateString('fr-FR'), 70, yPos);
+    yPos += 10;
+    
+    // Catégorie
+    doc.setFont('helvetica', 'bold');
+    doc.text('Catégorie:', 20, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(invoice.categorie || 'Non classé', 70, yPos);
+    yPos += 10;
+    
+    // Description
+    if (invoice.description) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Description:', 20, yPos);
+      doc.setFont('helvetica', 'normal');
+      const splitDescription = doc.splitTextToSize(invoice.description, 120);
+      doc.text(splitDescription, 70, yPos);
+      yPos += (splitDescription.length * 7) + 5;
+    } else {
+      yPos += 5;
+    }
+    
+    // Ligne de séparation
+    doc.setDrawColor(226, 232, 240);
+    doc.line(20, yPos, 190, yPos);
+    yPos += 15;
+    
+    // Tableau des montants
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Résumé financier', 20, yPos);
+    yPos += 10;
+    
+    // Fond gris clair pour le tableau
+    doc.setFillColor(248, 250, 252);
+    doc.rect(20, yPos - 5, 170, 35, 'F');
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    
+    // Montant HT
+    doc.text('Montant HT:', 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${invoice.montant_ht.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    yPos += 10;
+    
+    // TVA
+    doc.setFont('helvetica', 'normal');
+    doc.text(`TVA (${tvaPercent}%):`, 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${tvaAmount.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    yPos += 10;
+    
+    // Total TTC
+    doc.setFontSize(13);
+    doc.setTextColor(249, 115, 22);
+    doc.text('Total TTC:', 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${invoice.total_amount.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Document généré par ArtisScan', 105, 280, { align: 'center' });
+    doc.text(new Date().toLocaleDateString('fr-FR'), 105, 285, { align: 'center' });
+    
+    doc.save(`facture_${invoice.entreprise}_${new Date(invoice.date_facture).toLocaleDateString('fr-FR').replace(/\//g, '-')}.pdf`);
+    
+    showToastMessage('📄 Export PDF téléchargé !', 'success');
   };
 
   // Confirmer suppression projet
@@ -2502,13 +2701,83 @@ export default function Dashboard() {
                                 </p>
                               </div>
                             </div>
-                            <button
-                              onClick={() => confirmDelete(invoice.id)}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </button>
+                            
+                            {/* Menu actions */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => archiveInvoice(invoice.id)}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Archiver"
+                              >
+                                <Archive className="w-4 h-4 text-slate-500" />
+                              </button>
+                              
+                              <div className="relative">
+                                <button
+                                  onClick={() => {
+                                    // Toggle menu d'export pour cette facture
+                                    const currentOpen = (window as any).openExportMenu;
+                                    if (currentOpen === invoice.id) {
+                                      (window as any).openExportMenu = null;
+                                    } else {
+                                      (window as any).openExportMenu = invoice.id;
+                                    }
+                                    // Force re-render
+                                    setInvoices([...invoices]);
+                                  }}
+                                  className="p-2 hover:bg-orange-50 rounded-lg transition-colors"
+                                  title="Exporter"
+                                >
+                                  <Download className="w-4 h-4 text-orange-500" />
+                                </button>
+                                
+                                {(window as any).openExportMenu === invoice.id && (
+                                  <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 min-w-[160px]">
+                                    <button
+                                      onClick={() => {
+                                        exportInvoicePDF(invoice);
+                                        (window as any).openExportMenu = null;
+                                        setInvoices([...invoices]);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-2"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      Export PDF
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        exportInvoiceExcel(invoice);
+                                        (window as any).openExportMenu = null;
+                                        setInvoices([...invoices]);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-2"
+                                    >
+                                      <FileDown className="w-4 h-4" />
+                                      Export Excel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        exportInvoiceCSV(invoice);
+                                        (window as any).openExportMenu = null;
+                                        setInvoices([...invoices]);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-2"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      Export CSV
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <button
+                                onClick={() => confirmDelete(invoice.id)}
+                                className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </button>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-3">
