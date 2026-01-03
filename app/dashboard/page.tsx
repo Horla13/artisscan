@@ -307,7 +307,8 @@ export default function Dashboard() {
           await supabase.from('profiles').update({ 
             subscription_tier: 'pro',
             plan: 'pro',
-            subscription_status: 'active' 
+            subscription_status: 'active',
+            stripe_customer_id: 'pending_' + sessionId // Marquer comme en attente de synchro webhook
           }).eq('id', user.id);
         }
 

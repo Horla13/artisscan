@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         trial_period_days: 14,
       },
       client_reference_id: userId,
+      customer_email: body?.userEmail,
       metadata: {
         supabase_user_id: userId || '',
       },

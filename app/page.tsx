@@ -17,14 +17,21 @@ export default function Home() {
       // Récupérer l'utilisateur actuel s'il est déjà connecté
       const { data: { session } } = await supabase.auth.getSession();
       
-      console.log(`[CHECKOUT] Initialisation pour cycle: ${cycle}`);
+      if (!session) {
+        // Si pas connecté, direction l'inscription
+        window.location.href = `/login?mode=signup&cycle=${cycle}`;
+        return;
+      }
+
+      console.log(`[CHECKOUT] Initialisation pour cycle: ${cycle} (User: ${session.user.id})`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session?.user?.id 
+          userId: session?.user?.id,
+          userEmail: session?.user?.email
         }),
       });
 

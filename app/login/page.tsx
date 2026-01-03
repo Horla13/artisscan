@@ -1,15 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    if (mode === 'signup') {
+      setIsSignUp(true)
+    }
+  }, [searchParams])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,7 +33,13 @@ export default function LoginPage() {
 
       if (error) throw error
 
-      router.push('/dashboard')
+      // Redirection intelligente après login
+      const cycle = searchParams.get('cycle')
+      if (cycle) {
+        router.push(`/#tarification`)
+      } else {
+        router.push('/dashboard')
+      }
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de la connexion')
     } finally {
@@ -50,8 +65,13 @@ export default function LoginPage() {
 
       if (error) throw error
 
-      // Après l'inscription, on connecte l'utilisateur
-      router.push('/dashboard')
+      // Après l'inscription, on redirige vers les tarifs pour le choix du plan
+      const cycle = searchParams.get('cycle')
+      if (cycle) {
+        router.push(`/#tarification`)
+      } else {
+        router.push('/#tarification')
+      }
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {
@@ -60,74 +80,83 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-12">
-      <div className="card-clean rounded-3xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-50 flex items-center justify-center">
-            <svg className="w-8 h-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">ArtisScan</h1>
-          <p className="text-slate-500">Connectez-vous à votre compte</p>
+    <div className="card-clean rounded-3xl p-8 w-full max-w-md bg-white shadow-xl border border-slate-100">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+          <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl">
-            <p className="text-red-600 text-sm">{error}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleSignIn} className="space-y-5">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-white text-slate-900"
-              placeholder="votre@email.com"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-white text-slate-900"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full py-3 px-4 rounded-xl font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Chargement...' : 'Se connecter'}
-          </button>
-        </form>
-
-        <div className="mt-5">
-          <button
-            onClick={handleSignUp}
-            disabled={loading}
-            className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-          >
-            {loading ? 'Chargement...' : 'S\'inscrire'}
-          </button>
-        </div>
+        <h1 className="text-3xl font-black text-slate-900 mb-2">ArtisScan</h1>
+        <p className="text-slate-500 font-medium">
+          {isSignUp ? 'Créez votre compte artisan' : 'Connectez-vous à votre espace'}
+        </p>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl animate-shake">
+          <p className="text-red-600 text-sm font-medium">{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={!isSignUp ? handleSignIn : (e) => { e.preventDefault(); handleSignUp(); }} className="space-y-5">
+        <div>
+          <label htmlFor="email" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+            Email Professionnel
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-slate-50 text-slate-900"
+            placeholder="votre@email.com"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+            Mot de passe
+          </label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-slate-50 text-slate-900"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg shadow-orange-200 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Chargement...' : isSignUp ? 'Créer mon compte' : 'Se connecter'}
+        </button>
+      </form>
+
+      <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+        <button
+          onClick={() => setIsSignUp(!isSignUp)}
+          className="text-sm font-bold text-slate-500 hover:text-orange-600 transition-colors"
+        >
+          {isSignUp ? 'Déjà un compte ? Se connecter' : 'Pas encore de compte ? S\'inscrire'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
+      <Suspense fallback={<div className="text-orange-500 font-black animate-pulse">Chargement...</div>}>
+        <LoginForm />
+      </Suspense>
     </div>
   )
 }
