@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
               .update({
                 stripe_customer_id: customerId,
                 subscription_tier: 'pro',
+                plan: 'pro', // Double sécurité si la colonne s'appelle plan
                 subscription_status: 'active',
                 updated_at: new Date().toISOString()
               })

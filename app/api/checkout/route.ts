@@ -34,8 +34,8 @@ export async function POST(req: NextRequest) {
 
     const priceId = billingCycle === 'yearly' ? yearlyPriceId : monthlyPriceId;
     
-    // Debug pour Vercel Logs
-    console.log(`[STRIPE DEBUG] Cycle: ${billingCycle} | ID utilisé: "${priceId}" | User: ${userId || 'Non identifié'}`);
+    // LOG CRITIQUE : Vérification de l'ID envoyé à Stripe
+    console.log(`[STRIPE CHECKOUT] CYCLE: ${billingCycle} | PRICE_ID: ${priceId}`);
 
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: '2024-06-20',

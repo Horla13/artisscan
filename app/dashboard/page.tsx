@@ -293,20 +293,32 @@ export default function Dashboard() {
   const checkSubscriptionLimits = async () => {
     try {
       const profile = await getUserProfile();
+      const isSuccessReturn = typeof window !== 'undefined' && window.location.search.includes('checkout=success');
+
       if (profile) {
         setUserTier(profile.subscription_tier);
         
-        // Rediriger vers checkout si l'abonnement n'est pas actif/trial
-        if (profile.subscription_tier !== 'pro' && 
-            profile.subscription_status !== 'active' && 
-            profile.subscription_status !== 'trialing') {
+        // SORTIE DE BOUCLE : Si retour success Stripe OU si customer_id présent OU si status actif/trial
+        const isActuallyPro = 
+          isSuccessReturn || 
+          profile.stripe_customer_id || 
+          profile.subscription_tier === 'pro' || 
+          profile.subscription_status === 'active' || 
+          profile.subscription_status === 'trialing';
+
+        if (!isActuallyPro) {
+          console.log('⚠️ Accès PRO non validé, redirection vers tarifs...');
           window.location.href = '/#tarification';
           return;
         }
+        
+        console.log('✅ Accès PRO validé');
       } else {
         // Pas de profil = pas d'abonnement
-        window.location.href = '/#tarification';
-        return;
+        if (!isSuccessReturn) {
+          window.location.href = '/#tarification';
+          return;
+        }
       }
 
       const scanStatus = await canUserScan();

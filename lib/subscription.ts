@@ -5,6 +5,7 @@ export type SubscriptionTier = 'free' | 'pro';
 export interface UserProfile {
   id: string;
   subscription_tier: SubscriptionTier;
+  plan?: string;
   subscription_status?: string;
   stripe_customer_id?: string;
   created_at: string;
@@ -22,7 +23,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     // Sélectionner uniquement les colonnes nécessaires
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, subscription_tier, subscription_status, stripe_customer_id, created_at, updated_at')
+      .select('id, subscription_tier, plan, subscription_status, stripe_customer_id, created_at, updated_at')
       .eq('id', user.id)
       .single();
 
@@ -32,9 +33,15 @@ export async function getUserProfile(): Promise<UserProfile | null> {
       return {
         id: user.id,
         subscription_tier: 'free',
+        plan: 'free',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+    }
+
+    // Normalisation : s'assurer que subscription_tier reflète le 'plan' si présent
+    if (data && data.plan) {
+      data.subscription_tier = data.plan as SubscriptionTier;
     }
 
     return data;
@@ -50,10 +57,13 @@ export async function getUserProfile(): Promise<UserProfile | null> {
 export async function canUserScan(): Promise<{ canScan: boolean; remaining: number; tier: SubscriptionTier }> {
   try {
     const profile = await getUserProfile();
-    const tier = profile?.subscription_tier || 'free';
+    const tier = profile?.subscription_tier || profile?.plan || 'free';
 
-    // Pro peut scanner sans limite
-    if (tier === 'pro' || profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing') {
+    // Pro peut scanner sans limite (Active, Trialing ou Customer ID présent)
+    if (tier === 'pro' || 
+        profile?.subscription_status === 'active' || 
+        profile?.subscription_status === 'trialing' || 
+        profile?.stripe_customer_id) {
       return { canScan: true, remaining: -1, tier: 'pro' };
     }
 

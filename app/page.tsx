@@ -9,18 +9,21 @@ export default function Home() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  const startCheckout = async () => {
+  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
     try {
       setCheckoutLoading(true);
+      const cycle = forcedCycle || billingCycle;
       
       // Récupérer l'utilisateur actuel s'il est déjà connecté
       const { data: { session } } = await supabase.auth.getSession();
       
+      console.log(`[CHECKOUT] Initialisation pour cycle: ${cycle}`);
+
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          billingCycle,
+          billingCycle: cycle,
           userId: session?.user?.id 
         }),
       });
@@ -330,7 +333,7 @@ export default function Home() {
             <button
               onClick={() => {
                 setBillingCycle('monthly');
-                startCheckout();
+                startCheckout('monthly');
               }}
               disabled={checkoutLoading}
               className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm"
@@ -397,7 +400,7 @@ export default function Home() {
             <button
               onClick={() => {
                 setBillingCycle('yearly');
-                startCheckout();
+                startCheckout('yearly');
               }}
               disabled={checkoutLoading}
               className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed text-sm"
