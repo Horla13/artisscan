@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText } from 'lucide-react';
@@ -60,6 +61,7 @@ const LOADING_MESSAGES = [
 ];
 
 export default function Dashboard() {
+  const router = useRouter();
   const [analyzing, setAnalyzing] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
   const [result, setResult] = useState<any>(null);
@@ -266,6 +268,8 @@ export default function Dashboard() {
       if (session) {
         setUserEmail(session.user.email || null);
         await checkSubscriptionLimits();
+        // Rafraîchir pour refléter immédiatement le statut PRO après paiement
+        router.refresh?.();
       } else {
         // Rediriger vers login si pas de session
         window.location.href = '/login';
@@ -324,7 +328,8 @@ export default function Dashboard() {
         const isActuallyPro = 
           isSuccessReturn || 
           profile.stripe_customer_id || 
-          profile.subscription_tier === 'pro' || 
+          profile.subscription_tier === 'pro' ||
+          profile.plan === 'pro' ||
           profile.subscription_status === 'active' || 
           profile.subscription_status === 'trialing';
 

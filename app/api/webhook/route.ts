@@ -69,15 +69,15 @@ export async function POST(req: NextRequest) {
               await resend.emails.send({
                 from: 'ArtisScan <bienvenue@artisscan.fr>',
                 to: [userEmail],
-                subject: 'Bienvenue chez ArtisScan ! Votre accès Pro est activé',
+                subject: 'Paiement confirmé ! Votre espace ArtisScan est prêt.',
                 html: `
                   <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; border: 1px solid #e2e8f0; border-radius: 24px; text-align: center;">
                     <div style="margin-bottom: 30px;">
                       <img src="https://artisscan.vercel.app/icon-rounded.svg" alt="ArtisScan" style="width: 80px; height: 80px;">
                     </div>
-                    <h1 style="color: #1e293b; font-size: 28px; font-weight: 900; margin-bottom: 10px; tracking-tight: -0.025em;">Votre accès Pro est activé !</h1>
+                    <h1 style="color: #1e293b; font-size: 28px; font-weight: 900; margin-bottom: 10px; tracking-tight: -0.025em;">Paiement confirmé !</h1>
                     <p style="font-size: 18px; color: #64748b; line-height: 1.6; margin-bottom: 30px;">
-                      Merci pour votre confiance. Cliquez sur le bouton ci-dessous pour vous connecter et accéder à votre dashboard.
+                      Votre espace ArtisScan Pro est prêt. Cliquez sur le bouton ci-dessous pour vous connecter et accéder à votre dashboard.
                     </p>
                     
                     <div style="background-color: #fff7ed; padding: 24px; border-radius: 20px; margin-bottom: 35px; border: 1px solid #ffedd5;">
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
                     </div>
 
                     <a href="https://artisscan.vercel.app/login" style="background-color: #f97316; color: white; padding: 18px 36px; text-decoration: none; border-radius: 16px; font-weight: 900; font-size: 16px; display: inline-block; box-shadow: 0 10px 15px -3px rgba(249, 115, 22, 0.3);">
-                      Se connecter
+                      Se connecter et accéder à mon Dashboard
                     </a>
 
                     <p style="font-size: 12px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
