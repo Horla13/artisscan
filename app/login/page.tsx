@@ -69,6 +69,9 @@ function LoginForm() {
 
       if (error) throw error
 
+      // Forcer le rafraîchissement des composants pour reconnaître la nouvelle session
+      router.refresh()
+
       // Après l'inscription, on redirige vers les tarifs avec un message de bienvenue
       const redirectTo = searchParams.get('redirect') || '/pricing'
       const separator = redirectTo.includes('?') ? '&' : '?'

@@ -40,29 +40,36 @@ function PricingContent() {
     };
   }, []);
 
-  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
+  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly', retryCount = 0) => {
     try {
       setCheckoutLoading(true);
       const cycle = forcedCycle || billingCycle;
       
-      // Vérification de la session en temps réel
-      const { data: { session } } = await supabase.auth.getSession();
+      // VÉRIFICATION DE FORCE : On demande l'utilisateur directement à Supabase au clic
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      if (!session) {
-        console.log("⚠️ Pas de session, redirection vers signup...");
+      if (userError || !user) {
+        if (retryCount < 2) {
+          console.log(`⚠️ Échec vérification session (essai ${retryCount + 1}), nouvelle tentative...`);
+          // On attend un peu que la session se propage
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return startCheckout(cycle, retryCount + 1);
+        }
+        
+        console.log("❌ Pas de session après tentatives, redirection vers login");
         router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
         return;
       }
 
-      console.log(`[CHECKOUT] Initialisation pour ${session.user.email} (Cycle: ${cycle})`);
+      console.log(`[CHECKOUT] Session validée pour ${user.email}`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session.user.id,
-          userEmail: session.user.email // Passage de l'email pour Stripe
+          userId: user.id,
+          userEmail: user.email // Passage forcé de l'email
         }),
       });
 
@@ -72,6 +79,7 @@ function PricingContent() {
       
       window.location.href = data.url;
     } catch (e: any) {
+      console.error('Erreur startCheckout:', e);
       alert(e?.message || 'Erreur lors du paiement.');
       setCheckoutLoading(false);
     }
