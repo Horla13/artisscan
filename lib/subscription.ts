@@ -114,13 +114,13 @@ export function canExportCSV(tier: SubscriptionTier): boolean {
  * Retourne le nom affiché du plan
  */
 export function getTierDisplayName(tier: SubscriptionTier): string {
-  return tier === 'pro' ? 'PRO (Essai gratuit)' : 'Inactif';
+  return 'ArtisScan PRO';
 }
 
 /**
  * Retourne la couleur du badge selon le tier
  */
 export function getTierBadgeColor(tier: SubscriptionTier): string {
-  return tier === 'pro' ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-slate-100 text-slate-400';
+  return 'bg-orange-500 text-white shadow-lg shadow-orange-200';
 }
 

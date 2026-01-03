@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         supabase_user_id: userId || '',
       },
-      success_url: `${baseUrl}/dashboard?checkout=success`,
+      success_url: `${baseUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/#tarification`,
       allow_promotion_codes: true,
     });

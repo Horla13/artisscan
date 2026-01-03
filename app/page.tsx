@@ -85,7 +85,7 @@ export default function Home() {
 
         <div className="flex items-center justify-center mb-12">
           <button
-            onClick={startCheckout}
+            onClick={() => startCheckout()}
             disabled={checkoutLoading}
             className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-10 py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
@@ -486,7 +486,7 @@ export default function Home() {
             Rejoignez les artisans qui ont déjà divisé leur temps de paperasse par 10
           </p>
           <button
-            onClick={startCheckout}
+            onClick={() => startCheckout()}
             disabled={checkoutLoading}
             className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg px-12 py-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >

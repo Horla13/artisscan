@@ -293,7 +293,28 @@ export default function Dashboard() {
   const checkSubscriptionLimits = async () => {
     try {
       const profile = await getUserProfile();
-      const isSuccessReturn = typeof window !== 'undefined' && window.location.search.includes('checkout=success');
+      const params = new URLSearchParams(window.location.search);
+      const isSuccessReturn = params.get('checkout') === 'success';
+      const sessionId = params.get('session_id');
+
+      // Si retour de Stripe avec session_id, on force l'accès PRO immédiatement
+      if (sessionId && isSuccessReturn) {
+        console.log('🎯 Retour Stripe réussi (ID: ' + sessionId + '), déblocage PRO...');
+        
+        // Mise à jour préventive du profil pour éviter la boucle
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('profiles').update({ 
+            subscription_tier: 'pro',
+            plan: 'pro',
+            subscription_status: 'active' 
+          }).eq('id', user.id);
+        }
+
+        setUserTier('pro');
+        setIsLoadingProfile(false);
+        return;
+      }
 
       if (profile) {
         setUserTier(profile.subscription_tier);
