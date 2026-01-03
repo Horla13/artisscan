@@ -1676,7 +1676,18 @@ export default function Dashboard() {
       setResult(data);
 
       // NE PAS sauvegarder automatiquement - Ouvrir la modale de validation
-      setPendingInvoiceData(data);
+      // ✅ Calculer la TVA automatiquement si elle n'est pas fournie
+      const enrichedData = {
+        ...data,
+        tva: data.tva || (data.total_amount && data.montant_ht 
+          ? (parseFloat(data.total_amount) - parseFloat(data.montant_ht)).toFixed(2)
+          : '0'),
+        montant_ttc: data.total_amount || data.montant_ttc
+      };
+      
+      console.log('📊 Données enrichies pour le formulaire:', enrichedData);
+      
+      setPendingInvoiceData(enrichedData);
       setShowValidationModal(true);
 
     } catch (err: any) {
