@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder, Percent } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -1712,20 +1712,20 @@ export default function Dashboard() {
 
       // Validation des données
       const montantHT = parseFloat(pendingInvoiceData.montant_ht);
-      const montantTTC = parseFloat(pendingInvoiceData.total_amount);
+      const tva = parseFloat(pendingInvoiceData.tva);
 
       if (isNaN(montantHT) || montantHT < 0) {
         showToastMessage('❌ Montant HT invalide', 'error');
         return;
       }
 
-      if (isNaN(montantTTC) || montantTTC < 0) {
-        showToastMessage('❌ Montant TTC invalide', 'error');
+      if (isNaN(tva) || tva < 0) {
+        showToastMessage('❌ Montant TVA invalide', 'error');
         return;
       }
 
-      // Calcul de la TVA
-      const tva = montantTTC - montantHT;
+      // Calcul du TTC : HT + TVA
+      const montantTTC = montantHT + tva;
 
       // Préparer les données pour l'insertion
       const finalCategory = pendingInvoiceData.categorie === '📝 Autre' 
@@ -3136,37 +3136,37 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* TVA calculée automatiquement */}
+              {/* TVA - SAISIE MANUELLE */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                  TVA (Calculée)
-                </label>
-                <input
-                  type="text"
-                  value={pendingInvoiceData.total_amount && pendingInvoiceData.montant_ht 
-                    ? (parseFloat(pendingInvoiceData.total_amount) - parseFloat(pendingInvoiceData.montant_ht)).toFixed(2)
-                    : '0.00'}
-                  readOnly
-                  className="w-full px-4 py-3 bg-slate-100/50 border border-slate-200 rounded-xl text-slate-500 text-sm font-bold italic"
-                />
-              </div>
-
-              {/* Montant TTC */}
-              <div>
-                <label className="block text-sm font-bold text-orange-600 mb-2 flex items-center gap-2">
-                  <Receipt className="w-4 h-4" />
-                  Montant TTC (€)
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-orange-500" />
+                  Montant TVA (€)
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  value={pendingInvoiceData.total_amount || ''}
+                  value={pendingInvoiceData.tva || ''}
                   onChange={(e) => setPendingInvoiceData({
                     ...pendingInvoiceData,
-                    total_amount: e.target.value
+                    tva: e.target.value
                   })}
-                  className="w-full px-4 py-3 bg-orange-50/30 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-lg font-black text-slate-900"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="0.00"
+                />
+              </div>
+
+              {/* Montant TTC - CALCULÉ AUTOMATIQUEMENT */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                  Montant TTC (Calculé)
+                </label>
+                <input
+                  type="text"
+                  value={pendingInvoiceData.montant_ht && pendingInvoiceData.tva
+                    ? (parseFloat(pendingInvoiceData.montant_ht) + parseFloat(pendingInvoiceData.tva)).toFixed(2)
+                    : '0.00'}
+                  readOnly
+                  className="w-full px-4 py-3 bg-orange-50/50 border border-orange-200 rounded-xl text-orange-900 text-lg font-black italic"
                 />
               </div>
 
