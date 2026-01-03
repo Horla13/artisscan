@@ -1611,14 +1611,14 @@ export default function Dashboard() {
 
       // Validation des données
       const montantHT = parseFloat(pendingInvoiceData.montant_ht);
-      const totalAmount = parseFloat(pendingInvoiceData.total_amount);
+      const montantTTC = parseFloat(pendingInvoiceData.total_amount);
 
       if (isNaN(montantHT) || montantHT < 0) {
         showToastMessage('❌ Montant HT invalide', 'error');
         return;
       }
 
-      if (isNaN(totalAmount) || totalAmount < 0) {
+      if (isNaN(montantTTC) || montantTTC < 0) {
         showToastMessage('❌ Montant TTC invalide', 'error');
         return;
       }
@@ -1632,12 +1632,10 @@ export default function Dashboard() {
         user_id: user.id,
         entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         montant_ht: Number(montantHT) || 0,
-        total_amount: Number(totalAmount) || 0,
+        montant_ttc: Number(montantTTC) || 0,
         date_facture: pendingInvoiceData.date || new Date().toISOString(),
         description: pendingInvoiceData.description || '',
         categorie: finalCategory || 'Non classé',
-        nom_chantier: null,
-        project_id: null,
       };
 
       console.log('📤 Envoi données à Supabase:', invoiceData);
@@ -1649,7 +1647,6 @@ export default function Dashboard() {
 
       if (error) {
         console.error('❌ Erreur Supabase:', error);
-        // ✅ CORRECTION 4: Message d'erreur précis
         if (error.code === '400' || error.code === 'PGRST116') {
           showToastMessage(`❌ Erreur 400: ${error.message || 'Données invalides'}. Vérifiez les champs.`, 'error');
         } else {
