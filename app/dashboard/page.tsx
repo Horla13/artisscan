@@ -322,85 +322,46 @@ export default function Dashboard() {
 
   const checkSubscriptionLimits = async () => {
     try {
-      const profile = await getUserProfile();
       const params = new URLSearchParams(window.location.search);
-      const isSuccessReturn = params.get('checkout') === 'success' || params.get('session_id') !== null;
       const sessionId = params.get('session_id');
 
-      console.log('🔍 checkSubscriptionLimits - Profil:', profile);
-      console.log('🔍 checkSubscriptionLimits - Session ID:', sessionId);
+      console.log('🔍 Vérification session utilisateur...');
 
-      // Si retour de Stripe avec session_id, on force l'accès PRO immédiatement
+      // Si retour de Stripe avec session_id, afficher l'écran d'activation
       if (sessionId) {
-        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + '), déblocage PRO...');
+        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ')');
         
-        // Mise à jour préventive du profil pour éviter la boucle
+        // Mise à jour préventive du profil
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await supabase.from('profiles').update({ 
-            subscription_tier: 'pro',
             plan: 'pro',
-            subscription_status: 'active',
-            stripe_customer_id: 'pending_' + sessionId // Marquer comme en attente de synchro webhook
+            updated_at: new Date().toISOString()
           }).eq('id', user.id);
         }
 
         setUserTier('pro');
-        setActivationPending(true); // Afficher l'écran d'activation
+        setCanScan(true);
+        setRemainingScans(-1);
+        setActivationPending(true); // Afficher l'écran d'activation temporaire
         setIsLoadingProfile(false);
         return;
       }
 
-      // ✅ MODIFICATION: L'utilisateur connecté a toujours accès au Dashboard
-      // On vérifie juste son statut PRO pour afficher les bonnes fonctionnalités
+      // ✅ MODE PRO-ONLY: Tout utilisateur connecté est PRO
+      console.log('✅ Utilisateur connecté → Accès PRO complet');
       
-      if (profile) {
-        // Vérifier si l'utilisateur est PRO (plusieurs critères)
-        const isActuallyPro = 
-          isSuccessReturn || 
-          profile.stripe_customer_id || 
-          profile.subscription_tier === 'pro' ||
-          profile.plan === 'pro' ||
-          profile.subscription_status === 'active' || 
-          profile.subscription_status === 'trialing';
+      setUserTier('pro');
+      setCanScan(true);
+      setRemainingScans(-1);
+      setActivationPending(false);
 
-        console.log('✅ Utilisateur détecté - PRO:', isActuallyPro);
-
-        if (isActuallyPro) {
-          setUserTier('pro');
-          setCanScan(true);
-          setRemainingScans(-1);
-          setActivationPending(false); // ✅ Pas de blocage si PRO
-          console.log('✅ Accès PRO validé, Dashboard accessible');
-        } else {
-          // Utilisateur FREE: Accès au Dashboard mais fonctionnalités limitées
-          setUserTier('free');
-          setCanScan(false);
-          setRemainingScans(0);
-          setActivationPending(false); // ✅ Pas de blocage non plus
-          console.log('ℹ️ Utilisateur FREE, Dashboard accessible avec limites');
-        }
-      } else {
-        // Pas de profil trouvé (en création)
-        console.log('⚠️ Pas de profil trouvé, accès Dashboard en mode dégradé');
-        setUserTier('free');
-        setCanScan(false);
-        setRemainingScans(0);
-        setActivationPending(false); // ✅ On ne bloque pas l'accès
-      }
-
-      // Mise à jour supplémentaire via canUserScan pour cohérence
-      const scanStatus = await canUserScan();
-      setCanScan(scanStatus.canScan !== false);
-      setRemainingScans(scanStatus.remaining);
-      if (scanStatus.tier) {
-        setUserTier(scanStatus.tier);
-      }
     } catch (error) {
       console.error('❌ Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur, on laisse l'accès par défaut (pas de blocage)
-      setCanScan(false);
-      setUserTier('free');
+      // En cas d'erreur, on donne quand même l'accès PRO
+      setUserTier('pro');
+      setCanScan(true);
+      setRemainingScans(-1);
       setActivationPending(false);
     } finally {
       setIsLoadingProfile(false);

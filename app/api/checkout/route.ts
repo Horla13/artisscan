@@ -54,8 +54,7 @@ export async function POST(req: NextRequest) {
         supabase_user_id: userId || '',
         supabase_user_email: body?.userEmail || '',
       },
-      // Redirection finale : on revient sur la Landing Page avec le session_id
-      // Retour direct vers le dashboard après paiement (domaine Vercel)
+      // Retour direct vers le dashboard après paiement
       success_url: `https://artisscan.vercel.app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
