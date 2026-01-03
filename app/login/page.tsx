@@ -72,10 +72,13 @@ function LoginForm() {
       // Forcer le rafraîchissement des composants pour reconnaître la nouvelle session
       router.refresh()
 
-      // Après l'inscription, on redirige vers les tarifs avec un message de bienvenue
-      const redirectTo = searchParams.get('redirect') || '/pricing'
-      const separator = redirectTo.includes('?') ? '&' : '?'
-      router.push(`${redirectTo}${separator}status=welcome`)
+      // Petit délai pour laisser le cookie de session s'enregistrer
+      setTimeout(() => {
+        // Après l'inscription, on redirige vers les tarifs avec un message de bienvenue
+        const redirectTo = searchParams.get('redirect') || '/pricing'
+        const separator = redirectTo.includes('?') ? '&' : '?'
+        router.push(`${redirectTo}${separator}status=welcome`)
+      }, 500)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {
