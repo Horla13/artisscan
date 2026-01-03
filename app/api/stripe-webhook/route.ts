@@ -61,26 +61,22 @@ export async function POST(req: Request) {
       
       console.log('✅ Utilisateur trouvé - ID:', user.id);
       
-      // 5. Upsert robuste du profil en PRO avec ID et email
-      const profileData = {
-        id: user.id,
-        email: userEmail,
-        stripe_customer_id: customerId,
-        subscription_tier: 'pro',
-        plan: 'pro',
-        subscription_status: 'active',
-        updated_at: new Date().toISOString(),
-      };
-      
-      console.log('📝 Tentative UPSERT avec:', profileData);
+      // 5. Update simple : passage en PRO (sans stripe_customer_id)
+      console.log('📝 Tentative UPDATE plan = pro pour email:', userEmail);
       
       const { data, error } = await supabase
         .from('profiles')
-        .upsert(profileData, { onConflict: 'id' })
+        .update({ 
+          plan: 'pro',
+          subscription_tier: 'pro',
+          subscription_status: 'active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('email', userEmail)
         .select();
       
       if (error) {
-        console.error('❌ ERREUR UPSERT:', JSON.stringify(error));
+        console.error('❌ ERREUR UPDATE:', JSON.stringify(error));
         console.error('Code erreur:', error.code);
         console.error('Details:', error.details);
         console.error('Message:', error.message);
@@ -88,6 +84,7 @@ export async function POST(req: Request) {
       }
       
       console.log('🎉 SUCCÈS: Plan PRO activé pour:', userEmail);
+      console.log('✅ Lignes modifiées:', data?.length || 0);
       console.log('✅ Données retournées:', data);
     }
     
