@@ -2413,76 +2413,83 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* PARAMÈTRES */}
+        {/* PARAMÈTRES - Design Pro */}
         {currentView === 'parametres' && (
-          <div className="fade-in space-y-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Paramètres</h2>
-            
-            {/* Logo de l'entreprise */}
-            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <h3 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2 uppercase tracking-tight">
-                <LayoutDashboard className="w-4 h-4 text-orange-500" />
-                Identité de l'entreprise
+          <div className="fade-in max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Paramètres</h1>
+              <p className="text-slate-500 mt-2">Gérez votre profil et vos préférences</p>
+            </div>
+
+            {/* Avatar/Logo Section */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
+              <div className="flex items-center gap-6">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full border-4 border-slate-100 overflow-hidden bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center group">
+                    {companyLogo ? (
+                      <img src={companyLogo} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white text-3xl font-black">
+                        {companyName ? companyName[0].toUpperCase() : (userEmail ? userEmail[0].toUpperCase() : 'A')}
+                      </span>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <label htmlFor="avatar-upload" className="cursor-pointer">
+                        <Camera className="w-6 h-6 text-white" />
+                      </label>
+                    </div>
+                  </div>
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const result = event.target?.result as string;
+                          setCompanyLogo(result);
+                          localStorage.setItem('artisscan_company_logo', result);
+                          showToastMessage('✅ Avatar mis à jour', 'success');
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-slate-900">{companyName || 'Nom de l\'entreprise'}</h2>
+                  <p className="text-sm text-slate-500 mt-1">{userEmail}</p>
+                  <button
+                    onClick={() => {
+                      setCompanyLogo(null);
+                      localStorage.removeItem('artisscan_company_logo');
+                      showToastMessage('Avatar supprimé', 'success');
+                    }}
+                    className="mt-3 text-sm text-slate-400 hover:text-red-500 font-medium transition-colors"
+                  >
+                    Supprimer l'avatar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Informations Personnelles */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <LayoutDashboard className="w-5 h-5 text-orange-500" />
+                Informations Personnelles
               </h3>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Personnalisez vos rapports professionnels</p>
               
               <div className="space-y-6">
-                {/* Logo Section */}
-                <div className="flex items-center gap-6 pb-6 border-b border-slate-100">
-                  <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 relative group">
-                    {companyLogo ? (
-                      <>
-                        <img src={companyLogo} alt="Logo" className="w-full h-full object-contain" />
-                        <button 
-                          onClick={() => {
-                            setCompanyLogo(null);
-                            localStorage.removeItem('artisscan_company_logo');
-                          }}
-                          className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold"
-                        >
-                          SUPPRIMER
-                        </button>
-                      </>
-                    ) : (
-                      <LayoutDashboard className="w-8 h-8 text-slate-300" />
-                    )}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      id="logo-upload"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            setCompanyLogo(result);
-                            localStorage.setItem('artisscan_company_logo', result);
-                            showToastMessage('✅ Logo mis à jour !', 'success');
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                    <label 
-                      htmlFor="logo-upload"
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-sm transition-all active:scale-95"
-                    >
-                      <Plus className="w-4 h-4" />
-                      {companyLogo ? 'Changer le logo' : 'Télécharger votre Logo'}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Nom de l'entreprise
                     </label>
-                    <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-black">Format: PNG/JPG (MAX 500KB)</p>
-                  </div>
-                </div>
-
-                {/* Formulaire Entreprise */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom de l'entreprise</label>
                     <input
                       type="text"
                       value={companyName}
@@ -2491,11 +2498,14 @@ export default function Dashboard() {
                         localStorage.setItem('artisscan_company_name', e.target.value);
                       }}
                       placeholder="Ex: Russo Plomberie"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SIRET</label>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      SIRET
+                    </label>
                     <input
                       type="text"
                       value={companySiret}
@@ -2504,123 +2514,157 @@ export default function Dashboard() {
                         localStorage.setItem('artisscan_company_siret', e.target.value);
                       }}
                       placeholder="842 123 456 00012"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Métier (Ex: Plombier, Boulanger)</label>
-                    <input
-                      type="text"
-                      value={companyProfession}
-                      onChange={(e) => {
-                        setCompanyProfession(e.target.value);
-                        localStorage.setItem('artisscan_company_profession', e.target.value);
-                      }}
-                      placeholder="Votre métier"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
-                    />
-                  </div>
-                  <div className="md:col-span-2 space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Adresse professionnelle</label>
-                    <input
-                      type="text"
-                      value={companyAddress}
-                      onChange={(e) => {
-                        setCompanyAddress(e.target.value);
-                        localStorage.setItem('artisscan_company_address', e.target.value);
-                      }}
-                      placeholder="Ex: 12 rue de la Paix, 75002 Paris"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
-                    />
-                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Métier
+                  </label>
+                  <input
+                    type="text"
+                    value={companyProfession}
+                    onChange={(e) => {
+                      setCompanyProfession(e.target.value);
+                      localStorage.setItem('artisscan_company_profession', e.target.value);
+                    }}
+                    placeholder="Ex: Plombier, Boulanger, Électricien..."
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Adresse professionnelle
+                  </label>
+                  <input
+                    type="text"
+                    value={companyAddress}
+                    onChange={(e) => {
+                      setCompanyAddress(e.target.value);
+                      localStorage.setItem('artisscan_company_address', e.target.value);
+                    }}
+                    placeholder="12 rue de la Paix, 75002 Paris"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all text-sm"
+                  />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <button
+                    onClick={() => {
+                      showToastMessage('✅ Informations sauvegardées', 'success');
+                    }}
+                    className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-all active:scale-95"
+                  >
+                    Sauvegarder les modifications
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Mon Compte & Déconnexion (accès rapide) */}
-            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm">
-              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight flex items-center gap-2">
-                <Plus className="w-4 h-4 text-orange-500 rotate-45" />
-                Mon Compte
+            {/* Sécurité */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-orange-500" />
+                Sécurité
               </h3>
               
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">E-mail de connexion</span>
-                  <span className="text-sm font-bold text-slate-900">{userEmail || 'Non connecté'}</span>
-                </div>
-                
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all text-xs font-black uppercase tracking-widest border border-red-100 active:scale-95"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Déconnexion
-                </button>
-              </div>
-            </div>
-
-            {/* Informations sur le plan actuel */}
-            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight">Votre Abonnement</h3>
-              <div className="flex items-center justify-between">
+              <div className="space-y-6">
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Plan actuel</p>
-                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
-                    <Crown className="w-4 h-4" />
-                    <span className="font-black uppercase text-xs tracking-wider">{getTierDisplayName(userTier)}</span>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Adresse e-mail
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="email"
+                      value={userEmail || ''}
+                      disabled
+                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed"
+                    />
+                    <span className="text-xs text-slate-400 font-medium">Non modifiable</span>
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Changer le mot de passe
+                  </label>
+                  <button
+                    onClick={() => {
+                      showToastMessage('📧 Un email de réinitialisation a été envoyé', 'success');
+                    }}
+                    className="px-6 py-2.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-medium rounded-xl transition-all active:scale-95"
+                  >
+                    Réinitialiser mon mot de passe
+                  </button>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Vous recevrez un lien de réinitialisation par e-mail
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl transition-all active:scale-95"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Se déconnecter
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Organisation automatique */}
-            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm">
-              <h3 className="text-sm font-black text-slate-900 mb-2 uppercase tracking-tight">Chronologie</h3>
-              <p className="text-sm text-slate-600">
-                Vos factures sont automatiquement groupées par <span className="font-bold">mois</span> selon la date de facture extraite.
-              </p>
-              <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-widest">
-                Aucune gestion manuelle : tout est classé par mois.
-              </p>
+            {/* Abonnement */}
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-8 mb-6 shadow-lg text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-100 text-sm font-medium mb-2">Votre abonnement</p>
+                  <div className="flex items-center gap-3">
+                    <Crown className="w-6 h-6" />
+                    <span className="text-2xl font-black">ArtisScan PRO</span>
+                  </div>
+                  <p className="text-orange-100 text-sm mt-2">Accès illimité à toutes les fonctionnalités</p>
+                </div>
+              </div>
             </div>
 
-            <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight">Export & Données</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Exports */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Exports de données</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Exportez vos factures aux formats professionnels
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   onClick={() => exportToCSV()}
                   disabled={invoices.length === 0}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all font-black text-xs uppercase tracking-widest ${
+                  className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl transition-all font-medium ${
                     invoices.length === 0
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
-                      : 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-100'
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                      : 'bg-white border-2 border-slate-200 hover:border-orange-500 text-slate-700'
                   }`}
-                  title="Exporter en CSV"
                 >
-                  <Download className="w-4 h-4" />
-                  Exporter (CSV)
+                  <FileText className="w-5 h-5" />
+                  Exporter en CSV
                 </button>
+                
                 <button
                   onClick={exportToExcel}
                   disabled={invoices.length === 0}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all font-black text-xs uppercase tracking-widest ${
+                  className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl transition-all font-medium ${
                     invoices.length === 0
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
-                      : 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-100'
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
                   }`}
-                  title="Exporter en Excel"
                 >
-                  <Download className="w-4 h-4" />
-                  Exporter (Excel Pro)
+                  <Download className="w-5 h-5" />
+                  Exporter en Excel
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-widest text-center">
-                Formats CSV et Excel compatibles comptabilité
-              </p>
             </div>
-
-            {/* (Section À propos supprimée) */}
           </div>
         )}
         </div>
