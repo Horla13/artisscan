@@ -77,9 +77,16 @@ function LoginForm() {
       // Forcer le rafraîchissement des composants
       router.refresh()
 
-      // Redirection immédiate vers les tarifs
-      const cycle = searchParams.get('cycle') || 'monthly'
-      router.push(`/pricing?mode=signup&status=welcome&cycle=${cycle}`)
+      // 1. Vérifier si un plan est en attente
+      const savedPlan = localStorage.getItem('artisscan_pending_plan');
+      
+      // Redirection intelligente
+      if (savedPlan) {
+        router.push(`/pricing?mode=signup&status=welcome&auto=true`);
+      } else {
+        const cycle = searchParams.get('cycle') || 'monthly'
+        router.push(`/pricing?mode=signup&status=welcome&cycle=${cycle}`)
+      }
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {

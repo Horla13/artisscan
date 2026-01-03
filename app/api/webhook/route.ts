@@ -65,28 +65,32 @@ export async function POST(req: NextRequest) {
                 to: [userEmail],
                 subject: '🚀 Bienvenue sur ArtisScan PRO !',
                 html: `
-                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
-                    <h1 style="color: #f97316; text-align: center;">Félicitations !</h1>
-                    <p style="font-size: 16px; color: #1e293b; line-height: 1.6;">
-                      Bonjour, <br><br>
-                      Votre abonnement <strong>ArtisScan PRO</strong> est maintenant actif. Vous avez désormais accès à tous nos outils de gestion intelligente pour simplifier votre comptabilité.
+                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; border: 1px solid #e2e8f0; border-radius: 24px; text-align: center;">
+                    <div style="margin-bottom: 30px;">
+                      <img src="https://artisscan.vercel.app/icon-rounded.svg" alt="ArtisScan" style="width: 80px; height: 80px;">
+                    </div>
+                    <h1 style="color: #1e293b; font-size: 28px; font-weight: 900; margin-bottom: 10px; tracking-tight: -0.025em;">Félicitations !</h1>
+                    <p style="font-size: 18px; color: #64748b; line-height: 1.6; margin-bottom: 30px;">
+                      Votre accès <strong>ArtisScan PRO</strong> est désormais activé. <br>
+                      Simplifiez votre gestion dès maintenant.
                     </p>
-                    <div style="background-color: #f8fafc; padding: 20px; border-radius: 12px; margin: 25px 0;">
-                      <ul style="list-style: none; padding: 0; margin: 0; color: #475569; font-size: 14px;">
-                        <li style="margin-bottom: 10px;">✅ Scans illimités (IA)</li>
-                        <li style="margin-bottom: 10px;">✅ Exports PDF / Excel / CSV illimités</li>
-                        <li style="margin-bottom: 10px;">✅ Calcul de TVA automatique</li>
-                        <li style="margin-bottom: 10px;">✅ Support prioritaire 7j/7</li>
-                      </ul>
+                    
+                    <div style="background-color: #fff7ed; padding: 24px; border-radius: 20px; margin-bottom: 35px; border: 1px solid #ffedd5;">
+                      <div style="display: grid; gap: 12px; text-align: left; color: #9a3412; font-weight: 700; font-size: 15px;">
+                        <div style="margin-bottom: 8px;">✅ Scans IA illimités</div>
+                        <div style="margin-bottom: 8px;">✅ Exports PDF / Excel / CSV</div>
+                        <div style="margin-bottom: 8px;">✅ Calcul de TVA automatique</div>
+                        <div>✅ Support prioritaire 7j/7</div>
+                      </div>
                     </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                      <a href="https://artisscan.vercel.app/dashboard" style="background-color: #f97316; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-                        Accéder à mon Dashboard
-                      </a>
-                    </div>
-                    <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+
+                    <a href="https://artisscan.vercel.app/dashboard" style="background-color: #f97316; color: white; padding: 18px 36px; text-decoration: none; border-radius: 16px; font-weight: 900; font-size: 16px; display: inline-block; box-shadow: 0 10px 15px -3px rgba(249, 115, 22, 0.3);">
+                      Accéder à mes outils
+                    </a>
+
+                    <p style="font-size: 12px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
                       ArtisScan - La gestion intelligente universelle pour les artisans.<br>
-                      © 2024 ArtisScan. Tous droits réservés.
+                      © 2024 ArtisScan.
                     </p>
                   </div>
                 `

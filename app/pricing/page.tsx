@@ -10,35 +10,42 @@ function PricingContent() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isWelcome, setIsWelcome] = useState(false);
+  const [isAutoTriggered, setIsAutoTriggered] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // 1. Charger la session initiale et écouter les changements
   useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        
+        // 2. Déclenchement automatique si on revient du signup
+        const auto = searchParams.get('auto');
+        const savedCycle = localStorage.getItem('artisscan_pending_plan');
+        
+        if (auto === 'true' && savedCycle && !isAutoTriggered) {
+          console.log(`🚀 Déclenchement automatique pour le plan: ${savedCycle}`);
+          setIsAutoTriggered(true);
+          localStorage.removeItem('artisscan_pending_plan');
+          startCheckout(savedCycle as 'monthly' | 'yearly');
+        }
+      }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
     if (searchParams.get('status') === 'welcome') {
       setIsWelcome(true);
     }
-  }, [searchParams]);
 
-  // Listener pour détecter la connexion immédiate
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(`[AUTH] Événement: ${event}`);
-      if (session?.user) {
-        setUser(session.user);
-      } else {
-        setUser(null);
-      }
-    });
-
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) setUser(session.user);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [searchParams, isAutoTriggered]);
 
   const startCheckout = async (forcedCycle?: 'monthly' | 'yearly', retryCount = 0) => {
     try {
@@ -48,15 +55,17 @@ function PricingContent() {
       // VÉRIFICATION DE FORCE : On demande l'utilisateur à Supabase au clic
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Si vraiment aucune session et aucun email de secours, on dégage vers le signup
+      // SI PAS DE SESSION : Sauvegarde du choix et redirection Signup
       if (!session?.user?.id) {
         if (retryCount < 1) {
           console.log(`⚠️ Session non trouvée, tentative de récupération...`);
           await new Promise(resolve => setTimeout(resolve, 800));
           return startCheckout(cycle, retryCount + 1);
         }
-        console.log("❌ Blocage : Pas d'ID utilisateur. Redirection signup.");
-        router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
+        
+        console.log("📝 Sauvegarde du plan et redirection vers l'inscription");
+        localStorage.setItem('artisscan_pending_plan', cycle);
+        router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing?auto=true`);
         return;
       }
 
@@ -67,7 +76,7 @@ function PricingContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session.user.id, // ID OBLIGATOIRE
+          userId: session.user.id,
           userEmail: session.user.email
         }),
       });
