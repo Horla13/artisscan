@@ -343,14 +343,13 @@ export default function Home() {
               >
                 Commencer l'essai de 14 jours
               </button>
-              <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
             </div>
           </div>
 
           {/* Carte Annuelle (Recommandée) */}
-          <div className="flex-1 bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl hover:shadow-2xl transition-all duration-300 relative flex flex-col">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <span className="bg-green-600 text-white text-[10px] font-black uppercase tracking-wider px-4 py-1 rounded-full shadow-lg">
+          <div className="flex-1 bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl hover:shadow-2xl transition-all duration-300 relative flex flex-col overflow-visible">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap">
+              <span className="bg-green-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 sm:px-4 sm:py-1 rounded-full shadow-lg">
                 -25% ou 2 mois gratuits
               </span>
             </div>
@@ -408,7 +407,6 @@ export default function Home() {
               >
                 Commencer l'essai de 14 jours
               </button>
-              <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
             </div>
           </div>
         </div>
