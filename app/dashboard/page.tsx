@@ -19,10 +19,8 @@ interface Invoice {
   date_facture: string;
   description: string;
   categorie?: string;
-  nom_chantier?: string;
-  project_id?: string;
   created_at: string;
-  moyen_paiement?: string;
+  folder_id?: string;
 }
 
 interface Project {
@@ -529,8 +527,7 @@ export default function Dashboard() {
     const searchFields = [
       inv.entreprise || '',
       inv.description || '',
-      inv.categorie || '',
-      inv.nom_chantier || ''
+      inv.categorie || ''
     ].map(f => f.toLowerCase());
 
     const matchSearch = searchFields.some(field => field.includes(searchLower));
@@ -1460,7 +1457,8 @@ export default function Dashboard() {
     doc.text(formatPDFCurrency(projectStats.budget_restant ?? 0), 145, startY + 18);
 
     // 4. Tableau des dépenses
-    const projectInvoices = invoices.filter(inv => inv.project_id === projectStats.id)
+    // Note: La gestion par project_id a été remplacée par folder_id
+    const projectInvoices = invoices.filter(inv => inv.folder_id === projectStats.id)
       .sort((a, b) => new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime());
     
     const tableData = projectInvoices.map((inv: Invoice) => [
@@ -1514,7 +1512,8 @@ export default function Dashboard() {
       showToastMessage('📊 Export Excel disponible uniquement en plan PRO', 'error');
       return;
     }
-    const projectInvoices = invoices.filter(inv => inv.project_id === projectStats.id);
+    // Note: La gestion par project_id a été remplacée par folder_id
+    const projectInvoices = invoices.filter(inv => inv.folder_id === projectStats.id);
     if (projectInvoices.length === 0) {
       showToastMessage('❌ Aucune facture pour ce projet', 'error');
       return;
@@ -1733,19 +1732,28 @@ export default function Dashboard() {
         ? (customCategory.trim() || '📝 Autre') 
         : pendingInvoiceData.categorie;
 
+      // Structure exacte conforme à la table SQL
       const invoiceData = {
         user_id: user.id,
+        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         montant_ht: Number(montantHT) || 0,
         montant_ttc: Number(montantTTC) || 0,
         tva: Number(tva) || 0,
         categorie: finalCategory || 'Non classé',
         description: pendingInvoiceData.description || '',
-        date_facture: pendingInvoiceData.date || new Date().toISOString(),
-        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         folder_id: pendingInvoiceData.folder_id || null,
       };
 
-      console.log('📤 Envoi données à Supabase:', invoiceData);
+      console.log('📤 DONNÉES ENVOYÉES À SUPABASE:');
+      console.log('   - user_id:', invoiceData.user_id);
+      console.log('   - entreprise:', invoiceData.entreprise);
+      console.log('   - montant_ht:', invoiceData.montant_ht);
+      console.log('   - montant_ttc:', invoiceData.montant_ttc);
+      console.log('   - tva:', invoiceData.tva);
+      console.log('   - categorie:', invoiceData.categorie);
+      console.log('   - description:', invoiceData.description);
+      console.log('   - folder_id:', invoiceData.folder_id);
+      console.log('   Objet complet:', JSON.stringify(invoiceData, null, 2));
 
       const { data, error } = await supabase
         .from('scans')
