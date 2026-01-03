@@ -1712,20 +1712,36 @@ export default function Dashboard() {
 
       // Validation des données
       const montantHT = parseFloat(pendingInvoiceData.montant_ht);
-      const tva = parseFloat(pendingInvoiceData.tva);
+      let tva = parseFloat(pendingInvoiceData.tva);
+      let montantTTC = parseFloat(pendingInvoiceData.total_amount || pendingInvoiceData.montant_ttc);
 
       if (isNaN(montantHT) || montantHT < 0) {
         showToastMessage('❌ Montant HT invalide', 'error');
         return;
       }
 
+      // Calcul intelligent : si TVA manque mais TTC existe, calculer TVA
+      if (isNaN(tva) && !isNaN(montantTTC)) {
+        tva = montantTTC - montantHT;
+        console.log('🧮 TVA calculée automatiquement:', tva);
+      }
+
+      // Calcul intelligent : si TTC manque mais TVA existe, calculer TTC
+      if (isNaN(montantTTC) && !isNaN(tva)) {
+        montantTTC = montantHT + tva;
+        console.log('🧮 TTC calculé automatiquement:', montantTTC);
+      }
+
+      // Validation finale
       if (isNaN(tva) || tva < 0) {
-        showToastMessage('❌ Montant TVA invalide', 'error');
+        showToastMessage('❌ Montant TVA invalide ou manquant', 'error');
         return;
       }
 
-      // Calcul du TTC : HT + TVA
-      const montantTTC = montantHT + tva;
+      if (isNaN(montantTTC) || montantTTC < 0) {
+        showToastMessage('❌ Montant TTC invalide ou manquant', 'error');
+        return;
+      }
 
       // Préparer les données pour l'insertion
       const finalCategory = pendingInvoiceData.categorie === '📝 Autre' 
@@ -3127,16 +3143,31 @@ export default function Dashboard() {
                   type="number"
                   step="0.01"
                   value={pendingInvoiceData.montant_ht || ''}
-                  onChange={(e) => setPendingInvoiceData({
-                    ...pendingInvoiceData,
-                    montant_ht: e.target.value
-                  })}
+                  onChange={(e) => {
+                    const newHT = e.target.value;
+                    const currentTTC = pendingInvoiceData.total_amount || pendingInvoiceData.montant_ttc;
+                    
+                    // Si TTC existe, calculer la TVA automatiquement
+                    if (currentTTC) {
+                      const calculatedTVA = parseFloat(currentTTC) - parseFloat(newHT || '0');
+                      setPendingInvoiceData({
+                        ...pendingInvoiceData,
+                        montant_ht: newHT,
+                        tva: calculatedTVA >= 0 ? calculatedTVA.toFixed(2) : '0'
+                      });
+                    } else {
+                      setPendingInvoiceData({
+                        ...pendingInvoiceData,
+                        montant_ht: newHT
+                      });
+                    }
+                  }}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="0.00"
                 />
               </div>
 
-              {/* TVA - SAISIE MANUELLE */}
+              {/* TVA - SAISIE MANUELLE OU CALCULÉE */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <Percent className="w-4 h-4 text-orange-500" />
@@ -3146,27 +3177,56 @@ export default function Dashboard() {
                   type="number"
                   step="0.01"
                   value={pendingInvoiceData.tva || ''}
-                  onChange={(e) => setPendingInvoiceData({
-                    ...pendingInvoiceData,
-                    tva: e.target.value
-                  })}
+                  onChange={(e) => {
+                    const newTVA = e.target.value;
+                    const currentHT = pendingInvoiceData.montant_ht;
+                    
+                    setPendingInvoiceData({
+                      ...pendingInvoiceData,
+                      tva: newTVA,
+                      // Calculer le TTC automatiquement si HT existe
+                      total_amount: currentHT ? (parseFloat(currentHT) + parseFloat(newTVA || '0')).toFixed(2) : undefined,
+                      montant_ttc: currentHT ? (parseFloat(currentHT) + parseFloat(newTVA || '0')).toFixed(2) : undefined
+                    });
+                  }}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="0.00"
                 />
               </div>
 
-              {/* Montant TTC - CALCULÉ AUTOMATIQUEMENT */}
+              {/* Montant TTC - SAISIE MANUELLE OU CALCULÉ */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                  Montant TTC (Calculé)
+                <label className="block text-sm font-bold text-orange-600 mb-2 flex items-center gap-2">
+                  <Receipt className="w-4 h-4" />
+                  Montant TTC (€)
                 </label>
                 <input
-                  type="text"
-                  value={pendingInvoiceData.montant_ht && pendingInvoiceData.tva
-                    ? (parseFloat(pendingInvoiceData.montant_ht) + parseFloat(pendingInvoiceData.tva)).toFixed(2)
-                    : '0.00'}
-                  readOnly
-                  className="w-full px-4 py-3 bg-orange-50/50 border border-orange-200 rounded-xl text-orange-900 text-lg font-black italic"
+                  type="number"
+                  step="0.01"
+                  value={pendingInvoiceData.total_amount || pendingInvoiceData.montant_ttc || ''}
+                  onChange={(e) => {
+                    const newTTC = e.target.value;
+                    const currentHT = pendingInvoiceData.montant_ht;
+                    
+                    // Si HT existe, calculer la TVA automatiquement
+                    if (currentHT) {
+                      const calculatedTVA = parseFloat(newTTC || '0') - parseFloat(currentHT);
+                      setPendingInvoiceData({
+                        ...pendingInvoiceData,
+                        total_amount: newTTC,
+                        montant_ttc: newTTC,
+                        tva: calculatedTVA >= 0 ? calculatedTVA.toFixed(2) : '0'
+                      });
+                    } else {
+                      setPendingInvoiceData({
+                        ...pendingInvoiceData,
+                        total_amount: newTTC,
+                        montant_ttc: newTTC
+                      });
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-orange-50/30 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-lg font-black text-slate-900"
+                  placeholder="0.00"
                 />
               </div>
 
