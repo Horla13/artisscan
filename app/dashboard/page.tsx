@@ -327,6 +327,9 @@ export default function Dashboard() {
       const isSuccessReturn = params.get('checkout') === 'success' || params.get('session_id') !== null;
       const sessionId = params.get('session_id');
 
+      console.log('🔍 checkSubscriptionLimits - Profil:', profile);
+      console.log('🔍 checkSubscriptionLimits - Session ID:', sessionId);
+
       // Si retour de Stripe avec session_id, on force l'accès PRO immédiatement
       if (sessionId) {
         console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + '), déblocage PRO...');
@@ -343,15 +346,16 @@ export default function Dashboard() {
         }
 
         setUserTier('pro');
-        setActivationPending(true);
+        setActivationPending(true); // Afficher l'écran d'activation
         setIsLoadingProfile(false);
         return;
       }
 
+      // ✅ MODIFICATION: L'utilisateur connecté a toujours accès au Dashboard
+      // On vérifie juste son statut PRO pour afficher les bonnes fonctionnalités
+      
       if (profile) {
-        setUserTier(profile.subscription_tier);
-        
-        // SORTIE DE BOUCLE : Si retour success Stripe OU si customer_id présent OU si status actif/trial
+        // Vérifier si l'utilisateur est PRO (plusieurs critères)
         const isActuallyPro = 
           isSuccessReturn || 
           profile.stripe_customer_id || 
@@ -360,18 +364,32 @@ export default function Dashboard() {
           profile.subscription_status === 'active' || 
           profile.subscription_status === 'trialing';
 
-        if (!isActuallyPro) {
-          console.log('⚠️ Accès PRO en cours d’activation...');
-          setActivationPending(true);
+        console.log('✅ Utilisateur détecté - PRO:', isActuallyPro);
+
+        if (isActuallyPro) {
+          setUserTier('pro');
+          setCanScan(true);
+          setRemainingScans(-1);
+          setActivationPending(false); // ✅ Pas de blocage si PRO
+          console.log('✅ Accès PRO validé, Dashboard accessible');
         } else {
-          setActivationPending(false);
-          console.log('✅ Accès PRO validé');
+          // Utilisateur FREE: Accès au Dashboard mais fonctionnalités limitées
+          setUserTier('free');
+          setCanScan(false);
+          setRemainingScans(0);
+          setActivationPending(false); // ✅ Pas de blocage non plus
+          console.log('ℹ️ Utilisateur FREE, Dashboard accessible avec limites');
         }
       } else {
-        // Pas de profil = activation en cours
-        setActivationPending(true);
+        // Pas de profil trouvé (en création)
+        console.log('⚠️ Pas de profil trouvé, accès Dashboard en mode dégradé');
+        setUserTier('free');
+        setCanScan(false);
+        setRemainingScans(0);
+        setActivationPending(false); // ✅ On ne bloque pas l'accès
       }
 
+      // Mise à jour supplémentaire via canUserScan pour cohérence
       const scanStatus = await canUserScan();
       setCanScan(scanStatus.canScan !== false);
       setRemainingScans(scanStatus.remaining);
@@ -379,10 +397,11 @@ export default function Dashboard() {
         setUserTier(scanStatus.tier);
       }
     } catch (error) {
-      console.error('Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur de réseau, on laisse passer pour ne pas bloquer l'usage légitime
-      setCanScan(true);
-      setUserTier('pro');
+      console.error('❌ Erreur checkSubscriptionLimits:', error);
+      // En cas d'erreur, on laisse l'accès par défaut (pas de blocage)
+      setCanScan(false);
+      setUserTier('free');
+      setActivationPending(false);
     } finally {
       setIsLoadingProfile(false);
     }
