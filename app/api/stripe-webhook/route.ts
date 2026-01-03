@@ -40,9 +40,8 @@ export async function POST(req: Request) {
       const supabase = createClient(supabaseUrl, serviceRoleKey);
       console.log('✅ Client Supabase Admin créé');
       
-      // 4. Update/Upsert du profil en PRO
+      // 4. Update simple du profil en PRO (l'utilisateur existe déjà)
       const updateData = {
-        email: userEmail,
         stripe_customer_id: customerId,
         subscription_tier: 'pro',
         plan: 'pro',
@@ -50,14 +49,16 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       };
       
-      console.log('📝 Tentative UPSERT avec:', updateData);
+      console.log('📝 Tentative UPDATE avec:', updateData);
+      console.log('🔍 Pour email:', userEmail);
       
       const { data, error } = await supabase
         .from('profiles')
-        .upsert(updateData, { onConflict: 'email' });
+        .update(updateData)
+        .eq('email', userEmail);
       
       if (error) {
-        console.error('❌ ERREUR UPSERT:', JSON.stringify(error));
+        console.error('❌ ERREUR UPDATE:', JSON.stringify(error));
         return NextResponse.json({ received: true, error: error.message }, { status: 200 });
       }
       
