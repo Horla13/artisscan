@@ -278,7 +278,7 @@ export default function Home() {
       </section>
 
       {/* Section Tarification */}
-      <section className="max-w-7xl mx-auto px-6 sm:px-8 py-20" id="tarification">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20" id="tarification">
         <div className="text-center mb-16">
           <h3 className="text-4xl font-bold text-slate-900 mb-4">Un tarif simple pour tous</h3>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
@@ -286,13 +286,13 @@ export default function Home() {
           </p>
         </div>
         
-        {/* Deux cartes côte à côte */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+        {/* Deux cartes harmonisées */}
+        <div className="flex flex-col md:flex-row gap-6 max-w-5xl mx-auto px-4">
           {/* Carte Mensuelle */}
-          <div className="bg-white rounded-3xl p-8 md:p-10 border-2 border-slate-200 hover:border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300 relative group">
+          <div className="flex-1 bg-white rounded-3xl p-8 md:p-10 border-2 border-slate-200 hover:border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300 relative flex flex-col">
             <div className="text-center mb-8">
               <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Mensuelle</h4>
-              <p className="text-slate-500 font-medium text-sm">Souplesse maximale</p>
+              <p className="text-slate-500 font-medium text-sm h-5">Souplesse maximale</p>
             </div>
             
             <div className="text-center mb-8">
@@ -300,9 +300,10 @@ export default function Home() {
                 <span className="text-5xl font-black text-slate-900">19,90€</span>
                 <span className="text-slate-500 font-bold">/mois</span>
               </div>
+              <div className="h-5 mt-2"></div> {/* Espace pour alignement avec l'autre carte */}
             </div>
 
-            <ul className="space-y-4 mb-8">
+            <ul className="space-y-4 mb-8 flex-grow">
               <li className="flex items-center gap-3">
                 <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
                   <Check className="w-3.5 h-3.5 text-orange-600" />
@@ -335,17 +336,19 @@ export default function Home() {
               </li>
             </ul>
 
-            <button
-              onClick={() => startSignup('monthly')}
-              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg text-sm"
-            >
-              Commencer l'essai de 14 jours
-            </button>
-            <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
+            <div className="mt-auto">
+              <button
+                onClick={() => startSignup('monthly')}
+                className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg text-sm"
+              >
+                Commencer l'essai de 14 jours
+              </button>
+              <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
+            </div>
           </div>
 
           {/* Carte Annuelle (Recommandée) */}
-          <div className="bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl hover:shadow-2xl transition-all duration-300 relative">
+          <div className="flex-1 bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl hover:shadow-2xl transition-all duration-300 relative flex flex-col">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
               <span className="bg-green-600 text-white text-[10px] font-black uppercase tracking-wider px-4 py-1 rounded-full shadow-lg">
                 -25% ou 2 mois gratuits
@@ -354,7 +357,7 @@ export default function Home() {
 
             <div className="text-center mb-8">
               <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Annuelle</h4>
-              <p className="text-orange-600 font-bold text-sm">La plus avantageuse ⭐</p>
+              <p className="text-orange-600 font-bold text-sm h-5">La plus avantageuse ⭐</p>
             </div>
             
             <div className="text-center mb-8">
@@ -362,10 +365,10 @@ export default function Home() {
                 <span className="text-5xl font-black text-orange-600">14,90€</span>
                 <span className="text-slate-600 font-bold">/mois</span>
               </div>
-              <p className="text-xs text-slate-500 font-bold mt-2">facturé 179€ / an</p>
+              <p className="text-xs text-slate-500 font-bold mt-2 h-5">facturé 179€ / an</p>
             </div>
 
-            <ul className="space-y-4 mb-8">
+            <ul className="space-y-4 mb-8 flex-grow">
               <li className="flex items-center gap-3">
                 <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
                   <Check className="w-3.5 h-3.5 text-white" />
@@ -398,13 +401,15 @@ export default function Home() {
               </li>
             </ul>
 
-            <button
-              onClick={() => startSignup('yearly')}
-              className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl text-sm"
-            >
-              Commencer l'essai de 14 jours
-            </button>
-            <p className="text-xs text-center text-slate-500 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
+            <div className="mt-auto">
+              <button
+                onClick={() => startSignup('yearly')}
+                className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg text-sm"
+              >
+                Commencer l'essai de 14 jours
+              </button>
+              <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
+            </div>
           </div>
         </div>
 
