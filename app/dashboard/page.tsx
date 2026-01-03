@@ -84,6 +84,7 @@ export default function Dashboard() {
   const [companyProfession, setCompanyProfession] = useState('');
   const [activationPending, setActivationPending] = useState(false);
   const [showForceAccess, setShowForceAccess] = useState(false);
+  const [forceAccessClicks, setForceAccessClicks] = useState(0);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -1629,8 +1630,9 @@ export default function Dashboard() {
   if (activationPending || isLoadingProfile) {
     const forceCheck = async () => {
       console.log('🔄 Force refresh session + vérification profil');
+      setForceAccessClicks(prev => prev + 1);
       
-      // 1. Rafraîchir la session Supabase
+      // 1. Rafraîchir la session Supabase (VITAL)
       try {
         const { data, error } = await supabase.auth.refreshSession();
         if (error) {
@@ -1652,12 +1654,11 @@ export default function Dashboard() {
         setUserTier('pro');
       } else {
         console.warn('⚠️ Profil pas encore PRO, réessayez dans un instant');
-        showToastMessage('Activation en cours, réessayez dans un instant', 'error');
       }
       
-      // 3. Forcer la redirection
-      router.push('/dashboard');
-      router.refresh?.();
+      // 3. Forcer la redirection complète (rechargement total de la page)
+      console.log('🚀 Redirection forcée vers /dashboard');
+      window.location.assign('/dashboard');
     };
 
     return (
@@ -1674,12 +1675,25 @@ export default function Dashboard() {
             <div className="h-full bg-orange-500 animate-pulse" style={{ width: '70%' }}></div>
           </div>
           {showForceAccess && (
-            <button
-              onClick={forceCheck}
-              className="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md active:scale-95 transition-all"
-            >
-              Accéder au Dashboard
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={forceCheck}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md active:scale-95 transition-all"
+              >
+                Accéder au Dashboard
+              </button>
+              {forceAccessClicks >= 2 && (
+                <div className="text-center">
+                  <p className="text-xs text-slate-500 mb-2">Le bouton ne fonctionne pas ?</p>
+                  <a
+                    href="https://artisscan.vercel.app/dashboard"
+                    className="text-orange-500 font-bold underline text-sm hover:text-orange-600"
+                  >
+                    Cliquez ici pour accéder directement
+                  </a>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
