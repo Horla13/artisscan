@@ -1632,10 +1632,11 @@ export default function Dashboard() {
       if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
         setActivationPending(false);
         setUserTier('pro');
-        router.push('/dashboard');
       } else {
         showToastMessage('Activation en cours, réessayez dans un instant', 'error');
       }
+      router.push('/dashboard');
+      router.refresh?.();
     };
 
     return (

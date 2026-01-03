@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
         const customerId = session.customer as string;
         const userEmail = session.customer_details?.email || session.metadata?.supabase_user_email;
         const nowIso = new Date().toISOString();
-        const userId = session.metadata?.supabase_user_id || session.client_reference_id;
 
         if (!userEmail) {
           console.error('❌ Webhook: email introuvable, impossible de mettre à jour le profil.');
@@ -57,18 +56,15 @@ export async function POST(req: NextRequest) {
           updated_at: nowIso,
         };
 
-        let upsertError = null;
+        // Upsert par email (service_role pour contourner RLS)
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert(updateData, { onConflict: 'email' });
 
-        if (userId) {
-          const { error } = await supabase.from('profiles').update(updateData).eq('id', userId);
-          upsertError = error;
-          if (!error) console.log(`✅ Profil PRO mis à jour via ID pour ${userId}`);
+        if (upsertError) {
+          console.error('❌ Erreur update/upsert profil:', upsertError);
         } else {
-          const { error } = await supabase
-            .from('profiles')
-            .upsert(updateData, { onConflict: 'email' });
-          upsertError = error;
-          if (!error) console.log(`✅ Profil PRO upserté via email pour ${userEmail}`);
+          console.log(`✅ Profil PRO upserté via email pour ${userEmail}`);
         }
 
         if (upsertError) {
