@@ -297,28 +297,53 @@ export default function Dashboard() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Polling doux pendant l'activation pour détecter plan='pro' dès que la DB est synchro
+  // Polling automatique pendant l'activation pour détecter plan='pro' et rediriger
   useEffect(() => {
     if (!activationPending) return;
 
+    console.log('🔄 Démarrage du polling automatique (vérification toutes les 2s)');
+
     const interval = setInterval(async () => {
-      const profile = await getUserProfile();
-      if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
-        setActivationPending(false);
-        setUserTier('pro');
-        router.push('/dashboard');
+      console.log('🔍 Vérification statut PRO...');
+      
+      try {
+        const profile = await getUserProfile();
+        
+        if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
+          console.log('✅ Statut PRO détecté en base de données !');
+          
+          // 1. Rafraîchir la session Supabase (VITAL)
+          console.log('📡 Rafraîchissement de la session Supabase...');
+          const { data, error } = await supabase.auth.refreshSession();
+          
+          if (error) {
+            console.error('❌ Erreur refresh session:', error);
+          } else {
+            console.log('✅ Session rafraîchie avec succès');
+          }
+          
+          // 2. Redirection automatique vers le Dashboard
+          console.log('🚀 Redirection automatique vers /dashboard...');
+          clearInterval(interval);
+          setActivationPending(false);
+          setUserTier('pro');
+          window.location.href = '/dashboard';
+        }
+      } catch (err) {
+        console.error('❌ Erreur polling:', err);
       }
     }, 2000);
 
+    // Bouton de secours après 10 secondes
     const timer = setTimeout(() => {
       setShowForceAccess(true);
-    }, 5000);
+    }, 10000);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timer);
     };
-  }, [activationPending, router]);
+  }, [activationPending]);
 
   const checkSubscriptionLimits = async () => {
     try {
@@ -1608,61 +1633,42 @@ export default function Dashboard() {
 
   // Affichage d'attente pendant l'activation PRO
   if (activationPending || isLoadingProfile) {
-    const forceCheck = async () => {
-      console.log('⚡ Clic sur "Accéder au Dashboard" - Rafraîchissement et redirection forcée');
-      setForceAccessClicks(prev => prev + 1);
-      
-      try {
-        // 1. Rafraîchir la session Supabase (VITAL pour mettre à jour le profil)
-        console.log('📡 Rafraîchissement de la session Supabase...');
-        const { data, error } = await supabase.auth.refreshSession();
-        
-        if (error) {
-          console.error('❌ Erreur refresh session:', error);
-        } else {
-          console.log('✅ Session rafraîchie avec succès');
-        }
-      } catch (err) {
-        console.error('❌ Erreur lors du refresh:', err);
-      }
-      
-      // 2. Forcer le rechargement complet de la page (récupère le nouveau statut PRO)
-      console.log('🚀 Redirection complète vers /dashboard avec rechargement total');
-      window.location.href = '/dashboard';
-    };
-
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
         <div className="bg-white border border-slate-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-4 animate-fade-in">
           <div className="flex items-center justify-center gap-3 text-orange-500 font-black text-lg uppercase tracking-widest">
-            <Zap className="w-6 h-6" />
-            Activation de votre abonnement...
+            <Zap className="w-6 h-6 animate-pulse" />
+            Paiement validé !
           </div>
-          <p className="text-slate-600 text-sm">
-            Merci pour votre paiement. Nous synchronisons votre accès Pro. Cette étape ne prend que quelques secondes.
+          <p className="text-slate-600 text-sm font-medium">
+            Redirection vers votre dashboard en cours...
+          </p>
+          <p className="text-slate-400 text-xs">
+            Nous synchronisons votre accès Pro. Cette étape ne prend que quelques secondes.
           </p>
           <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
             <div className="h-full bg-orange-500 animate-pulse" style={{ width: '70%' }}></div>
           </div>
+          
+          {/* Bouton de secours après 10 secondes */}
           {showForceAccess && (
-            <div className="space-y-3">
+            <div className="space-y-3 pt-4 border-t border-slate-200">
+              <p className="text-xs text-slate-500">La redirection automatique prend du temps ?</p>
               <button
-                onClick={forceCheck}
+                onClick={async () => {
+                  console.log('⚡ Clic bouton secours - Forçage redirection');
+                  try {
+                    await supabase.auth.refreshSession();
+                    window.location.href = '/dashboard';
+                  } catch (err) {
+                    console.error('❌ Erreur:', err);
+                    window.location.href = '/dashboard';
+                  }
+                }}
                 className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md active:scale-95 transition-all"
               >
                 Accéder au Dashboard
               </button>
-              {forceAccessClicks >= 2 && (
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-2">Le bouton ne fonctionne pas ?</p>
-                  <a
-                    href="https://artisscan.vercel.app/dashboard"
-                    className="text-orange-500 font-bold underline text-sm hover:text-orange-600"
-                  >
-                    Cliquez ici pour accéder directement
-                  </a>
-                </div>
-              )}
             </div>
           )}
         </div>
