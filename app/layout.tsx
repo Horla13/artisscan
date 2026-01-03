@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ArtisScan - Scanner vos factures",
-  description: "Scannez et gérez vos factures d'artisan facilement",
+  title: "ArtisScan - Gestion intelligente pour artisans",
+  description: "Scannez et gérez vos factures d'artisan facilement avec l'IA",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -22,6 +22,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/icon-rounded.svg", type: "image/svg+xml" }
     ],
     apple: [
@@ -31,6 +32,7 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
+    shortcut: "/favicon.ico",
   },
 };
 

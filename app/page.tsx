@@ -271,105 +271,146 @@ export default function Home() {
 
       {/* Section Tarification */}
       <section className="max-w-7xl mx-auto px-6 sm:px-8 py-20" id="tarification">
-        <div className="text-center mb-12">
+        <div className="text-center mb-16">
           <h3 className="text-4xl font-bold text-slate-900 mb-4">Un tarif simple pour tous</h3>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10">
-            Une seule offre complète. Sans engagement, résiliable à tout moment.
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Choisissez la formule qui vous convient. Sans engagement, résiliable à tout moment.
           </p>
-
-          {/* Sélecteur Mois/Année */}
-          <div className="flex items-center justify-center gap-4 mb-12">
-            <span className={`text-sm font-bold ${billingCycle === 'monthly' ? 'text-slate-900' : 'text-slate-400'}`}>Mensuel</span>
-            <button 
-              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-              className="relative w-14 h-7 bg-slate-200 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-            >
-              <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${billingCycle === 'yearly' ? 'translate-x-7' : ''}`} />
-            </button>
-            <div className="flex items-center gap-2">
-              <span className={`text-sm font-bold ${billingCycle === 'yearly' ? 'text-slate-900' : 'text-slate-400'}`}>Annuel</span>
-              <span className="bg-green-100 text-green-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider shadow-sm">
-                -25% ou 2 mois gratuits
-              </span>
-            </div>
-          </div>
         </div>
         
-        <div className="flex justify-center">
-          {/* Plan Unique : ArtisScan Pro */}
-          <div className="bg-white rounded-3xl p-8 md:p-12 border-2 border-orange-500 shadow-xl shadow-orange-100 relative max-w-lg w-full">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-              <span className="bg-orange-500 text-white text-[10px] font-black uppercase tracking-[0.2em] px-6 py-1.5 rounded-full shadow-lg">
-                OFFRE ILLIMITÉE
-              </span>
+        {/* Deux cartes côte à côte */}
+        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          {/* Carte Mensuelle */}
+          <div className="bg-white rounded-3xl p-8 md:p-10 border-2 border-slate-200 hover:border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300 relative group">
+            <div className="text-center mb-8">
+              <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Mensuelle</h4>
+              <p className="text-slate-500 font-medium text-sm">Souplesse maximale</p>
             </div>
             
-            <div className="text-center mb-10">
-              <h4 className="text-2xl font-black text-slate-900 mb-2">ArtisScan Pro</h4>
-              <p className="text-slate-500 font-medium">Pour tous les artisans et commerçants</p>
-            </div>
-            
-            <div className="text-center mb-10">
-              <div className="flex items-center justify-center gap-1">
-                <span className="text-5xl font-black text-slate-900">
-                  {billingCycle === 'monthly' ? '19,90' : '14,90'}€
-                </span>
-                <div className="text-left">
-                  <p className="text-slate-500 font-bold leading-none">/mois</p>
-                  {billingCycle === 'yearly' && (
-                    <p className="text-[10px] text-green-600 font-black uppercase tracking-tighter mt-1">Facturé 179€/an</p>
-                  )}
-                </div>
+            <div className="text-center mb-8">
+              <div className="flex items-baseline justify-center gap-1">
+                <span className="text-5xl font-black text-slate-900">19,90€</span>
+                <span className="text-slate-500 font-bold">/mois</span>
               </div>
             </div>
 
-            <ul className="space-y-5 mb-10">
-              <li className="flex items-center gap-4">
-                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
-                  <Check className="w-4 h-4 text-orange-600" />
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-orange-600" />
                 </div>
-                <span className="text-slate-900 font-bold">Scans illimités (IA Haute Précision)</span>
+                <span className="text-slate-700 font-medium text-sm">Scans illimités (IA)</span>
               </li>
-              <li className="flex items-center gap-4">
-                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
-                  <Check className="w-4 h-4 text-orange-600" />
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-orange-600" />
                 </div>
-                <span className="text-slate-900 font-bold">Export PDF / Excel / CSV illimité</span>
+                <span className="text-slate-700 font-medium text-sm">Export PDF / Excel / CSV</span>
               </li>
-              <li className="flex items-center gap-4">
-                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
-                  <Check className="w-4 h-4 text-orange-600" />
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-orange-600" />
                 </div>
-                <span className="text-slate-900 font-bold">Calcul TVA & Catégorisation auto</span>
+                <span className="text-slate-700 font-medium text-sm">Calcul TVA automatique</span>
               </li>
-              <li className="flex items-center gap-4">
-                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
-                  <Check className="w-4 h-4 text-orange-600" />
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-orange-600" />
                 </div>
-                <span className="text-slate-900 font-bold">Gestion des dossiers & archives</span>
+                <span className="text-slate-700 font-medium text-sm">Support 7j/7</span>
               </li>
-              <li className="flex items-center gap-4">
-                <div className="w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-100">
-                  <Check className="w-4 h-4 text-orange-600" />
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-orange-600" />
                 </div>
-                <span className="text-slate-900 font-bold">Support prioritaire 7j/7</span>
+                <span className="text-slate-700 font-medium text-sm">Sans engagement</span>
               </li>
             </ul>
 
             <button
-              onClick={startCheckout}
+              onClick={() => {
+                setBillingCycle('monthly');
+                startCheckout();
+              }}
               disabled={checkoutLoading}
-              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-[0.1em] py-5 rounded-2xl transition-all duration-200 active:scale-95 shadow-lg shadow-orange-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm"
             >
-              {checkoutLoading ? 'Redirection…' : "Démarrer l'essai gratuit"}
+              {checkoutLoading ? 'Redirection…' : "Commencer l'essai de 14 jours"}
             </button>
-            <p className="text-xs text-center text-slate-400 mt-4 font-bold uppercase tracking-widest italic">14 jours d'essai gratuit • Sans engagement</p>
+            <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
+          </div>
+
+          {/* Carte Annuelle (Recommandée) */}
+          <div className="bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl hover:shadow-2xl transition-all duration-300 relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <span className="bg-green-600 text-white text-[10px] font-black uppercase tracking-wider px-4 py-1 rounded-full shadow-lg">
+                -25% ou 2 mois gratuits
+              </span>
+            </div>
+
+            <div className="text-center mb-8">
+              <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Annuelle</h4>
+              <p className="text-orange-600 font-bold text-sm">La plus avantageuse ⭐</p>
+            </div>
+            
+            <div className="text-center mb-8">
+              <div className="flex items-baseline justify-center gap-1">
+                <span className="text-5xl font-black text-orange-600">14,90€</span>
+                <span className="text-slate-600 font-bold">/mois</span>
+              </div>
+              <p className="text-xs text-slate-500 font-bold mt-2">facturé 179€ / an</p>
+            </div>
+
+            <ul className="space-y-4 mb-8">
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-slate-900 font-bold text-sm">Scans illimités (IA)</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-slate-900 font-bold text-sm">Export PDF / Excel / CSV</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-slate-900 font-bold text-sm">Calcul TVA automatique</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-slate-900 font-bold text-sm">Support prioritaire 7j/7</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-slate-900 font-bold text-sm">Économie de 60€ / an</span>
+              </li>
+            </ul>
+
+            <button
+              onClick={() => {
+                setBillingCycle('yearly');
+                startCheckout();
+              }}
+              disabled={checkoutLoading}
+              className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+            >
+              {checkoutLoading ? 'Redirection…' : "Commencer l'essai de 14 jours"}
+            </button>
+            <p className="text-xs text-center text-slate-500 mt-3 font-medium">Essai gratuit • Aucune carte requise</p>
           </div>
         </div>
 
         {/* FAQ Tarifs */}
         <div className="mt-16 text-center">
-          <p className="text-slate-600 mb-4">
+          <p className="text-slate-600 mb-4 font-medium">
             Des questions sur nos tarifs ?
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500">
@@ -383,7 +424,7 @@ export default function Home() {
             </span>
             <span className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-600" />
-              Facturation mensuelle ou annuelle
+              Facture automatique chaque mois
             </span>
           </div>
         </div>

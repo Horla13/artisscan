@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package } from 'lucide-react';
+import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -69,6 +69,7 @@ export default function Dashboard() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -1558,14 +1559,8 @@ export default function Dashboard() {
   
 
   const triggerFileInput = () => {
-    // Vérifier SEULEMENT si on affiche la modale (ne pas bloquer le bouton)
-    // La modale s'affiche uniquement si vraiment >= 5 scans
-    if (!isLoadingProfile && userTier === 'free' && remainingScans === 0 && stats.nombreFactures >= 5) {
-      setShowLimitModal(true);
-      return;
-    }
-    // Sinon, toujours permettre le scan
-    fileInputRef.current?.click();
+    // Menu de sélection : Appareil photo OU Téléverser fichier
+    setShowUploadMenu(true);
   };
 
     return (
@@ -2407,41 +2402,6 @@ export default function Dashboard() {
                 Aucune gestion manuelle : tout est classé par mois.
               </p>
             </div>
-            {/* Mode Test (Simulation Pro) */}
-            <div className="card-clean rounded-3xl p-6 border-2 border-amber-100 bg-amber-50/50 shadow-inner">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Mode Test (Simulation)</h3>
-              </div>
-              <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-4">
-                Testez le statut Pro instantanément
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    await updateSubscriptionTier('free');
-                    await checkSubscriptionLimits();
-                    showToastMessage('Statut : INACTIF', 'success');
-                  }}
-                  className="flex-1 px-3 py-2 bg-white hover:bg-slate-50 text-slate-400 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
-                >
-                  INACTIF
-                </button>
-                <button
-                  onClick={async () => {
-                    await updateSubscriptionTier('pro');
-                    await checkSubscriptionLimits();
-                    showToastMessage('Statut : PRO (Test) 🎉', 'success');
-                  }}
-                  className="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-orange-100 active:scale-95"
-                >
-                  PRO
-                </button>
-              </div>
-              <p className="text-[9px] font-bold text-amber-500 mt-3 uppercase tracking-tighter">
-                ⚠️ Uniquement pour le test. À supprimer en production.
-              </p>
-            </div>
 
             <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
               <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-tight">Export & Données</h3>
@@ -2487,64 +2447,78 @@ export default function Dashboard() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         capture="environment"
         onChange={handleAnalyze}
         className="hidden"
       />
 
-      {/* Modale de limitation Free */}
-      {showLimitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full slide-up">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="w-8 h-8 text-orange-500" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Limite de scans atteinte</h3>
-              <p className="text-slate-600">
-                Vous avez utilisé vos <strong>5 scans gratuits</strong> ce mois.
-              </p>
-            </div>
-
-            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-6">
-              <h4 className="font-semibold text-slate-900 mb-2">Passez au plan Pro pour :</h4>
-              <ul className="space-y-2 text-sm text-slate-700">
-                <li className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                  <span><strong>Scans illimités</strong></span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                  <span>Export CSV illimité</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                  <span>Catégorisation IA automatique</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                  <span>Graphiques & statistiques avancées</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3">
+      {/* Menu de sélection Upload */}
+      {showUploadMenu && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-[70] px-4" onClick={() => setShowUploadMenu(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-slate-900">Scanner une facture</h3>
               <button
-                onClick={() => setShowLimitModal(false)}
-                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium"
+                onClick={() => setShowUploadMenu(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                Plus tard
+                <X className="w-5 h-5 text-slate-400" />
               </button>
-              <Link
-                href="/#tarification"
-                className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold text-center"
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  setShowUploadMenu(false);
+                  const input = fileInputRef.current;
+                  if (input) {
+                    input.setAttribute('capture', 'environment');
+                    input.setAttribute('accept', 'image/*');
+                    input.click();
+                  }
+                }}
+                className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-2xl transition-all active:scale-95 shadow-lg group"
               >
-                Passer à Pro
-              </Link>
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-black text-base">Prendre une photo</p>
+                  <p className="text-xs opacity-90">Ouvrir l'appareil photo</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowUploadMenu(false);
+                  const input = fileInputRef.current;
+                  if (input) {
+                    input.removeAttribute('capture');
+                    input.setAttribute('accept', 'image/*,application/pdf');
+                    input.click();
+                  }
+                }}
+                className="w-full flex items-center gap-4 p-4 bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl transition-all active:scale-95 group"
+              >
+                <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FileText className="w-6 h-6 text-slate-600" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-black text-slate-900 text-base">Téléverser un fichier</p>
+                  <p className="text-xs text-slate-500">Galerie, PDF ou image</p>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowUploadMenu(false)}
+              className="w-full mt-4 py-3 text-slate-400 hover:text-slate-600 font-medium text-sm transition-colors"
+            >
+              Annuler
+            </button>
           </div>
-            </div>
-            </div>
+        </div>
       )}
 
       {/* Modale Envoi au Comptable */}
