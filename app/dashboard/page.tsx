@@ -260,37 +260,91 @@ export default function Dashboard() {
     }
   };
 
-  // Charger le profil utilisateur et vérifier les limites dès que la session est prête
+  // 🔒 SÉCURITÉ DASHBOARD : Vérification stricte de l'authentification et du plan PRO
   useEffect(() => {
-    const initializeProfile = async () => {
+    const secureAccess = async () => {
       setIsLoadingProfile(true);
       
-      // Attendre que la session soit confirmée
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setUserEmail(session.user.email || null);
+      try {
+        console.log('🔒 SÉCURITÉ: Vérification accès Dashboard...');
+        
+        // 1. Vérifier l'utilisateur connecté avec getUser() (plus fiable)
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError) {
+          console.error('❌ SÉCURITÉ: Erreur auth:', JSON.stringify(authError));
+          setError(`Erreur authentification: ${authError.message}`);
+        }
+        
+        if (!user) {
+          console.log('🚫 SÉCURITÉ: Aucun utilisateur connecté → Redirection /login');
+          window.location.href = '/login?redirect=/dashboard';
+          return;
+        }
+        
+        console.log('✅ SÉCURITÉ: Utilisateur connecté:', user.email);
+        setUserEmail(user.email || null);
+        
+        // 2. Vérifier le plan dans la table profiles
+        console.log('📊 SÉCURITÉ: Récupération du profil...');
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileError) {
+          console.error('❌ SÉCURITÉ: Erreur profil:', JSON.stringify(profileError));
+          setError(`Erreur récupération profil: ${profileError.message} - ${JSON.stringify(profileError)}`);
+          setIsLoadingProfile(false);
+          return;
+        }
+        
+        console.log('📋 SÉCURITÉ: Profil récupéré:', JSON.stringify(profile, null, 2));
+        
+        // 3. Vérification STRICTE du plan PRO
+        const planExact = profile?.plan;
+        console.log('🔍 SÉCURITÉ: Plan exact:', `"${planExact}"`, typeof planExact);
+        
+        if (planExact !== 'pro') {
+          console.log('⛔ SÉCURITÉ: Plan non-PRO détecté, blocage accès');
+          setError(`⛔ Accès refusé : Votre plan est "${planExact}" mais doit être exactement "pro". Profil complet: ${JSON.stringify(profile)}`);
+          setUserTier('free');
+          setCanScan(false);
+          setRemainingScans(0);
+          setIsLoadingProfile(false);
+          return;
+        }
+        
+        // 4. Accès PRO confirmé
+        console.log('🎉 SÉCURITÉ: Plan PRO confirmé → Accès autorisé');
+        setUserTier('pro');
+        setCanScan(true);
+        setRemainingScans(-1);
+        setActivationPending(false);
+        
         await checkSubscriptionLimits();
-        // Rafraîchir pour refléter immédiatement le statut PRO après paiement
         router.refresh?.();
-      } else {
-        // Rediriger vers login si pas de session
-        window.location.href = '/login';
+        
+      } catch (err: any) {
+        console.error('💥 SÉCURITÉ: Exception:', err);
+        setError(`Exception sécurité: ${err.message} - ${JSON.stringify(err)}`);
+      } finally {
+        setIsLoadingProfile(false);
       }
-      
-      setIsLoadingProfile(false);
     };
 
-    initializeProfile();
+    secureAccess();
 
     // Écouter les changements de session
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        setUserEmail(session.user.email || null);
-        checkSubscriptionLimits();
-      } else if (event === 'SIGNED_OUT') {
+      console.log('🔄 SÉCURITÉ: Auth state change:', event);
+      if (event === 'SIGNED_OUT') {
         setUserEmail(null);
         window.location.href = '/login';
+      } else if (session) {
+        setUserEmail(session.user.email || null);
+        secureAccess(); // Re-vérifier l'accès
       }
     });
 
