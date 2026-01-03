@@ -45,36 +45,30 @@ function PricingContent() {
       setCheckoutLoading(true);
       const cycle = forcedCycle || billingCycle;
       
-      // VÉRIFICATION IMMÉDIATE : On récupère la session brute
+      // VÉRIFICATION DE FORCE : On demande l'utilisateur à Supabase au clic
       const { data: { session } } = await supabase.auth.getSession();
       
-      // FALLBACK : Si pas de session, on regarde si l'email est dans l'URL (post-signup immédiat)
-      const urlEmail = searchParams.get('email');
-      
-      if (!session?.user && !urlEmail) {
-        if (retryCount < 2) {
-          console.log(`⚠️ Session non détectée (essai ${retryCount + 1}), attente 1s...`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+      // Si vraiment aucune session et aucun email de secours, on dégage vers le signup
+      if (!session?.user?.id) {
+        if (retryCount < 1) {
+          console.log(`⚠️ Session non trouvée, tentative de récupération...`);
+          await new Promise(resolve => setTimeout(resolve, 800));
           return startCheckout(cycle, retryCount + 1);
         }
-        
-        console.log("❌ Pas de session ni d'email détecté, redirection forcée");
+        console.log("❌ Blocage : Pas d'ID utilisateur. Redirection signup.");
         router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
         return;
       }
 
-      const checkoutEmail = session?.user?.email || urlEmail;
-      const checkoutUserId = session?.user?.id || ''; // Stripe accepte un ID vide si email présent
-
-      console.log(`[CHECKOUT] Session trouvée pour ${checkoutEmail}. Lancement Stripe...`);
+      console.log(`[CHECKOUT] Lancement pour l'utilisateur: ${session.user.id}`);
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: checkoutUserId,
-          userEmail: checkoutEmail
+          userId: session.user.id, // ID OBLIGATOIRE
+          userEmail: session.user.email
         }),
       });
 

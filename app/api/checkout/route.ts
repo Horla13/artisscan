@@ -23,6 +23,13 @@ export async function POST(req: NextRequest) {
     const billingCycle = (body?.billingCycle as BillingCycle) || 'monthly';
     const userId = body?.userId;
 
+    if (!userId || userId === '') {
+      return NextResponse.json(
+        { error: "Identification utilisateur requise pour le paiement." },
+        { status: 400 }
+      );
+    }
+
     const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
     const yearlyPriceId = process.env.STRIPE_PRICE_ID_YEARLY?.trim();
     if (!monthlyPriceId || !yearlyPriceId) {
@@ -52,9 +59,9 @@ export async function POST(req: NextRequest) {
       client_reference_id: userId,
       customer_email: body?.userEmail,
       metadata: {
-        supabase_user_id: userId || '',
+        supabase_user_id: userId,
       },
-      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${baseUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
     });

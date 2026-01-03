@@ -69,14 +69,17 @@ function LoginForm() {
 
       if (error) throw error
 
-      console.log("✅ Inscription réussie, redirection immédiate vers les tarifs");
+      console.log("✅ Inscription réussie");
       
-      // Forcer le rafraîchissement des composants pour reconnaître la nouvelle session
+      // Force la récupération de la session pour s'assurer qu'elle est active localement
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Forcer le rafraîchissement des composants
       router.refresh()
 
-      // Redirection immédiate vers les tarifs avec l'email dans l'URL pour bypasser la latence session
+      // Redirection immédiate vers les tarifs
       const cycle = searchParams.get('cycle') || 'monthly'
-      router.push(`/pricing?mode=signup&status=welcome&cycle=${cycle}&email=${encodeURIComponent(email)}`)
+      router.push(`/pricing?mode=signup&status=welcome&cycle=${cycle}`)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue lors de l\'inscription')
     } finally {
