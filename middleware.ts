@@ -10,7 +10,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  console.log('🔍 Middleware: Protection /dashboard')
+  console.log('🔍 Middleware: Vérification accès /dashboard')
 
   let res = NextResponse.next({
     request: {
@@ -28,13 +28,11 @@ export async function middleware(req: NextRequest) {
             return req.cookies.get(name)?.value
           },
           set(name: string, value: string, options: any) {
-            // Mettre à jour les cookies de la requête
             req.cookies.set({
               name,
               value,
               ...options,
             })
-            // Mettre à jour les cookies de la réponse
             res = NextResponse.next({
               request: {
                 headers: req.headers,
@@ -47,13 +45,11 @@ export async function middleware(req: NextRequest) {
             })
           },
           remove(name: string, options: any) {
-            // Supprimer des cookies de la requête
             req.cookies.set({
               name,
               value: '',
               ...options,
             })
-            // Supprimer des cookies de la réponse
             res = NextResponse.next({
               request: {
                 headers: req.headers,
@@ -69,41 +65,39 @@ export async function middleware(req: NextRequest) {
       }
     )
 
-    // 1. Essayer de récupérer la session (plus permissif que getUser)
-    console.log('🔐 Tentative getSession()...')
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    // Vérification utilisateur avec getUser() (méthode serveur)
+    console.log('🔐 Middleware: Appel getUser()...')
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (sessionError) {
-      console.log('⚠️ Erreur getSession():', sessionError.message)
+    if (authError) {
+      console.error('❌ Middleware: Erreur getUser():', authError.message)
     }
 
-    // 2. Si pas de session, essayer getUser (plus strict)
-    if (!session) {
-      console.log('📡 Pas de session, tentative getUser()...')
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (!user) {
+      console.log('🚫 Middleware: AUCUN utilisateur détecté → Redirection /login')
+      const redirectUrl = new URL('/login', req.url)
+      redirectUrl.searchParams.set('redirect', pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
 
-      if (userError) {
-        console.log('❌ Erreur getUser():', userError.message, userError.status)
-      }
+    // Utilisateur détecté
+    console.log('✅ Middleware: Utilisateur DÉTECTÉ')
+    console.log('   - Email:', user.email)
+    console.log('   - ID:', user.id)
 
-      if (!user) {
-        console.log('🚫 Aucun utilisateur trouvé → Redirection /login')
-        const redirectUrl = new URL('/login', req.url)
-        redirectUrl.searchParams.set('redirect', pathname)
-        return NextResponse.redirect(redirectUrl)
-      }
-
-      console.log('✅ Utilisateur trouvé via getUser():', user.email)
+    // Autorisation spéciale pour l'utilisateur PRO
+    if (user.email === 'armagio13@gmail.com') {
+      console.log('🎉 Middleware: Utilisateur autorisé (armagio13@gmail.com) → Accès autorisé')
       return res
     }
 
-    console.log('✅ Session active:', session.user.email)
+    // Pour les autres utilisateurs connectés, on laisse aussi passer (mode PRO-only)
+    console.log('✅ Middleware: Utilisateur connecté → Accès autorisé')
     return res
 
   } catch (err: any) {
-    console.error('💥 Exception middleware:', err.message)
-    // En cas d'erreur, laisser passer (mode graceful)
-    console.log('⚠️ Erreur, accès autorisé par défaut')
+    console.error('💥 Middleware: Exception:', err.message)
+    console.log('⚠️ Middleware: Accès autorisé par défaut (erreur)')
     return res
   }
 }
