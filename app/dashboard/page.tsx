@@ -294,12 +294,12 @@ export default function Dashboard() {
     try {
       const profile = await getUserProfile();
       const params = new URLSearchParams(window.location.search);
-      const isSuccessReturn = params.get('checkout') === 'success';
+      const isSuccessReturn = params.get('checkout') === 'success' || params.get('session_id') !== null;
       const sessionId = params.get('session_id');
 
       // Si retour de Stripe avec session_id, on force l'accès PRO immédiatement
-      if (sessionId && isSuccessReturn) {
-        console.log('🎯 Retour Stripe réussi (ID: ' + sessionId + '), déblocage PRO...');
+      if (sessionId) {
+        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + '), déblocage PRO...');
         
         // Mise à jour préventive du profil pour éviter la boucle
         const { data: { user } } = await supabase.auth.getUser();

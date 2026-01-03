@@ -54,8 +54,8 @@ export async function POST(req: NextRequest) {
       metadata: {
         supabase_user_id: userId || '',
       },
-      success_url: `${baseUrl}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/#tarification`,
+      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
     });
 
