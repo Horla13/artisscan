@@ -4,15 +4,27 @@ import { createClient } from '@supabase/supabase-js';
 export async function POST(req: Request) {
   console.log('🔔 RECU DANS WEBHOOK - DEBUT');
   
+  // 1. Création du client Supabase avec SERVICE_ROLE_KEY dès le début
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('❌ Variables Supabase manquantes');
+    return NextResponse.json({ received: true, error: 'Config missing' }, { status: 500 });
+  }
+  
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  console.log('✅ Client Supabase Admin créé');
+  
   try {
-    // 1. Récupération du body (sans validation de signature pour test)
+    // 2. Récupération du body (sans validation de signature pour test)
     const body = await req.json();
     console.log('📦 Body reçu:', JSON.stringify(body, null, 2));
     
     const event = body;
     console.log('📋 Type événement:', event.type);
     
-    // 2. Traitement de l'événement checkout.session.completed
+    // 3. Traitement de l'événement checkout.session.completed
     if (event.type === 'checkout.session.completed') {
       console.log('✅ Événement checkout.session.completed détecté');
       
@@ -20,7 +32,9 @@ export async function POST(req: Request) {
       const userEmail = session.customer_details?.email || session.customer_email;
       const customerId = session.customer;
       
-      console.log('📧 Email client:', userEmail);
+      console.log('📧 Email client reçu:', userEmail);
+      console.log('📧 Type:', typeof userEmail);
+      console.log('📧 Longueur:', userEmail?.length);
       console.log('🆔 Customer ID:', customerId);
       
       if (!userEmail) {
@@ -28,20 +42,28 @@ export async function POST(req: Request) {
         return NextResponse.json({ received: true, error: 'No email' }, { status: 200 });
       }
       
-      // 3. Création du client Supabase avec SERVICE_ROLE_KEY
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // 4. Récupération de l'utilisateur via son email dans auth.users
+      console.log('🔍 Recherche utilisateur par email:', userEmail);
+      const { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
       
-      if (!supabaseUrl || !serviceRoleKey) {
-        console.error('❌ Variables Supabase manquantes');
-        return NextResponse.json({ received: true, error: 'Config missing' }, { status: 200 });
+      if (searchError) {
+        console.error('❌ Erreur recherche utilisateur:', searchError);
+        return NextResponse.json({ received: true, error: searchError.message }, { status: 200 });
       }
       
-      const supabase = createClient(supabaseUrl, serviceRoleKey);
-      console.log('✅ Client Supabase Admin créé');
+      const user = users.find(u => u.email === userEmail);
       
-      // 4. Upsert robuste du profil en PRO (crée ou met à jour)
+      if (!user) {
+        console.error('❌ Utilisateur non trouvé pour email:', userEmail);
+        console.log('👥 Utilisateurs trouvés:', users.map(u => u.email));
+        return NextResponse.json({ received: true, error: 'User not found' }, { status: 200 });
+      }
+      
+      console.log('✅ Utilisateur trouvé - ID:', user.id);
+      
+      // 5. Upsert robuste du profil en PRO avec ID et email
       const profileData = {
+        id: user.id,
         email: userEmail,
         stripe_customer_id: customerId,
         subscription_tier: 'pro',
@@ -51,17 +73,17 @@ export async function POST(req: Request) {
       };
       
       console.log('📝 Tentative UPSERT avec:', profileData);
-      console.log('🔍 Pour email:', userEmail);
       
       const { data, error } = await supabase
         .from('profiles')
-        .upsert(profileData, { onConflict: 'email' })
+        .upsert(profileData, { onConflict: 'id' })
         .select();
       
       if (error) {
         console.error('❌ ERREUR UPSERT:', JSON.stringify(error));
         console.error('Code erreur:', error.code);
         console.error('Details:', error.details);
+        console.error('Message:', error.message);
         return NextResponse.json({ received: true, error: error.message }, { status: 200 });
       }
       
