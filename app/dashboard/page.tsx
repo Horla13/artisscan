@@ -1629,35 +1629,25 @@ export default function Dashboard() {
   // Affichage d'attente pendant l'activation PRO
   if (activationPending || isLoadingProfile) {
     const forceCheck = async () => {
-      console.log('🔄 Force refresh session + vérification profil');
+      console.log('⚡ Clic sur "Accéder au Dashboard" - Rafraîchissement et redirection forcée');
       setForceAccessClicks(prev => prev + 1);
       
-      // 1. Rafraîchir la session Supabase (VITAL)
       try {
+        // 1. Rafraîchir la session Supabase (VITAL pour mettre à jour le profil)
+        console.log('📡 Rafraîchissement de la session Supabase...');
         const { data, error } = await supabase.auth.refreshSession();
+        
         if (error) {
           console.error('❌ Erreur refresh session:', error);
         } else {
-          console.log('✅ Session rafraîchie:', data);
+          console.log('✅ Session rafraîchie avec succès');
         }
       } catch (err) {
-        console.error('❌ Erreur refresh:', err);
+        console.error('❌ Erreur lors du refresh:', err);
       }
       
-      // 2. Vérifier le profil
-      const profile = await getUserProfile();
-      console.log('📊 Profil récupéré:', profile);
-      
-      if (profile && (profile.plan === 'pro' || profile.subscription_tier === 'pro' || profile.subscription_status === 'active')) {
-        console.log('✅ Profil PRO détecté, activation confirmée');
-        setActivationPending(false);
-        setUserTier('pro');
-      } else {
-        console.warn('⚠️ Profil pas encore PRO, réessayez dans un instant');
-      }
-      
-      // 3. Forcer la redirection complète (rechargement total de la page)
-      console.log('🚀 Redirection forcée vers /dashboard');
+      // 2. Forcer le rechargement complet de la page (récupère le nouveau statut PRO)
+      console.log('🚀 Redirection complète vers /dashboard avec rechargement total');
       window.location.href = '/dashboard';
     };
 
