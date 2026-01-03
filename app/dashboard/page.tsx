@@ -1658,7 +1658,7 @@ export default function Dashboard() {
       
       // 3. Forcer la redirection complète (rechargement total de la page)
       console.log('🚀 Redirection forcée vers /dashboard');
-      window.location.assign('/dashboard');
+      window.location.href = '/dashboard';
     };
 
     return (
