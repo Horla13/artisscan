@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     // Envoyer l'email via Resend
     const { data, error } = await resend.emails.send({
-      from: 'ArtisScan <comptabilite@artisscan.fr>',
+      from: 'ArtisScan <onboarding@resend.dev>',
       to: [comptableEmail],
       subject: `Pièces comptables ${userName || userEmail || ''} - ${periodDescription || new Date().toLocaleDateString('fr-FR')}`,
       html: emailBody,

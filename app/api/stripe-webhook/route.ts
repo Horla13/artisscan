@@ -229,7 +229,7 @@ export async function POST(req: Request) {
           `;
 
           const { data: emailData, error: emailError } = await resend.emails.send({
-            from: 'ArtisScan <bienvenue@artisscan.fr>',
+            from: 'ArtisScan <onboarding@resend.dev>',
             to: [userEmail],
             subject: 'Bienvenue sur votre Dashboard ArtisScan Pro ! 🚀',
             html: emailHtml,
