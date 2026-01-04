@@ -785,6 +785,198 @@ export default function Dashboard() {
     }
   };
 
+  // Archiver un dossier
+  const archiveFolder = async (folderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('folders')
+        .update({ archived: true })
+        .eq('id', folderId);
+
+      if (error) throw error;
+
+      showToastMessage('📦 Dossier archivé !', 'success');
+      loadFolders();
+    } catch (err) {
+      console.error('Erreur archivage dossier:', err);
+      showToastMessage('❌ Erreur lors de l\'archivage', 'error');
+    }
+  };
+
+  // Export PDF d'un dossier  
+  const exportFolderPDF = (folder: Folder) => {
+    const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
+    
+    if (folderInvoices.length === 0) {
+      showToastMessage('❌ Aucune facture dans ce dossier', 'error');
+      return;
+    }
+
+    const doc = new jsPDF();
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(249, 115, 22);
+    doc.text('ArtisScan', 20, 25);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('GESTION INTELLIGENTE', 20, 32);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(20, 40, 190, 40);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Dossier: ${folder.name}`, 20, 55);
+    if (folder.reference) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Réf: ${folder.reference}`, 20, 62);
+    }
+    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
+    const totalTVA = folderInvoices.reduce((sum, inv) => {
+      if (inv.tva !== undefined && inv.tva !== null) return sum + inv.tva;
+      return sum + ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+    }, 0);
+    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+    let yPos = 75;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Résumé financier', 20, yPos);
+    yPos += 10;
+    doc.setFillColor(248, 250, 252);
+    doc.rect(20, yPos - 5, 170, 25, 'F');
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Total HT:', 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${totalHT.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    yPos += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Total TVA:', 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${totalTVA.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    yPos += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(249, 115, 22);
+    doc.text('Total TTC:', 25, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${totalTTC.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    yPos += 15;
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Liste des factures (${folderInvoices.length})`, 20, yPos);
+    yPos += 5;
+    const tableData = folderInvoices.map(inv => {
+      const tva = inv.tva !== undefined && inv.tva !== null 
+        ? inv.tva 
+        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+      return [
+        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        inv.entreprise,
+        `${inv.montant_ht.toFixed(2)} €`,
+        `${tva.toFixed(2)} €`,
+        `${(inv.montant_ttc || inv.total_amount).toFixed(2)} €`
+      ];
+    });
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Fournisseur', 'HT', 'TVA', 'TTC']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [249, 115, 22], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+        4: { halign: 'right', fontStyle: 'bold', textColor: [249, 115, 22] }
+      }
+    });
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Document généré par ArtisScan', 105, 280, { align: 'center' });
+    doc.text(new Date().toLocaleDateString('fr-FR'), 105, 285, { align: 'center' });
+    doc.save(`dossier_${folder.name.replace(/\s+/g, '_')}.pdf`);
+    showToastMessage('📄 Export PDF téléchargé !', 'success');
+  };
+
+  // Export Excel d'un dossier
+  const exportFolderExcel = (folder: Folder) => {
+    const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
+    if (folderInvoices.length === 0) {
+      showToastMessage('❌ Aucune facture dans ce dossier', 'error');
+      return;
+    }
+    const data = folderInvoices.map(inv => {
+      const tva = inv.tva !== undefined && inv.tva !== null 
+        ? inv.tva 
+        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+      return {
+        'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        'Fournisseur': inv.entreprise,
+        'Catégorie': inv.categorie || 'Non classé',
+        'Description': inv.description || '',
+        'Montant HT (€)': inv.montant_ht,
+        'TVA (€)': tva,
+        'Montant TTC (€)': inv.montant_ttc || inv.total_amount
+      };
+    });
+    const totalHT = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
+    const totalTVA = data.reduce((sum, row) => sum + row['TVA (€)'], 0);
+    const totalTTC = data.reduce((sum, row) => sum + row['Montant TTC (€)'], 0);
+    const finalData = [...data, {}, {
+      'Date': 'TOTAL',
+      'Fournisseur': '',
+      'Catégorie': '',
+      'Description': '',
+      'Montant HT (€)': totalHT,
+      'TVA (€)': totalTVA,
+      'Montant TTC (€)': totalTTC
+    }];
+    const ws = XLSX.utils.json_to_sheet(finalData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, folder.name.substring(0, 31));
+    XLSX.writeFile(wb, `dossier_${folder.name.replace(/\s+/g, '_')}.xlsx`);
+    showToastMessage('📊 Export Excel téléchargé !', 'success');
+  };
+
+  // Export CSV d'un dossier
+  const exportFolderCSV = (folder: Folder) => {
+    const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
+    if (folderInvoices.length === 0) {
+      showToastMessage('❌ Aucune facture dans ce dossier', 'error');
+      return;
+    }
+    const headers = ['Date', 'Fournisseur', 'Catégorie', 'Description', 'Montant HT', 'TVA', 'Montant TTC'];
+    const rows = folderInvoices.map(inv => {
+      const tva = inv.tva !== undefined && inv.tva !== null 
+        ? inv.tva 
+        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+      return [
+        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+        `"${inv.entreprise}"`,
+        `"${inv.categorie || 'Non classé'}"`,
+        `"${inv.description || ''}"`,
+        inv.montant_ht.toFixed(2),
+        tva.toFixed(2),
+        (inv.montant_ttc || inv.total_amount).toFixed(2)
+      ];
+    });
+    const csvContent = "\uFEFF" + [
+      headers.join(';'),
+      ...rows.map(row => row.join(';'))
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `dossier_${folder.name.replace(/\s+/g, '_')}.csv`;
+    link.click();
+    showToastMessage('📊 Export CSV téléchargé !', 'success');
+  };
+
   // Charger les projets depuis Supabase
   const loadProjects = async () => {
     setLoadingProjects(true);
@@ -2918,10 +3110,9 @@ export default function Dashboard() {
                     {folders.map(folder => (
                       <div
                         key={folder.id}
-                        className="bg-white rounded-2xl border-2 border-slate-200 p-6 hover:border-orange-400 hover:shadow-xl transition-all group cursor-pointer"
-                        onClick={() => setSelectedFolder(folder)}
+                        className="bg-white rounded-2xl border-2 border-slate-200 p-6 hover:border-orange-400 hover:shadow-xl transition-all group relative"
                       >
-                        <div className="flex items-start gap-4 mb-4">
+                        <div onClick={() => setSelectedFolder(folder)} className="flex items-start gap-4 mb-4 cursor-pointer">
                           <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                             <Folder className="w-7 h-7 text-white" />
                           </div>
@@ -2936,15 +3127,115 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteFolder(folder.id);
-                          }}
-                          className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-                        >
-                          Supprimer
-                        </button>
+                        
+                        {/* Menu actions discret */}
+                        <div className="absolute top-4 right-4">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(openMenuId === folder.id ? null : folder.id);
+                            }}
+                            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Actions"
+                          >
+                            <MoreVertical className="w-5 h-5 text-slate-400" />
+                          </button>
+                          
+                          {openMenuId === folder.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-40" 
+                                onClick={() => setOpenMenuId(null)}
+                              ></div>
+                              
+                              <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50 min-w-[200px]">
+                                {/* Archiver */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    archiveFolder(folder.id);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3"
+                                >
+                                  <Archive className="w-4 h-4 text-slate-500" />
+                                  Archiver
+                                </button>
+                                
+                                <div className="h-px bg-slate-100 my-1"></div>
+                                
+                                {/* Export PDF */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    exportFolderPDF(folder);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-3"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  Exporter en PDF
+                                </button>
+                                
+                                {/* Export Excel */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    exportFolderExcel(folder);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-3"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Exporter en Excel
+                                </button>
+                                
+                                {/* Export CSV */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    exportFolderCSV(folder);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  Exporter en CSV
+                                </button>
+                                
+                                <div className="h-px bg-slate-100 my-1"></div>
+                                
+                                {/* Envoyer au comptable */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowEmailModal(true);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center gap-3"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                  Envoyer au comptable
+                                </button>
+                                
+                                <div className="h-px bg-slate-100 my-1"></div>
+                                
+                                {/* Supprimer */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteFolder(folder.id);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Supprimer
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
