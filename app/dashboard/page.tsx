@@ -191,6 +191,7 @@ export default function Dashboard() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // États pour la gestion des dossiers
@@ -651,11 +652,12 @@ export default function Dashboard() {
       console.log('👤 User ID:', user?.id);
       
       if (user) {
-        console.log('🔍 Requête Supabase: scans WHERE user_id =', user.id);
+        console.log('🔍 Requête Supabase: scans WHERE user_id =', user.id, 'AND archived != true');
         const { data, error } = await supabase
           .from('scans')
           .select('*')
           .eq('user_id', user.id)
+          .neq('archived', true)  // ✅ Exclure les factures archivées
           .order('created_at', { ascending: false });
         
         if (error) {
@@ -2702,81 +2704,94 @@ export default function Dashboard() {
                               </div>
                             </div>
                             
-                            {/* Menu actions */}
-                            <div className="flex items-center gap-2">
+                            {/* Menu actions discret */}
+                            <div className="relative">
                               <button
-                                onClick={() => archiveInvoice(invoice.id)}
+                                onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
                                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                                title="Archiver"
+                                title="Actions"
                               >
-                                <Archive className="w-4 h-4 text-slate-500" />
+                                <MoreVertical className="w-5 h-5 text-slate-400" />
                               </button>
                               
-                              <div className="relative">
-                                <button
-                                  onClick={() => {
-                                    // Toggle menu d'export pour cette facture
-                                    const currentOpen = (window as any).openExportMenu;
-                                    if (currentOpen === invoice.id) {
-                                      (window as any).openExportMenu = null;
-                                    } else {
-                                      (window as any).openExportMenu = invoice.id;
-                                    }
-                                    // Force re-render
-                                    setInvoices([...invoices]);
-                                  }}
-                                  className="p-2 hover:bg-orange-50 rounded-lg transition-colors"
-                                  title="Exporter"
-                                >
-                                  <Download className="w-4 h-4 text-orange-500" />
-                                </button>
-                                
-                                {(window as any).openExportMenu === invoice.id && (
-                                  <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 min-w-[160px]">
+                              {openMenuId === invoice.id && (
+                                <>
+                                  {/* Overlay pour fermer le menu en cliquant à l'extérieur */}
+                                  <div 
+                                    className="fixed inset-0 z-40" 
+                                    onClick={() => setOpenMenuId(null)}
+                                  ></div>
+                                  
+                                  {/* Menu déroulant */}
+                                  <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50 min-w-[180px]">
+                                    {/* Archiver */}
+                                    <button
+                                      onClick={() => {
+                                        archiveInvoice(invoice.id);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3"
+                                    >
+                                      <Archive className="w-4 h-4 text-slate-500" />
+                                      Archiver
+                                    </button>
+                                    
+                                    {/* Séparateur */}
+                                    <div className="h-px bg-slate-100 my-1"></div>
+                                    
+                                    {/* Export PDF */}
                                     <button
                                       onClick={() => {
                                         exportInvoicePDF(invoice);
-                                        (window as any).openExportMenu = null;
-                                        setInvoices([...invoices]);
+                                        setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-2"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-3"
                                     >
                                       <FileText className="w-4 h-4" />
-                                      Export PDF
+                                      Exporter en PDF
                                     </button>
+                                    
+                                    {/* Export Excel */}
                                     <button
                                       onClick={() => {
                                         exportInvoiceExcel(invoice);
-                                        (window as any).openExportMenu = null;
-                                        setInvoices([...invoices]);
+                                        setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-2"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-3"
                                     >
-                                      <FileDown className="w-4 h-4" />
-                                      Export Excel
+                                      <Download className="w-4 h-4" />
+                                      Exporter en Excel
                                     </button>
+                                    
+                                    {/* Export CSV */}
                                     <button
                                       onClick={() => {
                                         exportInvoiceCSV(invoice);
-                                        (window as any).openExportMenu = null;
-                                        setInvoices([...invoices]);
+                                        setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-2"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
                                     >
                                       <FileText className="w-4 h-4" />
-                                      Export CSV
+                                      Exporter en CSV
+                                    </button>
+                                    
+                                    {/* Séparateur */}
+                                    <div className="h-px bg-slate-100 my-1"></div>
+                                    
+                                    {/* Supprimer */}
+                                    <button
+                                      onClick={() => {
+                                        confirmDelete(invoice.id);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Supprimer
                                     </button>
                                   </div>
-                                )}
-                              </div>
-                              
-                              <button
-                                onClick={() => confirmDelete(invoice.id)}
-                                className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Supprimer"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </button>
+                                </>
+                              )}
                             </div>
                           </div>
 
