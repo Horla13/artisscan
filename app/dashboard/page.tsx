@@ -966,145 +966,65 @@ export default function Dashboard() {
   // Déplacer une facture vers un dossier
   const moveInvoiceToFolder = async (invoiceId: string, folderId: string | null) => {
     try {
-      console.log('📂 === DÉPLACEMENT FACTURE - DÉBUT ===');
-      console.log('   Invoice ID:', invoiceId);
-      console.log('   Invoice ID type:', typeof invoiceId);
-      console.log('   Invoice ID length:', invoiceId?.length);
-      console.log('   Folder ID:', folderId);
-      console.log('   Folder ID type:', typeof folderId);
-      console.log('   Folder ID length:', folderId?.length);
-      console.log('   Folder ID is null?', folderId === null);
-      console.log('   Folder ID is undefined?', folderId === undefined);
-      console.log('   Folder ID is empty string?', folderId === '');
+      console.log('📂 Déplacement facture:', invoiceId, '→ dossier:', folderId);
       
-      // Validation stricte des IDs
+      // Validation des IDs
       if (!invoiceId || invoiceId.trim() === '') {
-        throw new Error('ID de facture invalide ou vide');
+        throw new Error('ID de facture invalide');
       }
       
       if (folderId !== null && (!folderId || folderId.trim() === '')) {
-        throw new Error('ID de dossier invalide (chaîne vide)');
+        throw new Error('ID de dossier invalide');
       }
       
       // Récupérer l'utilisateur connecté
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
-        console.error('❌ Erreur authentification:', authError);
         throw new Error('Utilisateur non connecté');
       }
-      
-      console.log('👤 User ID:', user.id);
       
       // Vérifier que la facture existe
       const invoiceExists = invoices.find(inv => inv.id === invoiceId);
       if (!invoiceExists) {
-        console.error('❌ Facture introuvable dans le state:', invoiceId);
-        console.log('   Factures disponibles:', invoices.map(i => ({ id: i.id, entreprise: i.entreprise })));
-        throw new Error(`Facture ${invoiceId} introuvable dans la liste actuelle`);
+        throw new Error('Facture introuvable');
       }
-      console.log('✅ Facture trouvée dans le state:', invoiceExists.entreprise);
-      console.log('   user_id de la facture:', invoiceExists.user_id);
+      
+      console.log('✅ Facture:', invoiceExists.entreprise);
       
       // Vérifier que le dossier existe (si folderId n'est pas null)
       if (folderId !== null) {
         const folderExists = folders.find(f => f.id === folderId);
         if (!folderExists) {
-          console.error('❌ Dossier introuvable dans le state:', folderId);
-          console.log('   Dossiers disponibles:', folders.map(f => ({ id: f.id, name: f.name })));
-          throw new Error(`Dossier ${folderId} introuvable dans la liste actuelle`);
+          throw new Error('Dossier introuvable');
         }
-        console.log('✅ Dossier trouvé dans le state:', folderExists.name);
+        console.log('✅ Dossier:', folderExists.name);
       }
       
-      console.log('🚀 Tentative d\'update Supabase...');
-      console.log('   UPDATE scans');
-      console.log('   SET folder_id =', folderId);
-      console.log('   WHERE id =', invoiceId);
-      console.log('   AND user_id =', user.id);
-      
-      // ✅ REQUÊTE AVEC DOUBLE FILTRE (id + user_id)
+      // Update avec filtre user_id pour RLS
       const { data, error } = await supabase
         .from('scans')
         .update({ folder_id: folderId })
         .eq('id', invoiceId)
-        .eq('user_id', user.id)  // 🔒 Sécurité RLS
+        .eq('user_id', user.id)
         .select();
 
       if (error) {
-        console.error('❌ ERREUR SUPABASE:', error);
-        console.error('   Code:', error.code);
-        console.error('   Message:', error.message);
-        console.error('   Details:', error.details);
-        console.error('   Hint:', error.hint);
-        throw new Error(`Erreur Supabase: ${error.message}`);
+        console.error('❌ Erreur Supabase:', error.message);
+        throw new Error(`Erreur: ${error.message}`);
       }
 
-      console.log('✅ Update Supabase réussi!');
-      console.log('   Données retournées:', data);
-      console.log('   Nombre de lignes modifiées:', data?.length || 0);
-      
       if (!data || data.length === 0) {
-        console.error('❌ AUCUNE LIGNE MODIFIÉE!');
-        console.error('   Possible raisons:');
-        console.error('   1. L\'ID de la facture n\'existe pas dans la BDD');
-        console.error('   2. La facture appartient à un autre user_id');
-        console.error('   3. Row Level Security (RLS) bloque l\'accès');
-        console.error('   Vérification en BDD nécessaire...');
-        
-        // Tentative de lecture directe pour vérifier l'existence
-        console.log('🔍 Tentative de lecture directe de la facture...');
-        const { data: checkData, error: checkError } = await supabase
-          .from('scans')
-          .select('id, user_id, folder_id, entreprise')
-          .eq('id', invoiceId);
-        
-        if (checkError) {
-          console.error('❌ Erreur lecture:', checkError.message);
-        } else if (!checkData || checkData.length === 0) {
-          console.error('❌ La facture n\'existe PAS dans la BDD avec cet ID!');
-          throw new Error('Cette facture n\'existe pas dans la base de données. L\'ID pourrait être incorrect.');
-        } else {
-          console.log('📊 Facture trouvée en BDD:', checkData[0]);
-          console.log('   Son user_id:', checkData[0].user_id);
-          console.log('   User actuel:', user.id);
-          console.log('   Match?', checkData[0].user_id === user.id);
-          
-          if (checkData[0].user_id !== user.id) {
-            throw new Error('Cette facture appartient à un autre utilisateur. Accès refusé.');
-          } else {
-            throw new Error('La facture existe mais l\'update a échoué. Vérifiez les permissions RLS dans Supabase.');
-          }
-        }
+        console.error('❌ Aucune ligne modifiée - Vérifiez les permissions RLS');
+        throw new Error('Impossible de modifier la facture. Vérifiez les permissions.');
       }
       
-      const updatedRow = data[0];
-      console.log('📊 Ligne mise à jour:', updatedRow);
-      console.log('   folder_id après update:', updatedRow.folder_id);
-      console.log('   folder_id type:', typeof updatedRow.folder_id);
-      console.log('   Correspondance?', updatedRow.folder_id === folderId);
+      console.log('✅ Transfert réussi! folder_id:', data[0].folder_id);
 
-      console.log('🔄 Rechargement FORCÉ des factures...');
-      
-      // ✅ RECHARGEMENT FORCÉ - Attendre la fin
+      // Rechargement des données
       await loadInvoices();
       
-      // ✅ DOUBLE VÉRIFICATION après rechargement
-      console.log('🔍 Double vérification après rechargement...');
-      
-      // Attendre un peu que le state se mette à jour
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Re-fetch direct pour être sûr
-      const { data: freshData } = await supabase
-        .from('scans')
-        .select('*')
-        .eq('id', invoiceId)
-        .single();
-      
-      console.log('📊 Données fraîches depuis Supabase:', freshData);
-      console.log('   folder_id final:', freshData?.folder_id);
-      
+      // Message de succès
       if (folderId) {
         const folder = folders.find(f => f.id === folderId);
         showToastMessage(`✅ Facture déplacée vers "${folder?.name || 'le dossier'}"`, 'success');
@@ -1115,18 +1035,12 @@ export default function Dashboard() {
       setShowMoveToFolderModal(false);
       setInvoiceToMove(null);
       
-      // ✅ FORCE UN NOUVEAU RECHARGEMENT pour être certain
-      setTimeout(() => {
-        loadInvoices();
-      }, 1000);
+      // Double rechargement pour être sûr
+      setTimeout(() => loadInvoices(), 500);
       
-      console.log('📂 === DÉPLACEMENT FACTURE - FIN AVEC SUCCÈS ===');
     } catch (err: any) {
-      console.error('❌ === ERREUR DÉPLACEMENT ===');
-      console.error('   Message:', err.message);
-      console.error('   Stack:', err.stack);
-      console.error('   Objet complet:', err);
-      showToastMessage(`❌ ${err.message || 'Erreur lors du déplacement'}`, 'error');
+      console.error('❌ Erreur:', err.message);
+      showToastMessage(`❌ ${err.message}`, 'error');
     }
   };
 
@@ -4339,18 +4253,9 @@ export default function Dashboard() {
                   </h2>
                   
                   {(() => {
-                    console.log('📊 === AFFICHAGE DOSSIER ===');
-                    console.log('   Selected Folder ID:', selectedFolder.id);
-                    console.log('   Total invoices:', invoices.length);
-                    console.log('   Invoices folder_ids:', invoices.map(inv => ({ id: inv.id, folder_id: inv.folder_id, entreprise: inv.entreprise })));
+                    const folderInvoices = invoices.filter(inv => inv.folder_id === selectedFolder.id);
                     
-                    const folderInvoices = invoices.filter(inv => {
-                      const match = inv.folder_id === selectedFolder.id;
-                      console.log(`   Invoice ${inv.id} (${inv.entreprise}): folder_id=${inv.folder_id}, match=${match}`);
-                      return match;
-                    });
-                    
-                    console.log('   Factures filtrées:', folderInvoices.length);
+                    console.log(`📂 Dossier "${selectedFolder.name}": ${folderInvoices.length} facture(s)`);
                     
                     if (folderInvoices.length === 0) {
                       return (
@@ -5385,15 +5290,7 @@ export default function Dashboard() {
                   {folders.map((folder) => (
                     <button
                       key={folder.id}
-                      onClick={() => {
-                        console.log('🖱️ Clic sur dossier:', folder.name);
-                        console.log('   Folder object:', folder);
-                        console.log('   folder.id:', folder.id);
-                        console.log('   folder.id type:', typeof folder.id);
-                        console.log('   invoiceToMove.id:', invoiceToMove.id);
-                        console.log('   invoiceToMove.id type:', typeof invoiceToMove.id);
-                        moveInvoiceToFolder(invoiceToMove.id, folder.id);
-                      }}
+                      onClick={() => moveInvoiceToFolder(invoiceToMove.id, folder.id)}
                       className="w-full flex items-center gap-4 p-4 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all group text-left"
                     >
                       <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
