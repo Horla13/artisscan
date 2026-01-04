@@ -965,16 +965,30 @@ export default function Dashboard() {
   // Déplacer une facture vers un dossier
   const moveInvoiceToFolder = async (invoiceId: string, folderId: string | null) => {
     try {
-      console.log('📂 Déplacement de la facture:', invoiceId, 'vers dossier:', folderId);
+      console.log('📂 === DÉPLACEMENT FACTURE ===');
+      console.log('   Invoice ID:', invoiceId, 'Type:', typeof invoiceId);
+      console.log('   Folder ID:', folderId, 'Type:', typeof folderId);
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('scans')
         .update({ folder_id: folderId })
-        .eq('id', invoiceId);
+        .eq('id', invoiceId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erreur Supabase:', error);
+        throw error;
+      }
+
+      console.log('✅ Update réussi, données retournées:', data);
+      console.log('   Nombre de lignes modifiées:', data?.length);
 
       await loadInvoices();
+      
+      console.log('🔄 Factures rechargées, vérification...');
+      const updatedInvoice = invoices.find(inv => inv.id === invoiceId);
+      console.log('   Facture mise à jour:', updatedInvoice);
+      console.log('   Son folder_id:', updatedInvoice?.folder_id);
       
       if (folderId) {
         const folder = folders.find(f => f.id === folderId);
@@ -4200,7 +4214,18 @@ export default function Dashboard() {
                   </h2>
                   
                   {(() => {
-                    const folderInvoices = invoices.filter(inv => inv.folder_id === selectedFolder.id);
+                    console.log('📊 === AFFICHAGE DOSSIER ===');
+                    console.log('   Selected Folder ID:', selectedFolder.id);
+                    console.log('   Total invoices:', invoices.length);
+                    console.log('   Invoices folder_ids:', invoices.map(inv => ({ id: inv.id, folder_id: inv.folder_id, entreprise: inv.entreprise })));
+                    
+                    const folderInvoices = invoices.filter(inv => {
+                      const match = inv.folder_id === selectedFolder.id;
+                      console.log(`   Invoice ${inv.id} (${inv.entreprise}): folder_id=${inv.folder_id}, match=${match}`);
+                      return match;
+                    });
+                    
+                    console.log('   Factures filtrées:', folderInvoices.length);
                     
                     if (folderInvoices.length === 0) {
                       return (
