@@ -8,6 +8,7 @@ export interface UserProfile {
   plan?: string;
   subscription_status?: string;
   stripe_customer_id?: string;
+  is_pro?: boolean; // Ajouté pour vérification directe
   created_at: string;
   updated_at: string;
 }
@@ -23,7 +24,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     // Sélectionner uniquement les colonnes nécessaires
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, subscription_tier, plan, subscription_status, stripe_customer_id, created_at, updated_at')
+      .select('id, subscription_tier, plan, subscription_status, stripe_customer_id, is_pro, created_at, updated_at')
       .eq('id', user.id)
       .single();
 

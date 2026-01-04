@@ -106,6 +106,9 @@ export default function Dashboard() {
   const [activationPending, setActivationPending] = useState(false);
   const [showForceAccess, setShowForceAccess] = useState(false);
   const [forceAccessClicks, setForceAccessClicks] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [activationMessage, setActivationMessage] = useState('Vérification du compte...');
+  const [isProVerified, setIsProVerified] = useState(false);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -440,6 +443,91 @@ export default function Dashboard() {
       clearTimeout(timer);
     };
   }, [activationPending]);
+
+  // 🎯 BARRE DE PROGRESSION AUTOMATIQUE (2 secondes pour atteindre 100%)
+  useEffect(() => {
+    if (!activationPending && !isLoadingProfile) return;
+
+    console.log('📊 Démarrage de la progression automatique...');
+    
+    // Progression de 0 à 100% en 2 secondes (20ms par tick = 100 ticks)
+    const progressInterval = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(progressInterval);
+          return 100;
+        }
+        return prev + 1;
+      });
+    }, 20); // 20ms * 100 = 2000ms (2 secondes)
+
+    // Messages dynamiques pendant la progression
+    const messageTimer1 = setTimeout(() => {
+      setActivationMessage('Vérification de l\'abonnement...');
+    }, 500);
+
+    const messageTimer2 = setTimeout(() => {
+      if (userTier === 'pro' || isProVerified) {
+        setActivationMessage('Abonnement PRO confirmé ✓');
+      } else {
+        setActivationMessage('Finalisation de la vérification...');
+      }
+    }, 1000);
+
+    const messageTimer3 = setTimeout(async () => {
+      // Vérifier le statut PRO une dernière fois
+      try {
+        const profile = await getUserProfile();
+        const planLower = profile?.plan?.toLowerCase();
+        const isPro = planLower === 'pro' || profile?.is_pro === true;
+        
+        if (isPro) {
+          setIsProVerified(true);
+          setActivationMessage('Configuration de votre espace professionnel...');
+        } else {
+          setActivationMessage('Vérification terminée');
+        }
+      } catch (err) {
+        console.error('❌ Erreur vérification finale:', err);
+      }
+    }, 1500);
+
+    // Redirection automatique après 2 secondes si PRO
+    const redirectTimer = setTimeout(async () => {
+      console.log('🎯 Progression terminée (100%), vérification finale...');
+      
+      try {
+        const profile = await getUserProfile();
+        const planLower = profile?.plan?.toLowerCase();
+        const isPro = planLower === 'pro' || profile?.is_pro === true;
+        
+        if (isPro) {
+          console.log('✅ PRO confirmé → Redirection automatique vers /dashboard');
+          await supabase.auth.refreshSession();
+          
+          // Attendre 500ms pour afficher le message de succès
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 500);
+        } else {
+          console.log('❌ Non-PRO détecté → Redirection vers /pricing');
+          setTimeout(() => {
+            router.push('/pricing');
+          }, 500);
+        }
+      } catch (err) {
+        console.error('❌ Erreur redirection automatique:', err);
+      }
+    }, 2500); // 2.5 secondes (progression + petit délai)
+
+    return () => {
+      clearInterval(progressInterval);
+      clearTimeout(messageTimer1);
+      clearTimeout(messageTimer2);
+      clearTimeout(messageTimer3);
+      clearTimeout(redirectTimer);
+    };
+  }, [activationPending, isLoadingProfile, userTier, isProVerified]);
 
   const checkSubscriptionLimits = async () => {
     try {
@@ -2576,46 +2664,138 @@ export default function Dashboard() {
     setShowUploadMenu(true);
   };
 
-  // Affichage d'attente pendant l'activation PRO
+  // Affichage d'attente pendant l'activation PRO avec progression automatique
   if (activationPending || isLoadingProfile) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
-        <div className="bg-white border border-slate-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-4 animate-fade-in">
-          <div className="flex items-center justify-center gap-3 text-orange-500 font-black text-lg uppercase tracking-widest">
-            <Zap className="w-6 h-6 animate-pulse" />
-            Paiement validé !
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-slate-50 flex items-center justify-center px-6 py-12">
+        <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-lg w-full text-center space-y-6 animate-fade-in">
+          {/* Icône animée */}
+          <div className="flex items-center justify-center">
+            <div className="relative">
+              {/* Cercle de progression animé */}
+              <div className="w-24 h-24 rounded-full border-4 border-slate-100 flex items-center justify-center relative overflow-hidden">
+                {/* Fond du cercle */}
+                <div 
+                  className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600 transition-all duration-300"
+                  style={{ 
+                    clipPath: `inset(${100 - loadingProgress}% 0 0 0)` 
+                  }}
+                ></div>
+                
+                {/* Icône centrale */}
+                <div className="relative z-10">
+                  {isProVerified || userTier === 'pro' ? (
+                    <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
+                      <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
+                      <Zap className="w-7 h-7 text-orange-500 animate-pulse" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Badge pourcentage */}
+              <div className="absolute -bottom-2 -right-2 bg-orange-500 text-white text-xs font-black px-3 py-1 rounded-full shadow-lg border-2 border-white">
+                {loadingProgress}%
+              </div>
+            </div>
           </div>
-          <p className="text-slate-600 text-sm font-medium">
-            Redirection vers votre dashboard en cours...
-          </p>
-          <p className="text-slate-400 text-xs">
-            Nous synchronisons votre accès Pro. Cette étape ne prend que quelques secondes.
-          </p>
-          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div className="h-full bg-orange-500 animate-pulse" style={{ width: '70%' }}></div>
+
+          {/* Message dynamique */}
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
+              {isProVerified || userTier === 'pro' 
+                ? '🎉 Bienvenue sur ArtisScan Pro' 
+                : activationMessage
+              }
+            </h2>
+            <p className="text-slate-600 text-base font-medium">
+              {isProVerified || userTier === 'pro'
+                ? 'Votre espace professionnel est prêt'
+                : 'Veuillez patienter quelques instants...'
+              }
+            </p>
           </div>
-          
-          {/* Bouton de secours après 10 secondes */}
-          {showForceAccess && (
-            <div className="space-y-3 pt-4 border-t border-slate-200">
-              <p className="text-xs text-slate-500">La redirection automatique prend du temps ?</p>
-              <button
-                onClick={async () => {
-                  console.log('⚡ Clic bouton secours - Forçage redirection');
-                  try {
-                    await supabase.auth.refreshSession();
-                    window.location.href = '/dashboard';
-                  } catch (err) {
-                    console.error('❌ Erreur:', err);
-                    window.location.href = '/dashboard';
-                  }
-                }}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md active:scale-95 transition-all"
-              >
-                Accéder au Dashboard
-              </button>
+
+          {/* Barre de progression linéaire */}
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 shadow-inner">
+            <div 
+              className="h-full bg-gradient-to-r from-orange-500 to-orange-600 transition-all duration-100 ease-linear rounded-full shadow-lg"
+              style={{ width: `${loadingProgress}%` }}
+            ></div>
+          </div>
+
+          {/* Liste des étapes */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2">
+            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 25 ? 'text-green-600' : 'text-slate-400'}`}>
+              {loadingProgress >= 25 ? (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <div className="w-5 h-5 border-2 border-slate-300 rounded-full animate-spin border-t-orange-500 flex-shrink-0"></div>
+              )}
+              <span className="text-sm font-bold">Connexion sécurisée établie</span>
+            </div>
+            
+            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 50 ? 'text-green-600' : 'text-slate-400'}`}>
+              {loadingProgress >= 50 ? (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
+              )}
+              <span className="text-sm font-bold">Vérification de l'abonnement</span>
+            </div>
+            
+            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 75 ? 'text-green-600' : 'text-slate-400'}`}>
+              {loadingProgress >= 75 ? (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
+              )}
+              <span className="text-sm font-bold">Configuration de votre espace</span>
+            </div>
+            
+            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 100 ? 'text-green-600' : 'text-slate-400'}`}>
+              {loadingProgress >= 100 ? (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
+              )}
+              <span className="text-sm font-bold">Redirection automatique...</span>
+            </div>
+          </div>
+
+          {/* Message de réussite pour PRO */}
+          {(isProVerified || userTier === 'pro') && loadingProgress >= 100 && (
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-5 text-white shadow-lg animate-fade-in">
+              <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                Tout est prêt !
+              </p>
+              <p className="text-lg font-black">Accès au Dashboard en cours...</p>
             </div>
           )}
+
+          {/* Note */}
+          <p className="text-xs text-slate-400">
+            {loadingProgress < 100 
+              ? 'Ne fermez pas cette fenêtre'
+              : 'Redirection automatique dans un instant...'
+            }
+          </p>
         </div>
       </div>
     );
