@@ -965,9 +965,44 @@ export default function Dashboard() {
   // Déplacer une facture vers un dossier
   const moveInvoiceToFolder = async (invoiceId: string, folderId: string | null) => {
     try {
-      console.log('📂 === DÉPLACEMENT FACTURE ===');
-      console.log('   Invoice ID:', invoiceId, 'Type:', typeof invoiceId);
-      console.log('   Folder ID:', folderId, 'Type:', typeof folderId);
+      console.log('📂 === DÉPLACEMENT FACTURE - DÉBUT ===');
+      console.log('   Invoice ID:', invoiceId);
+      console.log('   Invoice ID type:', typeof invoiceId);
+      console.log('   Invoice ID length:', invoiceId?.length);
+      console.log('   Folder ID:', folderId);
+      console.log('   Folder ID type:', typeof folderId);
+      console.log('   Folder ID length:', folderId?.length);
+      console.log('   Folder ID is null?', folderId === null);
+      console.log('   Folder ID is undefined?', folderId === undefined);
+      console.log('   Folder ID is empty string?', folderId === '');
+      
+      // Validation stricte des IDs
+      if (!invoiceId || invoiceId.trim() === '') {
+        throw new Error('ID de facture invalide ou vide');
+      }
+      
+      if (folderId !== null && (!folderId || folderId.trim() === '')) {
+        throw new Error('ID de dossier invalide (chaîne vide)');
+      }
+      
+      // Vérifier que la facture existe
+      const invoiceExists = invoices.find(inv => inv.id === invoiceId);
+      if (!invoiceExists) {
+        throw new Error(`Facture ${invoiceId} introuvable dans la liste actuelle`);
+      }
+      console.log('✅ Facture trouvée:', invoiceExists.entreprise);
+      
+      // Vérifier que le dossier existe (si folderId n'est pas null)
+      if (folderId !== null) {
+        const folderExists = folders.find(f => f.id === folderId);
+        if (!folderExists) {
+          throw new Error(`Dossier ${folderId} introuvable dans la liste actuelle`);
+        }
+        console.log('✅ Dossier trouvé:', folderExists.name);
+      }
+      
+      console.log('🚀 Tentative d\'update Supabase...');
+      console.log('   UPDATE scans SET folder_id =', folderId, 'WHERE id =', invoiceId);
       
       const { data, error } = await supabase
         .from('scans')
@@ -976,19 +1011,38 @@ export default function Dashboard() {
         .select();
 
       if (error) {
-        console.error('❌ Erreur Supabase:', error);
-        throw error;
+        console.error('❌ ERREUR SUPABASE:', error);
+        console.error('   Code:', error.code);
+        console.error('   Message:', error.message);
+        console.error('   Details:', error.details);
+        console.error('   Hint:', error.hint);
+        throw new Error(`Erreur Supabase: ${error.message}`);
       }
 
-      console.log('✅ Update réussi, données retournées:', data);
-      console.log('   Nombre de lignes modifiées:', data?.length);
+      console.log('✅ Update Supabase réussi!');
+      console.log('   Données retournées:', data);
+      console.log('   Nombre de lignes modifiées:', data?.length || 0);
+      
+      if (!data || data.length === 0) {
+        console.warn('⚠️ ATTENTION: Aucune ligne modifiée par l\'update!');
+        console.warn('   Cela signifie que la facture n\'existe pas ou que l\'ID ne correspond pas');
+        throw new Error('Aucune facture n\'a été modifiée. Vérifiez que la facture existe dans la base de données.');
+      }
+      
+      const updatedRow = data[0];
+      console.log('📊 Ligne mise à jour:', updatedRow);
+      console.log('   folder_id après update:', updatedRow.folder_id);
+      console.log('   folder_id type:', typeof updatedRow.folder_id);
 
+      console.log('🔄 Rechargement des factures...');
       await loadInvoices();
       
-      console.log('🔄 Factures rechargées, vérification...');
+      console.log('🔍 Vérification après rechargement...');
       const updatedInvoice = invoices.find(inv => inv.id === invoiceId);
-      console.log('   Facture mise à jour:', updatedInvoice);
+      console.log('   Facture rechargée:', updatedInvoice);
       console.log('   Son folder_id:', updatedInvoice?.folder_id);
+      console.log('   Types correspondent?', typeof updatedInvoice?.folder_id === typeof folderId);
+      console.log('   Valeurs correspondent?', updatedInvoice?.folder_id === folderId);
       
       if (folderId) {
         const folder = folders.find(f => f.id === folderId);
@@ -999,9 +1053,14 @@ export default function Dashboard() {
 
       setShowMoveToFolderModal(false);
       setInvoiceToMove(null);
-    } catch (err) {
-      console.error('❌ Erreur déplacement facture:', err);
-      showToastMessage('❌ Erreur lors du déplacement', 'error');
+      
+      console.log('📂 === DÉPLACEMENT FACTURE - FIN ===');
+    } catch (err: any) {
+      console.error('❌ === ERREUR DÉPLACEMENT ===');
+      console.error('   Message:', err.message);
+      console.error('   Stack:', err.stack);
+      console.error('   Objet complet:', err);
+      showToastMessage(`❌ ${err.message || 'Erreur lors du déplacement'}`, 'error');
     }
   };
 
@@ -5261,6 +5320,12 @@ export default function Dashboard() {
                     <button
                       key={folder.id}
                       onClick={() => {
+                        console.log('🖱️ Clic sur dossier:', folder.name);
+                        console.log('   Folder object:', folder);
+                        console.log('   folder.id:', folder.id);
+                        console.log('   folder.id type:', typeof folder.id);
+                        console.log('   invoiceToMove.id:', invoiceToMove.id);
+                        console.log('   invoiceToMove.id type:', typeof invoiceToMove.id);
                         moveInvoiceToFolder(invoiceToMove.id, folder.id);
                       }}
                       className="w-full flex items-center gap-4 p-4 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all group text-left"
