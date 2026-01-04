@@ -446,32 +446,76 @@ export default function Dashboard() {
       const params = new URLSearchParams(window.location.search);
       const sessionId = params.get('session_id');
 
-      console.log('🔍 checkSubscriptionLimits: Vérification utilisateur...');
+      console.log('🔍 checkSubscriptionLimits: Vérification statut PRO...');
+
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('❌ Pas d\'utilisateur connecté');
+        router.push('/login');
+        return;
+      }
+
+      // Récupérer le profil utilisateur
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_pro, plan, email')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        console.error('❌ Erreur récupération profil:', profileError);
+        // En cas d'erreur, rediriger vers pricing par sécurité
+        router.push('/pricing');
+        return;
+      }
+
+      console.log('👤 Profil utilisateur:', { 
+        email: profile?.email, 
+        is_pro: profile?.is_pro,
+        plan: profile?.plan 
+      });
 
       // Si retour de Stripe avec session_id, afficher l'écran d'activation
       if (sessionId) {
         console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ')');
         
-        // Mise à jour préventive du profil (toujours en minuscules)
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('profiles').update({ 
-            plan: 'pro', // Toujours en minuscules
-            updated_at: new Date().toISOString()
-          }).eq('id', user.id);
-        }
+        // Mise à jour préventive du profil
+        await supabase.from('profiles').update({ 
+          is_pro: true,
+          plan: 'pro',
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id);
 
         setUserTier('pro');
         setCanScan(true);
         setRemainingScans(-1);
-        setActivationPending(true); // Afficher l'écran d'activation temporaire
+        setActivationPending(true);
         setIsLoadingProfile(false);
         return;
       }
 
-      // ✅ MODE PRO-ONLY: Tout utilisateur connecté est PRO
-      console.log('✅ MODE PRO-ONLY: Utilisateur connecté → Accès PRO complet');
-      
+      // 🔒 VÉRIFICATION STRICTE : is_pro doit être true
+      if (!profile?.is_pro) {
+        console.warn('⛔ ACCÈS REFUSÉ: Utilisateur non-PRO détecté');
+        console.warn('   Email:', profile?.email);
+        console.warn('   is_pro:', profile?.is_pro);
+        console.warn('   plan:', profile?.plan);
+        
+        setUserTier('free');
+        setCanScan(false);
+        setRemainingScans(0);
+        setError('⛔ Abonnement requis pour accéder à cette fonctionnalité');
+        
+        // Redirection forcée vers la page de tarification
+        setTimeout(() => {
+          router.push('/pricing');
+        }, 1500);
+        return;
+      }
+
+      // ✅ Utilisateur PRO confirmé
+      console.log('✅ ACCÈS AUTORISÉ: Utilisateur PRO confirmé');
       setUserTier('pro');
       setCanScan(true);
       setRemainingScans(-1);
@@ -479,12 +523,8 @@ export default function Dashboard() {
 
     } catch (error) {
       console.error('❌ Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur, on donne quand même l'accès PRO (mode PRO-only)
-      console.log('⚠️ Erreur mais accès PRO accordé par défaut');
-      setUserTier('pro');
-      setCanScan(true);
-      setRemainingScans(-1);
-      setActivationPending(false);
+      // En cas d'erreur, redirection sécurisée vers pricing
+      router.push('/pricing');
     } finally {
       setIsLoadingProfile(false);
     }
@@ -2567,6 +2607,51 @@ export default function Dashboard() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // 🔒 Affichage du message d'erreur si l'utilisateur n'est pas PRO
+  if (error && error.includes('Abonnement requis')) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
+        <div className="bg-white border-2 border-red-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-6 animate-fade-in">
+          <div className="flex items-center justify-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-8 h-8 text-red-500" />
+            </div>
+          </div>
+          
+          <div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">
+              Abonnement requis
+            </h2>
+            <p className="text-slate-600 text-sm">
+              Vous devez souscrire à un abonnement PRO pour accéder au Dashboard et uploader vos factures.
+            </p>
+          </div>
+
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+            <p className="text-xs text-orange-900 font-medium">
+              🎯 <strong>14 jours d'essai gratuit</strong> disponibles !<br/>
+              Aucune carte bancaire requise pour commencer.
+            </p>
+          </div>
+
+          <button
+            onClick={() => router.push('/pricing')}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg active:scale-95 transition-all"
+          >
+            Découvrir les offres PRO
+          </button>
+
+          <button
+            onClick={() => router.push('/')}
+            className="w-full text-slate-500 hover:text-slate-700 font-medium text-sm py-2 transition-colors"
+          >
+            Retour à l'accueil
+          </button>
         </div>
       </div>
     );

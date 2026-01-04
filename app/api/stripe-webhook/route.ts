@@ -62,12 +62,13 @@ export async function POST(req: Request) {
       
       console.log('✅ Utilisateur trouvé - ID:', user.id);
       
-      // 5. Update ultra-simple : uniquement plan = 'pro'
-      console.log('📝 Tentative UPDATE plan = pro pour email:', userEmail);
+      // 5. Update ultra-simple : is_pro = true + plan = 'pro'
+      console.log('📝 Tentative UPDATE is_pro = true + plan = pro pour email:', userEmail);
       
       const { data, error } = await supabase
         .from('profiles')
         .update({ 
+          is_pro: true,
           plan: 'pro',
           updated_at: new Date().toISOString()
         })
