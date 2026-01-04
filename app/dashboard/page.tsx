@@ -205,6 +205,11 @@ export default function Dashboard() {
   const [showMonthSelector, setShowMonthSelector] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [comptableEmail, setComptableEmail] = useState('');
+  const [emailContext, setEmailContext] = useState<{
+    type: 'folder' | 'invoice' | 'monthly';
+    data?: any;
+  } | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [newProject, setNewProject] = useState({
     nom: '',
@@ -975,6 +980,197 @@ export default function Dashboard() {
     link.download = `dossier_${folder.name.replace(/\s+/g, '_')}.csv`;
     link.click();
     showToastMessage('📊 Export CSV téléchargé !', 'success');
+  };
+
+  // Envoyer au comptable
+  const sendToAccountant = async () => {
+    if (!comptableEmail || !comptableEmail.includes('@')) {
+      showToastMessage('❌ Email invalide', 'error');
+      return;
+    }
+
+    if (!emailContext) {
+      showToastMessage('❌ Contexte d\'envoi manquant', 'error');
+      return;
+    }
+
+    setSendingEmail(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Non connecté');
+
+      let fileData = '';
+      let fileName = '';
+      let fileType = '';
+      let invoicesCount = 0;
+      let totalTTC = 0;
+      let periodDescription = '';
+
+      // Générer le fichier selon le contexte
+      if (emailContext.type === 'folder' && emailContext.data) {
+        const folder = emailContext.data as Folder;
+        const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
+        
+        if (folderInvoices.length === 0) {
+          showToastMessage('❌ Aucune facture dans ce dossier', 'error');
+          setSendingEmail(false);
+          return;
+        }
+
+        invoicesCount = folderInvoices.length;
+        totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+        periodDescription = `le dossier "${folder.name}"`;
+
+        // Générer Excel pour dossier
+        const data = folderInvoices.map(inv => {
+          const tva = inv.tva !== undefined && inv.tva !== null 
+            ? inv.tva 
+            : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+          return {
+            'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+            'Fournisseur': inv.entreprise,
+            'Catégorie': inv.categorie || 'Non classé',
+            'Description': inv.description || '',
+            'Montant HT (€)': inv.montant_ht,
+            'TVA (€)': tva,
+            'Montant TTC (€)': inv.montant_ttc || inv.total_amount
+          };
+        });
+
+        const totalHT = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
+        const totalTVA = data.reduce((sum, row) => sum + row['TVA (€)'], 0);
+        const finalData = [...data, {}, {
+          'Date': 'TOTAL',
+          'Fournisseur': '',
+          'Catégorie': '',
+          'Description': '',
+          'Montant HT (€)': totalHT,
+          'TVA (€)': totalTVA,
+          'Montant TTC (€)': totalTTC
+        }];
+
+        const ws = XLSX.utils.json_to_sheet(finalData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, folder.name.substring(0, 31));
+        
+        // Convertir en base64
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+        fileData = wbout;
+        fileName = `dossier_${folder.name.replace(/\s+/g, '_')}.xlsx`;
+        fileType = 'xlsx';
+
+      } else if (emailContext.type === 'monthly') {
+        // Export mensuel (sélection multiple)
+        const filtered = filteredInvoices;
+        invoicesCount = filtered.length;
+        totalTTC = filtered.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+        periodDescription = selectedMonths.length > 1 
+          ? `${selectedMonths.length} mois sélectionnés` 
+          : selectedMonths[0] || 'la période sélectionnée';
+
+        if (selectedMonths.length > 1) {
+          // Excel multi-onglets
+          const wb = XLSX.utils.book_new();
+          
+          selectedMonths.forEach(monthKey => {
+            const monthInvoices = invoices.filter(inv => {
+              const invMonth = `${new Date(inv.date_facture).toLocaleDateString('fr-FR', { month: 'long' })} ${new Date(inv.date_facture).getFullYear()}`;
+              return invMonth === monthKey;
+            });
+
+            const data = monthInvoices.map(inv => {
+              const tva = inv.tva !== undefined && inv.tva !== null 
+                ? inv.tva 
+                : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+              return {
+                'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+                'Fournisseur': inv.entreprise,
+                'Catégorie': inv.categorie || 'Non classé',
+                'Description': inv.description || '',
+                'Montant HT (€)': inv.montant_ht,
+                'TVA (€)': tva,
+                'Montant TTC (€)': inv.montant_ttc || inv.total_amount
+              };
+            });
+
+            if (data.length > 0) {
+              const ws = XLSX.utils.json_to_sheet(data);
+              XLSX.utils.book_append_sheet(wb, ws, monthKey.substring(0, 31));
+            }
+          });
+
+          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+          fileData = wbout;
+          fileName = `export_multi_mois_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.xlsx`;
+          fileType = 'xlsx';
+
+        } else {
+          // Excel simple
+          const data = filtered.map(inv => {
+            const tva = inv.tva !== undefined && inv.tva !== null 
+              ? inv.tva 
+              : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+            return {
+              'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
+              'Fournisseur': inv.entreprise,
+              'Catégorie': inv.categorie || 'Non classé',
+              'Description': inv.description || '',
+              'Montant HT (€)': inv.montant_ht,
+              'TVA (€)': tva,
+              'Montant TTC (€)': inv.montant_ttc || inv.total_amount
+            };
+          });
+
+          const ws = XLSX.utils.json_to_sheet(data);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Factures');
+          
+          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+          fileData = wbout;
+          fileName = `export_${selectedMonths[0]?.replace(/\s+/g, '_')}.xlsx`;
+          fileType = 'xlsx';
+        }
+      }
+
+      // Récupérer le nom d'utilisateur depuis localStorage
+      const companyName = localStorage.getItem('company_name') || '';
+      const userName = companyName || user.email?.split('@')[0] || '';
+
+      // Appeler l'API d'envoi
+      const response = await fetch('/api/send-accounting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comptableEmail,
+          userName,
+          userEmail: user.email,
+          fileData,
+          fileName,
+          fileType,
+          invoicesCount,
+          totalTTC: totalTTC.toFixed(2),
+          periodDescription
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de l\'envoi');
+      }
+
+      showToastMessage(`✅ Email envoyé à ${comptableEmail}`, 'success');
+      setShowEmailModal(false);
+      setComptableEmail('');
+      setEmailContext(null);
+
+    } catch (err: any) {
+      console.error('❌ Erreur envoi comptable:', err);
+      showToastMessage(`❌ ${err.message}`, 'error');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   // Charger les projets depuis Supabase
@@ -3209,6 +3405,7 @@ export default function Dashboard() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setEmailContext({ type: 'folder', data: folder });
                                     setShowEmailModal(true);
                                     setOpenMenuId(null);
                                   }}
@@ -3628,6 +3825,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowEmailModal(false);
                   setComptableEmail('');
+                  setEmailContext(null);
                 }}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
@@ -3641,9 +3839,19 @@ export default function Dashboard() {
                 <div className="text-sm text-orange-900">
                   <p className="font-bold mb-1">Export préparé :</p>
                   <ul className="space-y-1 text-xs">
-                    <li>• <strong>{selectedMonths.length} mois</strong> sélectionné(s)</li>
-                    <li>• <strong>{filteredInvoices.length} factures</strong> incluses</li>
-                    <li>• Format : {selectedMonths.length > 1 ? 'Excel multi-onglets' : 'Excel standard'}</li>
+                    {emailContext?.type === 'folder' ? (
+                      <>
+                        <li>• <strong>Dossier :</strong> {(emailContext.data as Folder)?.name}</li>
+                        <li>• <strong>{invoices.filter(inv => inv.folder_id === (emailContext.data as Folder)?.id).length} factures</strong></li>
+                        <li>• Format : Excel (.xlsx)</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>• <strong>{selectedMonths.length} mois</strong> sélectionné(s)</li>
+                        <li>• <strong>{filteredInvoices.length} factures</strong> incluses</li>
+                        <li>• Format : {selectedMonths.length > 1 ? 'Excel multi-onglets' : 'Excel standard'}</li>
+                      </>
+                    )}
                   </ul>
                 </div>
               </div>
@@ -3670,31 +3878,28 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowEmailModal(false);
                   setComptableEmail('');
+                  setEmailContext(null);
                 }}
                 className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-bold text-sm"
               >
                 Annuler
               </button>
               <button
-                onClick={async () => {
-                  if (!comptableEmail || !comptableEmail.includes('@')) {
-                    showToastMessage('❌ Email invalide', 'error');
-                    return;
-                  }
-                  
-                  // Générer l'export
-                  exportToExcel();
-                  
-                  // Simuler l'envoi (en production : API backend pour email)
-                  showToastMessage(`📧 Export envoyé à ${comptableEmail}`, 'success');
-                  setShowEmailModal(false);
-                  setComptableEmail('');
-                }}
-                disabled={!comptableEmail}
+                onClick={sendToAccountant}
+                disabled={!comptableEmail || sendingEmail}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <Mail className="w-4 h-4" />
-                Envoyer
+                {sendingEmail ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Envoi en cours...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    Envoyer maintenant
+                  </>
+                )}
               </button>
             </div>
 
@@ -4115,7 +4320,10 @@ export default function Dashboard() {
           </button>
 
           <button
-            onClick={() => setShowEmailModal(true)}
+            onClick={() => {
+              setEmailContext({ type: 'monthly' });
+              setShowEmailModal(true);
+            }}
             disabled={filteredInvoices.length === 0}
             className="bg-white text-slate-700 px-6 py-3 rounded-2xl shadow-xl hover:shadow-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 flex items-center gap-2"
           >
