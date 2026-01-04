@@ -2563,6 +2563,15 @@ export default function Dashboard() {
   
 
   const triggerFileInput = () => {
+    // 🔒 VÉRIFICATION PRO : Bloquer l'accès si non-PRO
+    if (userTier !== 'pro') {
+      showToastMessage('⛔ Abonnement PRO requis pour scanner des factures', 'error');
+      setTimeout(() => {
+        router.push('/pricing');
+      }, 1500);
+      return;
+    }
+    
     // Menu de sélection : Appareil photo OU Téléverser fichier
     setShowUploadMenu(true);
   };
@@ -2612,46 +2621,97 @@ export default function Dashboard() {
     );
   }
 
-  // 🔒 Affichage du message d'erreur si l'utilisateur n'est pas PRO
+  // 🔒 ÉCRAN ACCÈS RESTREINT : Affichage si utilisateur non-PRO
   if (error && error.includes('Abonnement requis')) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
-        <div className="bg-white border-2 border-red-200 shadow-lg rounded-3xl p-8 max-w-md w-full text-center space-y-6 animate-fade-in">
-          <div className="flex items-center justify-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-8 h-8 text-red-500" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-slate-50 flex items-center justify-center px-6 py-12">
+        <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-8 max-w-lg w-full text-center space-y-6 animate-fade-in">
+          {/* Icône et titre */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-50 rounded-full flex items-center justify-center border-4 border-orange-200 shadow-lg">
+                <Crown className="w-10 h-10 text-orange-500" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                <AlertCircle className="w-5 h-5 text-white" />
+              </div>
+            </div>
+            
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
+                🔒 Accès Restreint
+              </h2>
+              <p className="text-slate-500 text-sm font-medium">
+                Abonnement PRO requis
+              </p>
             </div>
           </div>
-          
-          <div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">
-              Abonnement requis
-            </h2>
-            <p className="text-slate-600 text-sm">
-              Vous devez souscrire à un abonnement PRO pour accéder au Dashboard et uploader vos factures.
+
+          {/* Message principal */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left">
+            <p className="text-slate-700 text-sm leading-relaxed">
+              <strong className="text-slate-900">Vous devez souscrire à un abonnement PRO</strong> pour accéder au Dashboard ArtisScan et profiter de toutes les fonctionnalités :
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-600">
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold mt-0.5">✓</span>
+                <span>Scans IA <strong>illimités</strong> de vos factures</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold mt-0.5">✓</span>
+                <span>Exports <strong>PDF, Excel, CSV</strong></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold mt-0.5">✓</span>
+                <span>Organisation par <strong>dossiers</strong></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold mt-0.5">✓</span>
+                <span>Envoi direct à votre <strong>comptable</strong></span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Offre spéciale */}
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
+            <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+              <Zap className="w-4 h-4" />
+              Offre de lancement
+            </p>
+            <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
+            <p className="text-xs opacity-90">
+              Testez toutes les fonctionnalités PRO sans engagement
             </p>
           </div>
 
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-            <p className="text-xs text-orange-900 font-medium">
-              🎯 <strong>14 jours d'essai gratuit</strong> disponibles !<br/>
-              Aucune carte bancaire requise pour commencer.
-            </p>
+          {/* Boutons d'action */}
+          <div className="space-y-3">
+            <button
+              onClick={() => router.push('/pricing')}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Crown className="w-5 h-5" />
+              Devenir PRO maintenant
+            </button>
+
+            <button
+              onClick={() => router.push('/')}
+              className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
+            >
+              ← Retour à l'accueil
+            </button>
           </div>
 
-          <button
-            onClick={() => router.push('/pricing')}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg active:scale-95 transition-all"
-          >
-            Découvrir les offres PRO
-          </button>
-
-          <button
-            onClick={() => router.push('/')}
-            className="w-full text-slate-500 hover:text-slate-700 font-medium text-sm py-2 transition-colors"
-          >
-            Retour à l'accueil
-          </button>
+          {/* Footer info */}
+          <p className="text-xs text-slate-400 pt-4 border-t border-slate-200">
+            Déjà abonné ? Vérifiez votre email de confirmation ou{' '}
+            <button 
+              onClick={() => window.location.reload()} 
+              className="text-orange-500 hover:text-orange-600 font-bold underline"
+            >
+              rafraîchissez la page
+            </button>
+          </p>
         </div>
       </div>
     );
@@ -2979,9 +3039,19 @@ export default function Dashboard() {
 
           <button
                 onClick={triggerFileInput}
-                  disabled={analyzing}
-                className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all active:scale-95"
+                disabled={analyzing || userTier !== 'pro'}
+                className={`btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all active:scale-95 ${
+                  userTier !== 'pro' ? 'relative overflow-hidden' : ''
+                }`}
+                title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
                 >
+                  {/* Overlay de verrouillage si non-PRO */}
+                  {userTier !== 'pro' && (
+                    <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10">
+                      <Crown className="w-6 h-6 text-white animate-pulse" />
+                    </div>
+                  )}
+                  
                   {analyzing ? (
                   <span className="flex items-center justify-center">
                     <div className="spinner w-5 h-5 mr-3 border-white/30 border-t-white"></div>
@@ -4610,9 +4680,19 @@ export default function Dashboard() {
             {/* Scanner central plus gros */}
             <button
               onClick={triggerFileInput}
-              disabled={analyzing}
-              className="flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 active:scale-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white"
+              disabled={analyzing || userTier !== 'pro'}
+              className={`flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 active:scale-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative ${
+                userTier !== 'pro' ? 'saturate-50' : ''
+              }`}
+              title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
             >
+              {/* Badge de verrouillage si non-PRO */}
+              {userTier !== 'pro' && (
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center border-2 border-white shadow-lg z-10">
+                  <Crown className="w-4 h-4 text-orange-400 animate-pulse" />
+                </div>
+              )}
+              
               {analyzing ? (
                 <div className="spinner w-8 h-8 border-white border-opacity-20" style={{ borderTopColor: 'white' }}></div>
               ) : (
