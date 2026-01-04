@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getUserProfile, canUserScan, canExportCSV, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Invoice {
   id: string;
@@ -182,14 +183,14 @@ export default function Dashboard() {
   );
 
   const StatsCardSkeleton = () => (
-    <div className="card-clean rounded-2xl p-6 animate-pulse">
+    <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm">
       <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="h-4 bg-slate-200 rounded w-20 mb-2"></div>
-          <div className="h-8 bg-slate-200 rounded w-32 mb-2"></div>
-          <div className="h-3 bg-slate-100 rounded w-24"></div>
+        <div className="flex-1 space-y-3">
+          <div className="h-3 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded w-20 animate-shimmer bg-[length:200%_100%]"></div>
+          <div className="h-9 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded w-36 animate-shimmer bg-[length:200%_100%]"></div>
+          <div className="h-3 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded w-24 animate-shimmer bg-[length:200%_100%]"></div>
         </div>
-        <div className="w-12 h-12 rounded-full bg-slate-100"></div>
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-r from-orange-100 via-orange-50 to-orange-100 animate-shimmer bg-[length:200%_100%]"></div>
       </div>
     </div>
   );
@@ -3054,9 +3055,17 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 pb-28">
         <div className="space-y-6">
-        {/* DASHBOARD */}
+        {/* DASHBOARD avec transition AnimatePresence */}
+        <AnimatePresence mode="wait">
         {currentView === 'dashboard' && (
-          <div className="space-y-6 fade-in">
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="space-y-6"
+          >
             {/* 🎯 CTA PRO : Affiché si utilisateur non-PRO */}
             {userTier !== 'pro' && !isLoadingProfile && (
               <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 rounded-3xl p-8 text-white shadow-2xl shadow-orange-200 border-2 border-orange-400 relative overflow-hidden">
@@ -3146,7 +3155,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Stats principales - 3 cartes */}
+            {/* Stats principales - 3 cartes avec animations */}
             {loadingInvoices ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <StatsCardSkeleton />
@@ -3155,8 +3164,14 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Carte 1 : Total HT */}
-              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              {/* Carte 1 : Total HT avec animation fade-in up */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                whileHover={{ scale: 1.02, y: -4 }}
+                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Total HT</p>
@@ -3174,10 +3189,16 @@ export default function Dashboard() {
                     </svg>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Carte 2 : TVA récupérable */}
-              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              {/* Carte 2 : TVA récupérable avec animation fade-in up */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                whileHover={{ scale: 1.02, y: -4 }}
+                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">TVA récupérable</p>
@@ -3193,10 +3214,16 @@ export default function Dashboard() {
                     <TrendingUp className="w-6 h-6 text-orange-500" />
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Carte 3 : Total TTC */}
-              <div className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              {/* Carte 3 : Total TTC avec animation fade-in up */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+                whileHover={{ scale: 1.02, y: -4 }}
+                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[10px] font-black text-orange-500 mb-1 uppercase tracking-widest">Total TTC</p>
@@ -3212,7 +3239,7 @@ export default function Dashboard() {
                     <Receipt className="w-6 h-6 text-orange-500" />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
             )}
 
@@ -3292,10 +3319,12 @@ export default function Dashboard() {
               
               {/* (Suppression des dossiers : classement automatique par mois) */}
 
-          <button
+          <motion.button
                 onClick={triggerFileInput}
                 disabled={analyzing || userTier !== 'pro'}
-                className={`btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all active:scale-95 ${
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all ${
                   userTier !== 'pro' ? 'relative overflow-hidden' : ''
                 }`}
                 title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
@@ -3314,11 +3343,16 @@ export default function Dashboard() {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    <Camera className="w-6 h-6" />
+                    <motion.div
+                      animate={analyzing ? { scale: [1, 1.2, 1] } : {}}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                    >
+                      <Camera className="w-6 h-6" />
+                    </motion.div>
                     NUMÉRISER MAINTENANT
                   </span>
                   )}
-          </button>
+          </motion.button>
               </div>
 
             {/* Erreur */}
@@ -3380,12 +3414,18 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* HISTORIQUE */}
+        {/* HISTORIQUE avec transition AnimatePresence */}
         {currentView === 'historique' && (
-          <>
+          <motion.div
+            key="historique"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
             {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
             {userTier !== 'pro' && !isLoadingProfile ? (
               <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
@@ -3856,12 +3896,18 @@ export default function Dashboard() {
             )}
           </div>
             )}
-          </>
+          </motion.div>
         )}
 
-        {/* DOSSIERS PERSONNALISÉS */}
+        {/* DOSSIERS PERSONNALISÉS avec transition AnimatePresence */}
         {currentView === 'folders' && (
-          <>
+          <motion.div
+            key="folders"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
             {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
             {userTier !== 'pro' && !isLoadingProfile ? (
               <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
@@ -4154,12 +4200,19 @@ export default function Dashboard() {
             )}
           </div>
             )}
-          </>
+          </motion.div>
         )}
 
-        {/* PARAMÈTRES - Design Pro */}
+        {/* PARAMÈTRES - Design Pro avec transition AnimatePresence */}
         {currentView === 'parametres' && (
-          <div className="fade-in max-w-4xl mx-auto">
+          <motion.div
+            key="parametres"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="max-w-4xl mx-auto"
+          >
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">Paramètres</h1>
@@ -4409,8 +4462,9 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
         </div>
       </main>
 
@@ -5094,8 +5148,10 @@ export default function Dashboard() {
       <nav className="bottom-nav bg-white/95 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto px-2">
           <div className="flex items-center justify-around py-2">
-        <button
+        <motion.button
               onClick={() => setCurrentView('dashboard')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
                 currentView === 'dashboard' 
                   ? 'text-orange-500 scale-105' 
@@ -5104,13 +5160,15 @@ export default function Dashboard() {
             >
               <LayoutDashboard className={`w-6 h-6 mb-1 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
               <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'dashboard' ? 'font-black' : 'font-bold'}`}>Dashboard</span>
-            </button>
+            </motion.button>
 
-            {/* Scanner central plus gros */}
-            <button
+            {/* Scanner central plus gros avec animations */}
+            <motion.button
               onClick={triggerFileInput}
               disabled={analyzing || userTier !== 'pro'}
-              className={`flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 active:scale-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative ${
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.95 }}
+              className={`flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative ${
                 userTier !== 'pro' ? 'saturate-50' : ''
               }`}
               title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
@@ -5123,35 +5181,48 @@ export default function Dashboard() {
               )}
               
               {analyzing ? (
-                <div className="spinner w-8 h-8 border-white border-opacity-20" style={{ borderTopColor: 'white' }}></div>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                  className="w-8 h-8 border-4 border-white border-opacity-20 border-t-white rounded-full"
+                />
               ) : (
-                <Camera className="w-8 h-8" />
+                <motion.div
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                >
+                  <Camera className="w-8 h-8" />
+                </motion.div>
               )}
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={() => setCurrentView('historique')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
                 currentView === 'historique' 
                   ? 'text-orange-500 scale-105' 
                   : 'text-slate-400 hover:text-slate-600'
-                }`}
+              }`}
             >
               <Clock className={`w-6 h-6 mb-1 transition-transform ${currentView === 'historique' ? 'scale-110' : ''}`} strokeWidth={currentView === 'historique' ? 2.5 : 2} />
               <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'historique' ? 'font-black' : 'font-bold'}`}>Historique</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={() => setCurrentView('folders')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               className={`flex flex-col items-center justify-center py-2 px-3 transition-all duration-200 rounded-xl ${
                 currentView === 'folders' 
                   ? 'text-orange-500 scale-105' 
                   : 'text-slate-400 hover:text-slate-600'
-                }`}
+              }`}
             >
               <Folder className={`w-6 h-6 mb-1 transition-transform ${currentView === 'folders' ? 'scale-110' : ''}`} strokeWidth={currentView === 'folders' ? 2.5 : 2} />
               <span className={`text-[10px] uppercase tracking-widest transition-all ${currentView === 'folders' ? 'font-black' : 'font-bold'}`}>Dossiers</span>
-            </button>
+            </motion.button>
 
             {/* Onglet Dossiers supprimé : organisation automatique par mois */}
           </div>
