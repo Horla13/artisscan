@@ -1,94 +1,78 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Fond avec coins arrondis pour iOS/Android -->
-  <rect width="512" height="512" rx="110" fill="#1e293b"/>
+  <!-- Fond orange ArtisScan avec coins arrondis pour iOS/Android -->
+  <rect width="512" height="512" rx="110" fill="#f97316"/>
   
-  <!-- Dégradé subtil pour profondeur -->
+  <!-- Dégradé orange pour profondeur -->
   <defs>
-    <linearGradient id="emeraldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#059669" stop-opacity="1"/>
+    <linearGradient id="orangeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ea580c" stop-opacity="1"/>
     </linearGradient>
     
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.2"/>
     </filter>
   </defs>
   
-  <!-- Cadre de scan - Coin supérieur gauche -->
-  <path d="M 100 100 L 100 150 M 100 100 L 150 100" 
-        stroke="#475569" 
-        stroke-width="12" 
-        stroke-linecap="round"
-        opacity="0.8"/>
+  <!-- Appliquer le gradient au fond -->
+  <rect width="512" height="512" rx="110" fill="url(#orangeGradient)"/>
   
-  <!-- Cadre de scan - Coin supérieur droit -->
-  <path d="M 412 100 L 362 100 M 412 100 L 412 150" 
-        stroke="#475569" 
-        stroke-width="12" 
-        stroke-linecap="round"
-        opacity="0.8"/>
-  
-  <!-- Cadre de scan - Coin inférieur gauche -->
-  <path d="M 100 412 L 100 362 M 100 412 L 150 412" 
-        stroke="#475569" 
-        stroke-width="12" 
-        stroke-linecap="round"
-        opacity="0.8"/>
-  
-  <!-- Cadre de scan - Coin inférieur droit -->
-  <path d="M 412 412 L 412 362 M 412 412 L 362 412" 
-        stroke="#475569" 
-        stroke-width="12" 
-        stroke-linecap="round"
-        opacity="0.8"/>
-  
-  <!-- Lettre 'A' stylisée avec dégradé -->
-  <g id="letter-a" filter="url(#glow)">
-    <!-- Partie gauche du A -->
-    <path d="M 190 390 L 256 180" 
-          stroke="url(#emeraldGradient)" 
-          stroke-width="42" 
-          stroke-linecap="round" 
-          stroke-linejoin="round" 
-          fill="none"/>
+  <!-- Icône de scan centrale - Version grande et épurée -->
+  <g opacity="0.95" filter="url(#shadow)">
+    <!-- Cadre de scan - Coin supérieur gauche -->
+    <path d="M 100 100 L 100 180 M 100 100 L 180 100" 
+          stroke="#ffffff" 
+          stroke-width="24" 
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
     
-    <!-- Partie droite du A -->
-    <path d="M 256 180 L 322 390" 
-          stroke="url(#emeraldGradient)" 
-          stroke-width="42" 
-          stroke-linecap="round" 
-          stroke-linejoin="round" 
-          fill="none"/>
+    <!-- Cadre de scan - Coin supérieur droit -->
+    <path d="M 412 100 L 332 100 M 412 100 L 412 180" 
+          stroke="#ffffff" 
+          stroke-width="24" 
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
     
-    <!-- Barre horizontale du A -->
-    <line x1="210" y1="300" x2="302" y2="300" 
-          stroke="url(#emeraldGradient)" 
-          stroke-width="42" 
-          stroke-linecap="round"/>
+    <!-- Cadre de scan - Coin inférieur gauche -->
+    <path d="M 100 412 L 100 332 M 100 412 L 180 412" 
+          stroke="#ffffff" 
+          stroke-width="24" 
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+    
+    <!-- Cadre de scan - Coin inférieur droit -->
+    <path d="M 412 412 L 412 332 M 412 412 L 332 412" 
+          stroke="#ffffff" 
+          stroke-width="24" 
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+    
+    <!-- Lignes de scan horizontales (effet scanning) -->
+    <line x1="140" y1="210" x2="372" y2="210" 
+          stroke="#ffffff" 
+          stroke-width="10" 
+          stroke-linecap="round" 
+          opacity="0.6"/>
+    
+    <line x1="140" y1="256" x2="372" y2="256" 
+          stroke="#ffffff" 
+          stroke-width="14" 
+          stroke-linecap="round" 
+          opacity="0.9"/>
+    
+    <line x1="140" y1="302" x2="372" y2="302" 
+          stroke="#ffffff" 
+          stroke-width="10" 
+          stroke-linecap="round" 
+          opacity="0.6"/>
   </g>
   
-  <!-- Ligne de scan laser animée -->
-  <line x1="130" y1="300" x2="382" y2="300" 
-        stroke="#10b981" 
-        stroke-width="3" 
-        opacity="0.5" 
-        stroke-linecap="round">
-    <animate attributeName="opacity" 
-             values="0.3;0.8;0.3" 
-             dur="2s" 
-             repeatCount="indefinite"/>
-  </line>
-  
-  <!-- Points lumineux -->
-  <circle cx="256" cy="180" r="6" fill="#10b981" opacity="0.9">
-    <animate attributeName="opacity" 
-             values="0.5;1;0.5" 
-             dur="1.5s" 
-             repeatCount="indefinite"/>
-  </circle>
+  <!-- Petit éclair (Zap) en bas à droite pour dynamisme -->
+  <g transform="translate(370, 370)" opacity="0.9">
+    <path d="M 0 30 L 15 15 L 7 15 L 22 0 L 7 15 L 15 15 Z" 
+          fill="#ffffff" 
+          stroke="#ffffff" 
+          stroke-width="2" 
+          stroke-linejoin="round"/>
+  </g>
 </svg>
-
