@@ -93,6 +93,7 @@ export default function Dashboard() {
   // États pour le transfert de factures vers dossiers
   const [showMoveToFolderModal, setShowMoveToFolderModal] = useState(false);
   const [invoiceToMove, setInvoiceToMove] = useState<Invoice | null>(null);
+  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -4191,10 +4192,163 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
-                  <p className="text-sm text-orange-800">
-                    <strong>Note:</strong> La liaison des factures aux dossiers sera bientôt disponible. Pour l'instant, vous pouvez créer et organiser vos dossiers.
-                  </p>
+                {/* Liste des factures de ce dossier */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-orange-500" />
+                    Factures du dossier
+                  </h2>
+                  
+                  {(() => {
+                    const folderInvoices = invoices.filter(inv => inv.folder_id === selectedFolder.id);
+                    
+                    if (folderInvoices.length === 0) {
+                      return (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Receipt className="w-8 h-8 text-slate-400" />
+                          </div>
+                          <p className="text-slate-500 font-medium">Aucune facture dans ce dossier</p>
+                          <p className="text-sm text-slate-400 mt-2">
+                            Les factures que vous assignerez à ce dossier apparaîtront ici
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    // Calcul des totaux
+                    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
+                    const totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.tva || (inv.montant_ttc - inv.montant_ht) || 0), 0);
+                    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+
+                    return (
+                      <>
+                        {/* Résumé financier */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total HT</p>
+                            <p className="text-2xl font-black text-slate-900">
+                              {totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">TVA</p>
+                            <p className="text-2xl font-black text-slate-900">
+                              {totalTVA.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1">Total TTC</p>
+                            <p className="text-2xl font-black text-orange-600">
+                              {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Liste des factures */}
+                        <div className="space-y-3">
+                          <p className="text-sm font-bold text-slate-600 mb-3">
+                            {folderInvoices.length} facture{folderInvoices.length > 1 ? 's' : ''}
+                          </p>
+                          {folderInvoices.map((invoice) => (
+                            <div
+                              key={invoice.id}
+                              className="p-4 border border-slate-200 rounded-xl hover:border-orange-300 hover:bg-orange-50/30 transition-all"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="font-black text-slate-900">
+                                      {invoice.entreprise || 'Fournisseur non spécifié'}
+                                    </span>
+                                    {invoice.categorie && (
+                                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full font-bold">
+                                        {invoice.categorie}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {invoice.description && (
+                                    <p className="text-sm text-slate-600 mb-2">{invoice.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                                    <span>HT: {(invoice.montant_ht || 0).toFixed(2)} €</span>
+                                    <span>TVA: {(invoice.tva || (invoice.montant_ttc - invoice.montant_ht) || 0).toFixed(2)} €</span>
+                                    <span className="font-bold text-orange-600">
+                                      TTC: {(invoice.montant_ttc || invoice.total_amount || 0).toFixed(2)} €
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Menu actions */}
+                                <div className="relative">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setInvoiceMenuOpen(invoiceMenuOpen === invoice.id ? null : invoice.id);
+                                    }}
+                                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                  >
+                                    <MoreVertical className="w-4 h-4 text-slate-400" />
+                                  </button>
+
+                                  {invoiceMenuOpen === invoice.id && (
+                                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                                      <button
+                                        onClick={() => {
+                                          setInvoiceToMove(invoice);
+                                          setShowMoveToFolderModal(true);
+                                          setInvoiceMenuOpen(null);
+                                        }}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                      >
+                                        <Folder className="w-4 h-4 text-purple-500" />
+                                        <span className="font-medium text-slate-700">Déplacer vers un autre dossier</span>
+                                      </button>
+                                      
+                                      <button
+                                        onClick={async () => {
+                                          // Retirer du dossier
+                                          const { error } = await supabase
+                                            .from('scans')
+                                            .update({ folder_id: null })
+                                            .eq('id', invoice.id);
+                                          
+                                          if (error) {
+                                            showToastMessage('❌ Erreur lors du retrait', 'error');
+                                          } else {
+                                            showToastMessage('✅ Facture retirée du dossier', 'success');
+                                            await loadInvoices();
+                                          }
+                                          setInvoiceMenuOpen(null);
+                                        }}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                      >
+                                        <X className="w-4 h-4 text-slate-500" />
+                                        <span className="font-medium text-slate-700">Retirer du dossier</span>
+                                      </button>
+
+                                      <div className="border-t border-slate-100 my-2"></div>
+
+                                      <button
+                                        onClick={() => {
+                                          confirmDelete(invoice.id);
+                                          setInvoiceMenuOpen(null);
+                                        }}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 transition-colors"
+                                      >
+                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                        <span className="font-medium text-red-600">Supprimer</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </>
             )}
