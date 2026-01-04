@@ -4506,51 +4506,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Bouton flottant Export multi-mois */}
-      {selectedMonths.length > 0 && (
-        <div className="fixed bottom-24 right-6 z-40 flex flex-col gap-3">
-          <button
-            onClick={() => {
-              if (selectedMonths.length === 1) {
-                // Export simple
-                generateGlobalPDF();
-              } else {
-                // Export multi-mois (ZIP ou Excel multi-onglets)
-                exportToExcel();
-              }
-            }}
-            disabled={filteredInvoices.length === 0}
-            className="group relative bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-4 rounded-2xl shadow-2xl hover:shadow-orange-300 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-white"
-          >
-            <div className="flex items-center gap-3">
-              <Package className="w-5 h-5" />
-              <div className="text-left">
-                <div className="text-xs font-black uppercase tracking-wider">Exporter</div>
-                <div className="text-[10px] font-medium opacity-90">
-                  {selectedMonths.length} mois • {filteredInvoices.length} docs
-                </div>
-              </div>
-            </div>
-            {/* Badge compteur */}
-            <div className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2 border-white shadow-lg">
-              {selectedMonths.length}
-            </div>
-          </button>
-
-          <button
-            onClick={() => {
-              setEmailContext({ type: 'monthly' });
-              setShowEmailModal(true);
-            }}
-            disabled={filteredInvoices.length === 0}
-            className="bg-white text-slate-700 px-6 py-3 rounded-2xl shadow-xl hover:shadow-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 flex items-center gap-2"
-          >
-            <Mail className="w-4 h-4 text-orange-500" />
-            <span className="text-xs font-bold">Envoyer au comptable</span>
-          </button>
-        </div>
-      )}
-
             {/* Bottom Navigation */}
       <nav className="bottom-nav bg-white/95 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto px-2">
