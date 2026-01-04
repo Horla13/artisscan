@@ -15,12 +15,15 @@ interface Invoice {
   id: string;
   entreprise: string;
   montant_ht: number;
-  total_amount: number;
+  tva: number;
+  montant_ttc: number;
+  total_amount: number;  // Alias pour compatibilité avec l'ancienne structure
   date_facture: string;
   description: string;
   categorie?: string;
   created_at: string;
   folder_id?: string;
+  archived?: boolean;
 }
 
 interface Project {
@@ -557,9 +560,17 @@ export default function Dashboard() {
   // Stats calculées depuis les factures filtrées
   const stats = {
     totalHT: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.montant_ht), 0),
-    totalTTC: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.total_amount), 0),
+    totalTTC: filteredInvoices.reduce((sum: number, inv: Invoice) => {
+      // Utiliser montant_ttc ou total_amount
+      return sum + parseAmount(inv.montant_ttc || inv.total_amount);
+    }, 0),
     tvaRecuperable: filteredInvoices.reduce((sum: number, inv: Invoice) => {
-      const ttc = parseAmount(inv.total_amount);
+      // Si le champ tva existe, l'utiliser directement (toujours positif)
+      if (inv.tva !== undefined && inv.tva !== null) {
+        return sum + parseAmount(inv.tva);
+      }
+      // Sinon, calculer TTC - HT
+      const ttc = parseAmount(inv.montant_ttc || inv.total_amount);
       const ht = parseAmount(inv.montant_ht);
       return sum + (ttc - ht);
     }, 0),
@@ -1061,14 +1072,20 @@ export default function Dashboard() {
   // Export CSV d'une facture individuelle
   const exportInvoiceCSV = (invoice: Invoice) => {
     const headers = ['Date Facture', 'Fournisseur', 'Montant HT', 'TVA', 'Montant TTC', 'Catégorie', 'Description'];
-    const tvaAmount = (invoice.total_amount - invoice.montant_ht).toFixed(2);
+    
+    // Utiliser le champ tva s'il existe, sinon calculer
+    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
+      ? invoice.tva.toFixed(2)
+      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht).toFixed(2);
+    
+    const ttcAmount = (invoice.montant_ttc || invoice.total_amount).toFixed(2);
     
     const row = [
       new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
       `"${invoice.entreprise}"`,
       invoice.montant_ht.toFixed(2),
       tvaAmount,
-      invoice.total_amount.toFixed(2),
+      ttcAmount,
       `"${invoice.categorie || 'Non classé'}"`,
       `"${invoice.description || ''}"`
     ];
@@ -1085,14 +1102,19 @@ export default function Dashboard() {
 
   // Export Excel d'une facture individuelle
   const exportInvoiceExcel = (invoice: Invoice) => {
-    const tvaAmount = invoice.total_amount - invoice.montant_ht;
+    // Utiliser le champ tva s'il existe, sinon calculer
+    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
+      ? invoice.tva
+      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht);
+    
+    const ttcAmount = invoice.montant_ttc || invoice.total_amount;
     
     const data = [{
       'Date Facture': new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
       'Fournisseur': invoice.entreprise,
       'Montant HT (€)': invoice.montant_ht,
       'TVA (€)': tvaAmount,
-      'Montant TTC (€)': invoice.total_amount,
+      'Montant TTC (€)': ttcAmount,
       'Catégorie': invoice.categorie || 'Non classé',
       'Description': invoice.description || ''
     }];
@@ -1136,8 +1158,12 @@ export default function Dashboard() {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     
-    const tvaAmount = invoice.total_amount - invoice.montant_ht;
+    // Utiliser le champ tva s'il existe, sinon calculer
+    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
+      ? invoice.tva
+      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht);
     const tvaPercent = invoice.montant_ht > 0 ? Math.round((tvaAmount / invoice.montant_ht) * 100) : 0;
+    const ttcAmount = invoice.montant_ttc || invoice.total_amount;
     
     let yPos = 70;
     
@@ -1210,7 +1236,7 @@ export default function Dashboard() {
     doc.setTextColor(249, 115, 22);
     doc.text('Total TTC:', 25, yPos);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${invoice.total_amount.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    doc.text(`${ttcAmount.toFixed(2)} €`, 160, yPos, { align: 'right' });
     
     // Footer
     doc.setFontSize(8);
@@ -2808,14 +2834,23 @@ export default function Dashboard() {
                             <div className="flex-1">
                               <span className="text-[10px] text-orange-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
                               <span className="font-black text-orange-500 text-lg">
-                                {(invoice.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                {((invoice.montant_ttc || invoice.total_amount) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                               </span>
                             </div>
 
                             <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">TVA Récupérée</span>
                               <span className="font-black text-orange-500 italic text-base">
-                                {((invoice.total_amount || 0) - (invoice.montant_ht || 0)).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                {(() => {
+                                  // Si le champ tva existe, l'utiliser directement
+                                  if (invoice.tva !== undefined && invoice.tva !== null) {
+                                    return invoice.tva.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                  }
+                                  // Sinon, calculer TTC - HT
+                                  const ttc = (invoice.montant_ttc || invoice.total_amount) || 0;
+                                  const ht = invoice.montant_ht || 0;
+                                  return (ttc - ht).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                })()} €
                               </span>
                             </div>
                           </div>
