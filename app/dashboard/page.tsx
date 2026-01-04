@@ -590,6 +590,7 @@ export default function Dashboard() {
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION DYNAMIQUE
   const getLast7DaysData = () => {
     console.log('🔍 === GÉNÉRATION GRAPHIQUE (DYNAMIQUE) ===');
+    console.log('📦 Nombre total de factures disponibles:', invoices.length);
     
     // Helper pour extraire YYYY-MM-DD sans décalage de fuseau horaire
     const getPureISODate = (raw: string | Date) => {
@@ -623,12 +624,20 @@ export default function Dashboard() {
 
       let dayTotal = 0;
 
-      filteredInvoices.forEach(s => {
+      // ✅ Utiliser TOUTES les factures (invoices), pas filteredInvoices
+      invoices.forEach(s => {
         const scanDateStr = getPureISODate(s.date_facture || s.created_at);
+        console.log(`  📅 Facture: ${s.entreprise}, Date: ${scanDateStr}, Comparé à: ${targetDateStr}`);
+        
         if (scanDateStr === targetDateStr) {
-          dayTotal += parseAmount(s.total_amount);
+          // ✅ Utiliser montant_ttc ou total_amount
+          const montant = parseAmount(s.montant_ttc || s.total_amount);
+          dayTotal += montant;
+          console.log(`    ✅ MATCH! Montant: ${montant}€`);
         }
       });
+
+      console.log(`📊 ${label} (${targetDateStr}): ${dayTotal}€`);
 
       processedData.push({
         date: label,
@@ -644,7 +653,7 @@ export default function Dashboard() {
   // Mémoriser les données du graphique pour éviter les calculs inutiles et assurer la réactivité
   const chartData = useMemo(() => {
     return getLast7DaysData();
-  }, [filteredInvoices]);
+  }, [invoices]); // ✅ Dépendre de invoices, pas filteredInvoices
 
   // Toast helper
   const showToastMessage = (message: string, type: 'success' | 'error' = 'success') => {
