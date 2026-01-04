@@ -2741,8 +2741,8 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center gap-4">
-              {/* Badge du plan - PRO Uniquement */}
-              {!isLoadingProfile && (
+              {/* Badge du plan - Affiché UNIQUEMENT si utilisateur est PRO */}
+              {!isLoadingProfile && userTier === 'pro' && (
                 <div className="hidden sm:block">
                   <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
                     <Crown className="w-3.5 h-3.5" />
@@ -2877,6 +2877,57 @@ export default function Dashboard() {
         {/* DASHBOARD */}
         {currentView === 'dashboard' && (
           <div className="space-y-6 fade-in">
+            {/* 🎯 CTA PRO : Affiché si utilisateur non-PRO */}
+            {userTier !== 'pro' && !isLoadingProfile && (
+              <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 rounded-3xl p-8 text-white shadow-2xl shadow-orange-200 border-2 border-orange-400 relative overflow-hidden">
+                {/* Pattern décoratif */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24"></div>
+                
+                <div className="relative z-10 text-center max-w-2xl mx-auto">
+                  <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mb-6 border-2 border-white/20">
+                    <Crown className="w-10 h-10 text-white" />
+                  </div>
+                  
+                  <h2 className="text-3xl md:text-4xl font-black mb-3 tracking-tight">
+                    Activez votre accès ArtisScan Pro
+                  </h2>
+                  <p className="text-lg text-orange-100 mb-6 font-medium">
+                    Pour gérer vos factures, scanner vos documents et accéder à toutes les fonctionnalités
+                  </p>
+                  
+                  {/* Avantages en ligne */}
+                  <div className="flex flex-wrap items-center justify-center gap-4 mb-8 text-sm">
+                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
+                      <Zap className="w-4 h-4" />
+                      <span className="font-bold">Scans illimités</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
+                      <FileText className="w-4 h-4" />
+                      <span className="font-bold">Exports PDF/Excel</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
+                      <Folder className="w-4 h-4" />
+                      <span className="font-bold">Dossiers personnalisés</span>
+                    </div>
+                  </div>
+                  
+                  {/* Bouton CTA Principal */}
+                  <button
+                    onClick={() => router.push('/pricing')}
+                    className="inline-flex items-center gap-3 px-8 py-4 bg-white text-orange-600 font-black text-lg rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
+                  >
+                    <Crown className="w-6 h-6" />
+                    Découvrir les offres PRO
+                  </button>
+                  
+                  <p className="mt-4 text-sm text-orange-200 font-medium">
+                    🎁 14 jours d'essai gratuit • Sans engagement
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Résumé Chronologie (mois sélectionné) - DESIGN CLAIR MODERNE */}
             <div className="bg-white rounded-3xl p-6 text-slate-900 overflow-hidden relative border border-slate-200 shadow-sm transition-all hover:shadow-md">
               <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
@@ -2987,6 +3038,30 @@ export default function Dashboard() {
 
             {/* Graphique 7 derniers jours (TTC) */}
             <div className="card-clean rounded-3xl p-6 relative bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
+              {/* Overlay de floutage si non-PRO */}
+              {userTier !== 'pro' && !isLoadingProfile && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-md rounded-3xl z-20 flex items-center justify-center">
+                  <div className="text-center px-6">
+                    <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <Crown className="w-8 h-8 text-orange-500" />
+                    </div>
+                    <p className="text-lg font-black text-slate-900 mb-2">
+                      Graphique réservé aux abonnés PRO
+                    </p>
+                    <p className="text-sm text-slate-500 mb-4">
+                      Visualisez vos dépenses en temps réel
+                    </p>
+                    <button
+                      onClick={() => router.push('/pricing')}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-sm"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Devenir PRO
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dépenses des 7 derniers jours</h3>
                 {chartData.every(d => d.montant === 0) && (
