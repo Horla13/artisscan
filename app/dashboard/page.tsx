@@ -95,6 +95,7 @@ export default function Dashboard() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingFolders, setLoadingFolders] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'montant_ht' | 'total_amount' | 'categorie'>('date_facture');
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
@@ -719,20 +720,40 @@ export default function Dashboard() {
 
   // ===== GESTION DES DOSSIERS PERSONNALISÉS =====
   const loadFolders = async () => {
+    console.log('📂 === CHARGEMENT DES DOSSIERS ===');
+    setLoadingFolders(true);
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      
+      if (!user) {
+        console.warn('⚠️ Aucun utilisateur connecté pour charger les dossiers');
+        setFolders([]);
+        return;
+      }
+
+      console.log('👤 Utilisateur connecté:', user.id);
 
       const { data, error } = await supabase
         .from('folders')
         .select('*')
         .eq('user_id', user.id)
+        .neq('archived', true) // Exclure les dossiers archivés
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erreur Supabase:', error);
+        throw error;
+      }
+
+      console.log('✅ Dossiers chargés:', data?.length || 0);
       setFolders(data || []);
     } catch (err) {
-      console.error('Erreur chargement dossiers:', err);
+      console.error('❌ Erreur chargement dossiers:', err);
+      setFolders([]);
+    } finally {
+      setLoadingFolders(false);
+      console.log('✅ === FIN CHARGEMENT DOSSIERS ===');
     }
   };
 
@@ -1407,6 +1428,12 @@ export default function Dashboard() {
     console.log('🚀 Montage initial du Dashboard');
     console.log('📥 Chargement initial des factures...');
     loadInvoices();
+  }, []);
+
+  // Charger les dossiers au montage initial
+  useEffect(() => {
+    console.log('📂 Montage initial - Chargement des dossiers...');
+    loadFolders();
   }, []);
 
   // Tri des factures
@@ -3355,7 +3382,13 @@ export default function Dashboard() {
                 </div>
 
                 {/* Liste des dossiers */}
-                {folders.length === 0 ? (
+                {loadingFolders ? (
+                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+                    <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-2">Chargement des dossiers...</h3>
+                    <p className="text-slate-500">Veuillez patienter</p>
+                  </div>
+                ) : folders.length === 0 ? (
                   <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
                     <Folder className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                     <h3 className="text-lg font-bold text-slate-900 mb-2">Aucun dossier</h3>
