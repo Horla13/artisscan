@@ -89,6 +89,9 @@ export default function Dashboard() {
   const [folderReference, setFolderReference] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [showUploadMenu, setShowUploadMenu] = useState(false);
+  // États pour le transfert de factures vers dossiers
+  const [showMoveToFolderModal, setShowMoveToFolderModal] = useState(false);
+  const [invoiceToMove, setInvoiceToMove] = useState<Invoice | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -806,6 +809,40 @@ export default function Dashboard() {
       console.error('Erreur archivage dossier:', err);
       showToastMessage('❌ Erreur lors de l\'archivage', 'error');
     }
+  };
+
+  // Déplacer une facture vers un dossier
+  const moveInvoiceToFolder = async (invoiceId: string, folderId: string | null) => {
+    try {
+      console.log('📂 Déplacement de la facture:', invoiceId, 'vers dossier:', folderId);
+      
+      const { error } = await supabase
+        .from('scans')
+        .update({ folder_id: folderId })
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+
+      await loadInvoices();
+      
+      if (folderId) {
+        const folder = folders.find(f => f.id === folderId);
+        showToastMessage(`✅ Facture déplacée vers "${folder?.name || 'le dossier'}"`, 'success');
+      } else {
+        showToastMessage('✅ Facture retirée du dossier', 'success');
+      }
+
+      setShowMoveToFolderModal(false);
+      setInvoiceToMove(null);
+    } catch (err) {
+      console.error('❌ Erreur déplacement facture:', err);
+      showToastMessage('❌ Erreur lors du déplacement', 'error');
+    }
+  };
+
+  // Retirer une facture d'un dossier (remettre en vrac)
+  const removeInvoiceFromFolder = async (invoiceId: string) => {
+    await moveInvoiceToFolder(invoiceId, null);
   };
 
   // Export PDF d'un dossier  
@@ -3201,6 +3238,36 @@ export default function Dashboard() {
                                     {/* Séparateur */}
                                     <div className="h-px bg-slate-100 my-1"></div>
                                     
+                                    {/* Déplacer vers un dossier */}
+                                    <button
+                                      onClick={() => {
+                                        setInvoiceToMove(invoice);
+                                        setShowMoveToFolderModal(true);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center gap-3"
+                                    >
+                                      <Folder className="w-4 h-4" />
+                                      Déplacer vers un dossier
+                                    </button>
+                                    
+                                    {/* Retirer du dossier (si la facture est dans un dossier) */}
+                                    {invoice.folder_id && (
+                                      <button
+                                        onClick={() => {
+                                          removeInvoiceFromFolder(invoice.id);
+                                          setOpenMenuId(null);
+                                        }}
+                                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-600 transition-colors flex items-center gap-3"
+                                      >
+                                        <X className="w-4 h-4" />
+                                        Retirer du dossier
+                                      </button>
+                                    )}
+                                    
+                                    {/* Séparateur */}
+                                    <div className="h-px bg-slate-100 my-1"></div>
+                                    
                                     {/* Supprimer */}
                                     <button
                                       onClick={() => {
@@ -4274,6 +4341,124 @@ export default function Dashboard() {
               >
                 Créer
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale déplacement vers dossier */}
+      {showMoveToFolderModal && invoiceToMove && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full slide-up shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Folder className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Déplacer la facture</h3>
+                  <p className="text-xs text-slate-500 font-medium">Choisissez un dossier de destination</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowMoveToFolderModal(false);
+                  setInvoiceToMove(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Infos sur la facture */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <Receipt className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-bold text-slate-900 mb-1">{invoiceToMove.entreprise}</p>
+                  <p className="text-slate-600 text-xs">
+                    {new Date(invoiceToMove.date_facture).toLocaleDateString('fr-FR')} • {(invoiceToMove.montant_ttc || invoiceToMove.total_amount)?.toFixed(2)} €
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Liste des dossiers */}
+            <div className="space-y-2 mb-6 max-h-[400px] overflow-y-auto">
+              {folders.length === 0 ? (
+                <div className="text-center py-8">
+                  <Folder className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm font-medium mb-4">Aucun dossier créé</p>
+                  <button
+                    onClick={() => {
+                      setShowMoveToFolderModal(false);
+                      setInvoiceToMove(null);
+                      setShowFolderModal(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-bold text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Créer un dossier
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
+                    Sélectionnez un dossier ({folders.length})
+                  </p>
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      onClick={() => {
+                        moveInvoiceToFolder(invoiceToMove.id, folder.id);
+                      }}
+                      className="w-full flex items-center gap-4 p-4 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all group text-left"
+                    >
+                      <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <Folder className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-slate-900 text-sm truncate group-hover:text-purple-600 transition-colors">
+                          {folder.name}
+                        </p>
+                        {folder.reference && (
+                          <p className="text-xs text-slate-500 truncate">
+                            Réf: {folder.reference}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90 group-hover:text-purple-500 transition-colors" />
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Boutons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowMoveToFolderModal(false);
+                  setInvoiceToMove(null);
+                }}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-bold text-sm"
+              >
+                Annuler
+              </button>
+              {folders.length > 0 && (
+                <button
+                  onClick={() => {
+                    setShowMoveToFolderModal(false);
+                    setInvoiceToMove(null);
+                    setShowFolderModal(true);
+                  }}
+                  className="px-4 py-3 border-2 border-purple-500 text-purple-600 rounded-xl hover:bg-purple-50 transition-colors font-bold text-sm flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nouveau dossier
+                </button>
+              )}
             </div>
           </div>
         </div>
