@@ -3205,6 +3205,91 @@ export default function Dashboard() {
 
         {/* HISTORIQUE */}
         {currentView === 'historique' && (
+          <>
+            {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
+            {userTier !== 'pro' && !isLoadingProfile ? (
+              <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
+                <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-2xl w-full text-center space-y-6">
+                  {/* Icône principale */}
+                  <div className="flex items-center justify-center">
+                    <div className="relative">
+                      <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-orange-50 rounded-2xl flex items-center justify-center border-4 border-orange-200 shadow-lg">
+                        <Clock className="w-12 h-12 text-orange-500" />
+                      </div>
+                      <div className="absolute -top-2 -right-2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                        <Crown className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Message principal */}
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
+                      Historique Réservé aux Membres PRO
+                    </h2>
+                    <p className="text-lg text-slate-600 font-medium">
+                      Accédez à l'historique complet de vos factures et suivez vos dépenses en temps réel
+                    </p>
+                  </div>
+
+                  {/* Liste des avantages */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left">
+                    <p className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wide">
+                      Avec ArtisScan Pro, vous débloquez :
+                    </p>
+                    <ul className="space-y-3 text-sm text-slate-700">
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Historique illimité</strong> de toutes vos factures</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Recherche avancée</strong> par fournisseur, catégorie, montant</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Exports CSV/Excel/PDF</strong> pour votre comptable</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Filtres par période</strong> et catégorie</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Badge essai gratuit */}
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+                    <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      Offre spéciale
+                    </p>
+                    <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
+                    <p className="text-sm opacity-90">
+                      Testez toutes les fonctionnalités sans engagement
+                    </p>
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => router.push('/pricing')}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 text-base"
+                    >
+                      <Crown className="w-5 h-5" />
+                      Débloquer l'Historique PRO
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentView('dashboard')}
+                      className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
+                    >
+                      ← Retour au Dashboard
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // ✅ CONTENU NORMAL pour utilisateurs PRO
           <div className="fade-in space-y-4">
             {/* Header avec action */}
             <div className="flex items-center justify-between">
@@ -3590,10 +3675,97 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+            )}
+          </>
         )}
 
         {/* DOSSIERS PERSONNALISÉS */}
         {currentView === 'folders' && (
+          <>
+            {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
+            {userTier !== 'pro' && !isLoadingProfile ? (
+              <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
+                <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-2xl w-full text-center space-y-6">
+                  {/* Icône principale */}
+                  <div className="flex items-center justify-center">
+                    <div className="relative">
+                      <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-orange-50 rounded-2xl flex items-center justify-center border-4 border-orange-200 shadow-lg">
+                        <Folder className="w-12 h-12 text-orange-500" />
+                      </div>
+                      <div className="absolute -top-2 -right-2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                        <Crown className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Message principal */}
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
+                      Dossiers Réservés aux Membres PRO
+                    </h2>
+                    <p className="text-lg text-slate-600 font-medium">
+                      Organisez vos factures par projets, clients ou périodes avec des dossiers personnalisés
+                    </p>
+                  </div>
+
+                  {/* Liste des avantages */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left">
+                    <p className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wide">
+                      Avec ArtisScan Pro, vous débloquez :
+                    </p>
+                    <ul className="space-y-3 text-sm text-slate-700">
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Dossiers illimités</strong> pour organiser vos factures</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Références comptables</strong> personnalisées par dossier</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Exports groupés</strong> par dossier (PDF, Excel, CSV)</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
+                        <span><strong>Envoi direct</strong> au comptable par dossier</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Badge essai gratuit */}
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+                    <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      Offre spéciale
+                    </p>
+                    <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
+                    <p className="text-sm opacity-90">
+                      Testez toutes les fonctionnalités sans engagement
+                    </p>
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => router.push('/pricing')}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 text-base"
+                    >
+                      <Crown className="w-5 h-5" />
+                      Débloquer les Dossiers PRO
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentView('dashboard')}
+                      className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
+                    >
+                      ← Retour au Dashboard
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // ✅ CONTENU NORMAL pour utilisateurs PRO
           <div className="fade-in">
             {!selectedFolder ? (
               <>
@@ -3801,6 +3973,8 @@ export default function Dashboard() {
               </>
             )}
           </div>
+            )}
+          </>
         )}
 
         {/* PARAMÈTRES - Design Pro */}
