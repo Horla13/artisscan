@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Invoice {
   id: string;
+  user_id: string;
   entreprise: string;
   montant_ht: number;
   tva: number;
@@ -985,29 +986,49 @@ export default function Dashboard() {
         throw new Error('ID de dossier invalide (chaîne vide)');
       }
       
+      // Récupérer l'utilisateur connecté
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('❌ Erreur authentification:', authError);
+        throw new Error('Utilisateur non connecté');
+      }
+      
+      console.log('👤 User ID:', user.id);
+      
       // Vérifier que la facture existe
       const invoiceExists = invoices.find(inv => inv.id === invoiceId);
       if (!invoiceExists) {
+        console.error('❌ Facture introuvable dans le state:', invoiceId);
+        console.log('   Factures disponibles:', invoices.map(i => ({ id: i.id, entreprise: i.entreprise })));
         throw new Error(`Facture ${invoiceId} introuvable dans la liste actuelle`);
       }
-      console.log('✅ Facture trouvée:', invoiceExists.entreprise);
+      console.log('✅ Facture trouvée dans le state:', invoiceExists.entreprise);
+      console.log('   user_id de la facture:', invoiceExists.user_id);
       
       // Vérifier que le dossier existe (si folderId n'est pas null)
       if (folderId !== null) {
         const folderExists = folders.find(f => f.id === folderId);
         if (!folderExists) {
+          console.error('❌ Dossier introuvable dans le state:', folderId);
+          console.log('   Dossiers disponibles:', folders.map(f => ({ id: f.id, name: f.name })));
           throw new Error(`Dossier ${folderId} introuvable dans la liste actuelle`);
         }
-        console.log('✅ Dossier trouvé:', folderExists.name);
+        console.log('✅ Dossier trouvé dans le state:', folderExists.name);
       }
       
       console.log('🚀 Tentative d\'update Supabase...');
-      console.log('   UPDATE scans SET folder_id =', folderId, 'WHERE id =', invoiceId);
+      console.log('   UPDATE scans');
+      console.log('   SET folder_id =', folderId);
+      console.log('   WHERE id =', invoiceId);
+      console.log('   AND user_id =', user.id);
       
+      // ✅ REQUÊTE AVEC DOUBLE FILTRE (id + user_id)
       const { data, error } = await supabase
         .from('scans')
         .update({ folder_id: folderId })
         .eq('id', invoiceId)
+        .eq('user_id', user.id)  // 🔒 Sécurité RLS
         .select();
 
       if (error) {
@@ -1024,25 +1045,65 @@ export default function Dashboard() {
       console.log('   Nombre de lignes modifiées:', data?.length || 0);
       
       if (!data || data.length === 0) {
-        console.warn('⚠️ ATTENTION: Aucune ligne modifiée par l\'update!');
-        console.warn('   Cela signifie que la facture n\'existe pas ou que l\'ID ne correspond pas');
-        throw new Error('Aucune facture n\'a été modifiée. Vérifiez que la facture existe dans la base de données.');
+        console.error('❌ AUCUNE LIGNE MODIFIÉE!');
+        console.error('   Possible raisons:');
+        console.error('   1. L\'ID de la facture n\'existe pas dans la BDD');
+        console.error('   2. La facture appartient à un autre user_id');
+        console.error('   3. Row Level Security (RLS) bloque l\'accès');
+        console.error('   Vérification en BDD nécessaire...');
+        
+        // Tentative de lecture directe pour vérifier l'existence
+        console.log('🔍 Tentative de lecture directe de la facture...');
+        const { data: checkData, error: checkError } = await supabase
+          .from('scans')
+          .select('id, user_id, folder_id, entreprise')
+          .eq('id', invoiceId);
+        
+        if (checkError) {
+          console.error('❌ Erreur lecture:', checkError.message);
+        } else if (!checkData || checkData.length === 0) {
+          console.error('❌ La facture n\'existe PAS dans la BDD avec cet ID!');
+          throw new Error('Cette facture n\'existe pas dans la base de données. L\'ID pourrait être incorrect.');
+        } else {
+          console.log('📊 Facture trouvée en BDD:', checkData[0]);
+          console.log('   Son user_id:', checkData[0].user_id);
+          console.log('   User actuel:', user.id);
+          console.log('   Match?', checkData[0].user_id === user.id);
+          
+          if (checkData[0].user_id !== user.id) {
+            throw new Error('Cette facture appartient à un autre utilisateur. Accès refusé.');
+          } else {
+            throw new Error('La facture existe mais l\'update a échoué. Vérifiez les permissions RLS dans Supabase.');
+          }
+        }
       }
       
       const updatedRow = data[0];
       console.log('📊 Ligne mise à jour:', updatedRow);
       console.log('   folder_id après update:', updatedRow.folder_id);
       console.log('   folder_id type:', typeof updatedRow.folder_id);
+      console.log('   Correspondance?', updatedRow.folder_id === folderId);
 
-      console.log('🔄 Rechargement des factures...');
+      console.log('🔄 Rechargement FORCÉ des factures...');
+      
+      // ✅ RECHARGEMENT FORCÉ - Attendre la fin
       await loadInvoices();
       
-      console.log('🔍 Vérification après rechargement...');
-      const updatedInvoice = invoices.find(inv => inv.id === invoiceId);
-      console.log('   Facture rechargée:', updatedInvoice);
-      console.log('   Son folder_id:', updatedInvoice?.folder_id);
-      console.log('   Types correspondent?', typeof updatedInvoice?.folder_id === typeof folderId);
-      console.log('   Valeurs correspondent?', updatedInvoice?.folder_id === folderId);
+      // ✅ DOUBLE VÉRIFICATION après rechargement
+      console.log('🔍 Double vérification après rechargement...');
+      
+      // Attendre un peu que le state se mette à jour
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Re-fetch direct pour être sûr
+      const { data: freshData } = await supabase
+        .from('scans')
+        .select('*')
+        .eq('id', invoiceId)
+        .single();
+      
+      console.log('📊 Données fraîches depuis Supabase:', freshData);
+      console.log('   folder_id final:', freshData?.folder_id);
       
       if (folderId) {
         const folder = folders.find(f => f.id === folderId);
@@ -1054,7 +1115,12 @@ export default function Dashboard() {
       setShowMoveToFolderModal(false);
       setInvoiceToMove(null);
       
-      console.log('📂 === DÉPLACEMENT FACTURE - FIN ===');
+      // ✅ FORCE UN NOUVEAU RECHARGEMENT pour être certain
+      setTimeout(() => {
+        loadInvoices();
+      }, 1000);
+      
+      console.log('📂 === DÉPLACEMENT FACTURE - FIN AVEC SUCCÈS ===');
     } catch (err: any) {
       console.error('❌ === ERREUR DÉPLACEMENT ===');
       console.error('   Message:', err.message);
