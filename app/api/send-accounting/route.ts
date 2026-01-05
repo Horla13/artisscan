@@ -91,10 +91,10 @@ export async function POST(req: NextRequest) {
         <!-- Footer -->
         <div style="text-align: center; padding-top: 24px; border-top: 1px solid #f1f5f9;">
           <p style="color: #94a3b8; font-size: 12px; margin: 0 0 8px 0;">
-            Ce document a été généré automatiquement par ArtisScan
+            Envoyé via ArtisScan - Gestion intelligente pour artisans
           </p>
           <p style="color: #cbd5e1; font-size: 11px; margin: 0;">
-            © ${new Date().getFullYear()} ArtisScan - Gestion intelligente pour artisans
+            © ${new Date().getFullYear()} ArtisScan
           </p>
         </div>
       </div>
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     // Envoyer l'email via Resend
     const { data, error } = await resend.emails.send({
-      from: 'ArtisScan <onboarding@resend.dev>',
+      from: 'ArtisScan <contact@artisscan.fr>',
       to: [comptableEmail],
       subject: `Pièces comptables ${userName || userEmail || ''} - ${periodDescription || new Date().toLocaleDateString('fr-FR')}`,
       html: emailBody,

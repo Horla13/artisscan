@@ -210,8 +210,11 @@ export async function POST(req: Request) {
                   <p style="margin: 0 0 12px 0; color: #94a3b8; font-size: 13px; line-height: 1.6;">
                     Une question ? Répondez directement à cet email, nous sommes là pour vous aider.
                   </p>
-                  <p style="margin: 0 0 24px 0; color: #cbd5e1; font-size: 12px;">
-                    © ${new Date().getFullYear()} ArtisScan - Gestion intelligente pour artisans<br>
+                  <p style="margin: 0 0 8px 0; color: #94a3b8; font-size: 12px;">
+                    Envoyé via ArtisScan - Gestion intelligente pour artisans
+                  </p>
+                  <p style="margin: 0 0 24px 0; color: #cbd5e1; font-size: 11px;">
+                    © ${new Date().getFullYear()} ArtisScan<br>
                     Vous recevez cet email car vous venez de créer un compte ArtisScan Pro.
                   </p>
                   <div style="display: inline-flex; gap: 16px; margin-top: 16px;">
@@ -229,7 +232,7 @@ export async function POST(req: Request) {
           `;
 
           const { data: emailData, error: emailError } = await resend.emails.send({
-            from: 'ArtisScan <onboarding@resend.dev>',
+            from: 'ArtisScan <contact@artisscan.fr>',
             to: [userEmail],
             subject: 'Bienvenue sur votre Dashboard ArtisScan Pro ! 🚀',
             html: emailHtml,
