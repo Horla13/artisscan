@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       mimeType = 'text/csv';
     }
 
-    // Construire le corps de l'email avec design moderne Orange & Gris
+    // Construire le corps de l'email avec design ArtisScan Orange #FF8C00
     const emailBody = `
       <!DOCTYPE html>
       <html lang="fr">
@@ -64,17 +64,15 @@ export async function POST(req: NextRequest) {
         
         <div style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
           
-          <!-- Header avec Logo ArtisScan -->
-          <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 48px 40px; text-align: center;">
-            <div style="margin-bottom: 16px;">
-              <img 
-                src="https://i.ibb.co/XYY8H2/logo-artisscan-gestion-intelligente.png" 
-                alt="ArtisScan" 
-                width="200" 
-                style="max-width: 100%; height: auto; display: inline-block;"
-              />
-            </div>
-            <div style="margin-top: 12px;">
+          <!-- Header avec Logo ArtisScan Officiel -->
+          <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 50px 40px; text-align: center;">
+            <img 
+              src="https://www.artisscan.fr/logo.svg" 
+              alt="ArtisScan" 
+              width="200" 
+              style="display: block; margin: 0 auto; max-width: 200px; height: auto;"
+            />
+            <div style="margin-top: 20px;">
               <h1 style="color: #ffffff; font-size: 32px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.5px;">
                 ArtisScan
               </h1>
@@ -85,7 +83,7 @@ export async function POST(req: NextRequest) {
           </div>
 
           <!-- Contenu Principal -->
-          <div style="padding: 48px 40px;">
+          <div style="padding: 50px 40px;">
             
             <!-- Titre et Message -->
             <div style="margin-bottom: 40px;">
@@ -93,19 +91,19 @@ export async function POST(req: NextRequest) {
                 📊 Pièces comptables
               </h2>
               
-              <p style="color: #475569; font-size: 16px; line-height: 1.7; margin: 0 0 16px 0;">
+              <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 16px 0;">
                 Bonjour,
               </p>
               
-              <p style="color: #475569; font-size: 16px; line-height: 1.7; margin: 0;">
-                Vous trouverez ci-joint les pièces comptables de <strong style="color: #1e293b; font-weight: 600;">${userName || userEmail || 'votre client'}</strong>${periodDescription ? ` pour la période <strong style="color: #f97316; font-weight: 600;">${periodDescription}</strong>` : ''}.
+              <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0;">
+                Vous trouverez ci-joint les pièces comptables de <strong style="color: #1e293b; font-weight: 600;">${userName || userEmail || 'votre client'}</strong>${periodDescription ? ` pour la période <strong style="color: #FF8C00; font-weight: 600;">${periodDescription}</strong>` : ''}.
               </p>
             </div>
 
             <!-- Tableau Récapitulatif Financier -->
-            <div style="background-color: #f8fafc; border-radius: 16px; padding: 32px; margin-bottom: 40px;">
+            <div style="background-color: #fafafa; border: 2px solid #FF8C00; border-radius: 16px; padding: 32px; margin-bottom: 40px;">
               
-              <h3 style="color: #1e293b; font-size: 20px; font-weight: 700; margin: 0 0 24px 0;">
+              <h3 style="color: #FF8C00; font-size: 20px; font-weight: 700; margin: 0 0 28px 0; text-align: center; text-transform: uppercase; letter-spacing: 1px;">
                 Récapitulatif Financier
               </h3>
               
@@ -114,10 +112,10 @@ export async function POST(req: NextRequest) {
                 <!-- En-tête Orange -->
                 <thead>
                   <tr>
-                    <th style="padding: 15px 15px 15px 0; text-align: left; color: #f97316; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #f97316;">
+                    <th style="padding: 20px 20px 20px 0; text-align: left; color: #FF8C00; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #FF8C00;">
                       Libellé
                     </th>
-                    <th style="padding: 15px 0 15px 15px; text-align: right; color: #f97316; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #f97316;">
+                    <th style="padding: 20px 0 20px 20px; text-align: right; color: #FF8C00; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #FF8C00;">
                       Montant
                     </th>
                   </tr>
@@ -128,10 +126,10 @@ export async function POST(req: NextRequest) {
                   
                   <!-- Nombre de factures -->
                   <tr>
-                    <td style="padding: 15px 15px 15px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 20px 20px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
                       Nombre de factures
                     </td>
-                    <td style="padding: 15px 0 15px 15px; color: #1e293b; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 0 20px 20px; color: #1e293b; font-size: 15px; font-weight: 600; text-align: right; border-bottom: 1px solid #e2e8f0;">
                       ${invoicesCount || 0}
                     </td>
                   </tr>
@@ -139,10 +137,10 @@ export async function POST(req: NextRequest) {
                   ${totalHT ? `
                   <!-- Total HT -->
                   <tr>
-                    <td style="padding: 15px 15px 15px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 20px 20px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
                       Total Hors Taxes (HT)
                     </td>
-                    <td style="padding: 15px 0 15px 15px; color: #1e293b; font-size: 18px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 0 20px 20px; color: #1e293b; font-size: 18px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
                       ${totalHT} €
                     </td>
                   </tr>
@@ -151,10 +149,10 @@ export async function POST(req: NextRequest) {
                   ${totalTVA ? `
                   <!-- TVA Récupérable -->
                   <tr>
-                    <td style="padding: 15px 15px 15px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 20px 20px 0; color: #64748b; font-size: 15px; border-bottom: 1px solid #e2e8f0;">
                       TVA Récupérable
                     </td>
-                    <td style="padding: 15px 0 15px 15px; color: #10b981; font-size: 18px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 20px 0 20px 20px; color: #10b981; font-size: 18px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
                       + ${totalTVA} €
                     </td>
                   </tr>
@@ -165,18 +163,18 @@ export async function POST(req: NextRequest) {
               
               ${totalTTC ? `
               <!-- Total TTC (Encadré Orange) -->
-              <div style="margin-top: 24px; background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 3px solid #f97316; border-radius: 12px; padding: 20px; text-align: center;">
-                <p style="color: #9a3412; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
+              <div style="margin-top: 28px; background: linear-gradient(135deg, #fff5e6 0%, #ffe6cc 100%); border: 3px solid #FF8C00; border-radius: 12px; padding: 24px; text-align: center;">
+                <p style="color: #cc6600; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">
                   💰 Total TTC
                 </p>
-                <p style="color: #ea580c; font-size: 36px; font-weight: 900; margin: 0; letter-spacing: -1px;">
+                <p style="color: #FF8C00; font-size: 38px; font-weight: 900; margin: 0; letter-spacing: -1px;">
                   ${totalTTC} €
                 </p>
               </div>
               ` : ''}
               
               <!-- Info Format -->
-              <div style="margin-top: 20px; text-align: right;">
+              <div style="margin-top: 24px; text-align: right;">
                 <p style="color: #94a3b8; font-size: 13px; margin: 0;">
                   <strong>Format du fichier :</strong> ${fileName.split('.').pop()?.toUpperCase()}
                 </p>
@@ -184,31 +182,28 @@ export async function POST(req: NextRequest) {
               
             </div>
 
-            <!-- Bouton CTA (optionnel) -->
-            <div style="text-align: center; margin-bottom: 40px;">
-              <a 
-                href="https://www.artisscan.fr/dashboard" 
-                style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 40px; border-radius: 10px; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);"
-              >
-                📊 Accéder au tableau de bord
-              </a>
+            <!-- Ligne de séparation fine -->
+            <div style="border-top: 1px solid #e2e8f0; margin: 40px 0 32px;"></div>
+
+            <!-- Signature -->
+            <div style="margin-bottom: 32px;">
+              <p style="color: #64748b; font-size: 16px; line-height: 1.8; margin: 0 0 12px 0;">
+                Cordialement,
+              </p>
+              <p style="margin: 0 0 8px 0;">
+                <span style="color: #FF8C00; font-size: 18px; font-weight: 700;">L'équipe ArtisScan</span>
+              </p>
+              <p style="margin: 0;">
+                <a href="mailto:contact@artisscan.fr" style="color: #FF8C00; font-size: 14px; text-decoration: none; font-weight: 600;">
+                  ✉️ contact@artisscan.fr
+                </a>
+              </p>
             </div>
 
             <!-- Ligne de séparation -->
-            <div style="border-top: 2px solid #e2e8f0; margin: 40px 0 32px;"></div>
-
-            <!-- Signature -->
-            <div style="margin-bottom: 24px;">
-              <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
-                Cordialement,
-              </p>
-              <p style="margin: 0;">
-                <span style="color: #f97316; font-size: 18px; font-weight: 700;">L'équipe ArtisScan</span>
-              </p>
-              <p style="margin: 8px 0 0 0;">
-                <a href="mailto:contact@artisscan.fr" style="color: #f97316; font-size: 14px; text-decoration: none; font-weight: 600;">
-                  ✉️ contact@artisscan.fr
-                </a>
+            <div style="border-top: 1px solid #e2e8f0; margin: 32px 0; padding-top: 24px;">
+              <p style="color: #94a3b8; font-size: 13px; text-align: center; margin: 0; line-height: 1.6;">
+                <strong style="color: #FF8C00;">ArtisScan</strong> — La gestion intelligente pour les artisans
               </p>
             </div>
 
@@ -223,15 +218,15 @@ export async function POST(req: NextRequest) {
               © ${new Date().getFullYear()} ArtisScan. Tous droits réservés.
             </p>
             <div style="margin-top: 16px;">
-              <a href="https://www.artisscan.fr" style="color: #f97316; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
+              <a href="https://www.artisscan.fr" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
                 Site web
               </a>
               <span style="color: #475569;">•</span>
-              <a href="https://www.artisscan.fr/legal/confidentialite" style="color: #f97316; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
+              <a href="https://www.artisscan.fr/legal/confidentialite" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
                 Confidentialité
               </a>
               <span style="color: #475569;">•</span>
-              <a href="mailto:contact@artisscan.fr" style="color: #f97316; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
+              <a href="mailto:contact@artisscan.fr" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
                 Contact
               </a>
             </div>
