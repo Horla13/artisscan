@@ -63,6 +63,73 @@ function validateEquilibre(ecritures: LigneEcriture[]): {
   return { valid: true, totalDebit, totalCredit };
 }
 
+// ========== MAPPING INTELLIGENT DES COMPTES COMPTABLES ==========
+const COMPTE_MAPPING: Record<string, { compte: string; libelle: string; seuilImmo?: number; compteImmo?: string }> = {
+  'Matériaux': {
+    compte: '601000',
+    libelle: 'Achats de matières premières',
+  },
+  'Fournitures': {
+    compte: '606000',
+    libelle: 'Achats non stockés de matières et fournitures',
+  },
+  'Carburant': {
+    compte: '606100',
+    libelle: 'Fournitures non stockables (eau, énergie, carburant)',
+  },
+  'Outillage': {
+    compte: '606300',
+    libelle: 'Fournitures d\'entretien et de petit équipement',
+    seuilImmo: 500, // Si > 500€ → Immobilisation
+    compteImmo: '2154000',
+  },
+  'Services': {
+    compte: '628000',
+    libelle: 'Divers (services)',
+  },
+  'Abonnements': {
+    compte: '628000',
+    libelle: 'Divers (abonnements)',
+  },
+  'Restaurant': {
+    compte: '625600',
+    libelle: 'Missions',
+  },
+  'Location': {
+    compte: '613000',
+    libelle: 'Locations',
+  },
+  'Sous-traitance': {
+    compte: '604000',
+    libelle: 'Achats d\'études et prestations de services',
+  },
+};
+
+function getCompteComptable(categorie: string, montantTTC: number): { compte: string; libelle: string } {
+  const mapping = COMPTE_MAPPING[categorie];
+  
+  if (!mapping) {
+    // Catégorie inconnue → Compte par défaut
+    return {
+      compte: '606000',
+      libelle: 'Achats non stockés de matières et fournitures',
+    };
+  }
+  
+  // Si c'est de l'outillage et montant > 500€ → Immobilisation
+  if (mapping.seuilImmo && mapping.compteImmo && montantTTC > mapping.seuilImmo) {
+    return {
+      compte: mapping.compteImmo,
+      libelle: 'Matériel industriel',
+    };
+  }
+  
+  return {
+    compte: mapping.compte,
+    libelle: mapping.libelle,
+  };
+}
+
 // ========== GÉNÉRATION CSV FORMAT FEC (Point-virgule, Virgule décimale) ==========
 function generateFECCSV(invoices: any[]): string {
   const lignesEcritures: LigneEcriture[] = [];
@@ -80,20 +147,35 @@ function generateFECCSV(invoices: any[]): string {
     
     const fournisseur = invoice.entreprise || 'Fournisseur inconnu';
     const description = invoice.description || `Achat - ${fournisseur}`;
+    const categorie = invoice.categorie || 'Autre';
     
-    // Génération du code auxiliaire tiers (max 20 caractères)
-    const compAuxNum = `FOUR_${fournisseur.substring(0, 10).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+    // Mapping intelligent du compte comptable selon la catégorie
+    const compteInfo = getCompteComptable(categorie, ttc);
+    
+    // Génération du code auxiliaire tiers (max 20 caractères) avec normalisation
+    // Suppression des accents et caractères spéciaux pour compatibilité Sage/Cegid
+    const cleanFournisseur = fournisseur
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Supprime les accents
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '_') // Garde uniquement alphanumérique
+      .substring(0, 15);
+    
+    // Ajouter un hash unique si le nom est trop court
+    const compAuxNum = cleanFournisseur.length < 5
+      ? `FOUR_${cleanFournisseur}_${invoice.id?.slice(-4) || String(index).padStart(4, '0')}`
+      : `FOUR_${cleanFournisseur}`;
     
     // ====== ÉCRITURE D'ACHAT (3 lignes par facture) ======
     
-    // Ligne 1 : DÉBIT - Compte de charge (606)
+    // Ligne 1 : DÉBIT - Compte de charge (intelligent selon catégorie)
     lignesEcritures.push({
       journalCode: 'AC',
       journalLibelle: 'Achats',
       ecritureNum,
       ecritureDate,
-      compteNum: '606000',
-      compteLibelle: 'Achats non stockés de matières et fournitures',
+      compteNum: compteInfo.compte,
+      compteLibelle: compteInfo.libelle,
       compAuxNum: '',
       compAuxLibelle: '',
       pieceRef,

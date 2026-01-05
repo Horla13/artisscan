@@ -276,6 +276,36 @@ export default function Dashboard() {
     setSelectedMonths([defaultMonth]);
   }, [availableMonths, selectedMonths.length]);
 
+  // ========== CHARGEMENT DE L'EMAIL DU COMPTABLE DEPUIS LE PROFIL ==========
+  useEffect(() => {
+    const loadComptableEmail = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('comptable_email')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.warn('⚠️ Impossible de charger l\'email du comptable:', error.message);
+          return;
+        }
+
+        if (profile?.comptable_email) {
+          console.log('✅ Email du comptable chargé depuis le profil');
+          setComptableEmail(profile.comptable_email);
+        }
+      } catch (err) {
+        console.warn('⚠️ Erreur lors du chargement de l\'email:', err);
+      }
+    };
+
+    loadComptableEmail();
+  }, []); // Charger une seule fois au montage
+
   // Fonction pour tout rafraîchir (Données)
   const refreshAllData = async () => {
     console.log('🔄 Rafraîchissement global des données demandé...');
@@ -1225,8 +1255,19 @@ export default function Dashboard() {
 
   // Envoyer au comptable
   const sendToAccountant = async () => {
-    if (!comptableEmail || !comptableEmail.includes('@')) {
-      showToastMessage('❌ Email invalide', 'error');
+    // ========== VALIDATION STRICTE DE L'EMAIL ==========
+    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!comptableEmail || !emailRegex.test(comptableEmail)) {
+      showToastMessage('❌ Email invalide. Format attendu : exemple@cabinet.fr', 'error');
+      return;
+    }
+
+    // Validation supplémentaire : domaines suspects
+    const suspiciousDomains = ['test.com', 'example.com', 'tempmail.com'];
+    const domain = comptableEmail.split('@')[1]?.toLowerCase();
+    if (suspiciousDomains.includes(domain)) {
+      showToastMessage('⚠️ Veuillez utiliser un email professionnel valide', 'error');
       return;
     }
 
@@ -1240,6 +1281,23 @@ export default function Dashboard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Non connecté');
+
+      // ========== SAUVEGARDER L'EMAIL DU COMPTABLE DANS LE PROFIL ==========
+      // Mise à jour silencieuse (on ne bloque pas si ça échoue)
+      try {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ comptable_email: comptableEmail })
+          .eq('id', user.id);
+        
+        if (updateError) {
+          console.warn('⚠️ Impossible de sauvegarder l\'email du comptable:', updateError.message);
+        } else {
+          console.log('✅ Email du comptable sauvegardé dans le profil');
+        }
+      } catch (saveErr) {
+        console.warn('⚠️ Erreur lors de la sauvegarde de l\'email:', saveErr);
+      }
 
       let invoicesData: Invoice[] = [];
       let invoicesCount = 0;
@@ -2526,7 +2584,27 @@ export default function Dashboard() {
         console.log('🧮 TTC calculé automatiquement:', montantTTC);
       }
 
-      // Validation finale
+      // ========== VALIDATION MATHÉMATIQUE STRICTE ==========
+      // Vérifier que HT + TVA = TTC (tolérance 0.05€ pour arrondis)
+      const calculatedTTC = montantHT + tva;
+      const difference = Math.abs(calculatedTTC - montantTTC);
+      
+      if (difference > 0.05) {
+        console.error('❌ ERREUR CALCUL:', {
+          montantHT,
+          tva,
+          montantTTC,
+          calculated: calculatedTTC,
+          difference
+        });
+        showToastMessage(
+          `❌ Erreur de calcul détectée : HT (${montantHT.toFixed(2)}€) + TVA (${tva.toFixed(2)}€) = ${calculatedTTC.toFixed(2)}€ ≠ TTC (${montantTTC.toFixed(2)}€). Veuillez vérifier les montants.`,
+          'error'
+        );
+        return;
+      }
+
+      // Validation finale des valeurs
       if (isNaN(tva) || tva < 0) {
         showToastMessage('❌ Montant TVA invalide ou manquant', 'error');
         return;
@@ -2535,6 +2613,15 @@ export default function Dashboard() {
       if (isNaN(montantTTC) || montantTTC < 0) {
         showToastMessage('❌ Montant TTC invalide ou manquant', 'error');
         return;
+      }
+
+      // Validation taux de TVA (doit être entre 0% et 25%)
+      const tauxTVA = montantHT > 0 ? (tva / montantHT) * 100 : 0;
+      if (tauxTVA > 25) {
+        console.warn('⚠️ Taux TVA anormal:', tauxTVA.toFixed(2) + '%');
+        // On affiche un avertissement mais on ne bloque pas
+        alert(`⚠️ ATTENTION : Taux de TVA anormal (${tauxTVA.toFixed(1)}%)\n\nLes taux standard en France sont 5,5%, 10% ou 20%.\n\nVérifiez les montants avant d'enregistrer.`);
+        // On continue pour permettre à l'utilisateur de corriger
       }
 
       // Préparer les données pour l'insertion
