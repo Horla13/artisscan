@@ -1241,16 +1241,14 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Non connecté');
 
-      let fileData = '';
-      let fileName = '';
-      let fileType = '';
+      let invoicesData: Invoice[] = [];
       let invoicesCount = 0;
       let totalHT = 0;
       let totalTVA = 0;
       let totalTTC = 0;
       let periodDescription = '';
 
-      // Générer le fichier selon le contexte
+      // Récupérer les factures selon le contexte
       if (emailContext.type === 'folder' && emailContext.data) {
         const folder = emailContext.data as Folder;
         const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
@@ -1261,53 +1259,24 @@ export default function Dashboard() {
           return;
         }
 
+        invoicesData = folderInvoices;
         invoicesCount = folderInvoices.length;
         totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
         totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
         totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
         periodDescription = `le dossier "${folder.name}"`;
 
-        // Générer Excel pour dossier
-        const data = folderInvoices.map(inv => {
-          const tva = inv.tva !== undefined && inv.tva !== null 
-            ? inv.tva 
-            : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
-          return {
-            'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-            'Fournisseur': inv.entreprise,
-            'Catégorie': inv.categorie || 'Non classé',
-            'Description': inv.description || '',
-            'Montant HT (€)': inv.montant_ht,
-            'TVA (€)': tva,
-            'Montant TTC (€)': inv.montant_ttc || inv.total_amount
-          };
-        });
-
-        const totalHTCalc = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
-        const totalTVACalc = data.reduce((sum, row) => sum + row['TVA (€)'], 0);
-        const finalData = [...data, {}, {
-          'Date': 'TOTAL',
-          'Fournisseur': '',
-          'Catégorie': '',
-          'Description': '',
-          'Montant HT (€)': totalHTCalc,
-          'TVA (€)': totalTVACalc,
-          'Montant TTC (€)': totalTTC
-        }];
-
-        const ws = XLSX.utils.json_to_sheet(finalData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, folder.name.substring(0, 31));
-        
-        // Convertir en base64
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-        fileData = wbout;
-        fileName = `dossier_${folder.name.replace(/\s+/g, '_')}.xlsx`;
-        fileType = 'xlsx';
-
       } else if (emailContext.type === 'monthly') {
         // Export mensuel (sélection multiple)
         const filtered = filteredInvoices;
+        
+        if (filtered.length === 0) {
+          showToastMessage('❌ Aucune facture pour cette période', 'error');
+          setSendingEmail(false);
+          return;
+        }
+        
+        invoicesData = filtered;
         invoicesCount = filtered.length;
         totalHT = filtered.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
         totalTVA = filtered.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
@@ -1315,76 +1284,13 @@ export default function Dashboard() {
         periodDescription = selectedMonths.length > 1 
           ? `${selectedMonths.length} mois sélectionnés` 
           : selectedMonths[0] || 'la période sélectionnée';
-
-        if (selectedMonths.length > 1) {
-          // Excel multi-onglets
-          const wb = XLSX.utils.book_new();
-          
-          selectedMonths.forEach(monthKey => {
-            const monthInvoices = invoices.filter(inv => {
-              const invMonth = `${new Date(inv.date_facture).toLocaleDateString('fr-FR', { month: 'long' })} ${new Date(inv.date_facture).getFullYear()}`;
-              return invMonth === monthKey;
-            });
-
-            const data = monthInvoices.map(inv => {
-              const tva = inv.tva !== undefined && inv.tva !== null 
-                ? inv.tva 
-                : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
-              return {
-                'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-                'Fournisseur': inv.entreprise,
-                'Catégorie': inv.categorie || 'Non classé',
-                'Description': inv.description || '',
-                'Montant HT (€)': inv.montant_ht,
-                'TVA (€)': tva,
-                'Montant TTC (€)': inv.montant_ttc || inv.total_amount
-              };
-            });
-
-            if (data.length > 0) {
-              const ws = XLSX.utils.json_to_sheet(data);
-              XLSX.utils.book_append_sheet(wb, ws, monthKey.substring(0, 31));
-            }
-          });
-
-          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-          fileData = wbout;
-          fileName = `export_multi_mois_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.xlsx`;
-          fileType = 'xlsx';
-
-        } else {
-          // Excel simple
-          const data = filtered.map(inv => {
-            const tva = inv.tva !== undefined && inv.tva !== null 
-              ? inv.tva 
-              : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
-            return {
-              'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-              'Fournisseur': inv.entreprise,
-              'Catégorie': inv.categorie || 'Non classé',
-              'Description': inv.description || '',
-              'Montant HT (€)': inv.montant_ht,
-              'TVA (€)': tva,
-              'Montant TTC (€)': inv.montant_ttc || inv.total_amount
-            };
-          });
-
-          const ws = XLSX.utils.json_to_sheet(data);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, 'Factures');
-          
-          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-          fileData = wbout;
-          fileName = `export_${selectedMonths[0]?.replace(/\s+/g, '_')}.xlsx`;
-          fileType = 'xlsx';
-        }
       }
 
       // Récupérer le nom d'utilisateur depuis localStorage
       const companyName = localStorage.getItem('company_name') || '';
       const userName = companyName || user.email?.split('@')[0] || '';
 
-      // Appeler l'API d'envoi
+      // Appeler l'API d'envoi (PDF + CSV générés côté serveur)
       const response = await fetch('/api/send-accounting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1392,9 +1298,7 @@ export default function Dashboard() {
           comptableEmail,
           userName,
           userEmail: user.email,
-          fileData,
-          fileName,
-          fileType,
+          invoices: invoicesData, // Envoyer les données brutes des factures
           invoicesCount,
           totalHT: totalHT.toFixed(2),
           totalTVA: totalTVA.toFixed(2),
@@ -1409,7 +1313,7 @@ export default function Dashboard() {
         throw new Error(result.error || 'Erreur lors de l\'envoi');
       }
 
-      showToastMessage(`✅ Email envoyé à ${comptableEmail}`, 'success');
+      showToastMessage(`✅ Email envoyé à ${comptableEmail} avec PDF et CSV`, 'success');
       setShowEmailModal(false);
       setComptableEmail('');
       setEmailContext(null);
