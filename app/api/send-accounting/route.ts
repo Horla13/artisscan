@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
       fileName, 
       fileType,
       invoicesCount,
+      totalHT,
+      totalTVA,
       totalTTC,
       periodDescription
     } = body;
@@ -73,12 +75,43 @@ export async function POST(req: NextRequest) {
           </p>
 
           <!-- Récapitulatif -->
-          <div style="background-color: #fff7ed; border: 1px solid #ffedd5; border-radius: 16px; padding: 20px; margin: 24px 0;">
-            <p style="color: #9a3412; font-weight: 700; font-size: 13px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">📊 Récapitulatif</p>
-            <div style="color: #9a3412; font-size: 14px; line-height: 1.8;">
-              ${invoicesCount ? `<div><strong>Nombre de factures :</strong> ${invoicesCount}</div>` : ''}
-              ${totalTTC ? `<div><strong>Total TTC :</strong> ${totalTTC} €</div>` : ''}
-              <div><strong>Format :</strong> ${fileName.split('.').pop()?.toUpperCase()}</div>
+          <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px solid #fed7aa; border-radius: 16px; padding: 24px; margin: 24px 0; box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.1);">
+            <p style="color: #9a3412; font-weight: 800; font-size: 14px; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.5px; text-align: center;">
+              📊 Récapitulatif Financier
+            </p>
+            
+            <div style="background-color: white; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b; font-size: 14px; font-weight: 600;">Nombre de factures</span>
+                <span style="color: #1e293b; font-size: 16px; font-weight: 900;">${invoicesCount || 0}</span>
+              </div>
+              
+              ${totalHT ? `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b; font-size: 14px; font-weight: 600;">Total HT</span>
+                <span style="color: #1e293b; font-size: 20px; font-weight: 900;">${totalHT} €</span>
+              </div>
+              ` : ''}
+              
+              ${totalTVA ? `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b; font-size: 14px; font-weight: 600;">TVA Récupérable</span>
+                <span style="color: #16a34a; font-size: 20px; font-weight: 900;">+ ${totalTVA} €</span>
+              </div>
+              ` : ''}
+              
+              ${totalTTC ? `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px;">
+                <span style="color: #f97316; font-size: 15px; font-weight: 700; text-transform: uppercase;">Total TTC</span>
+                <span style="color: #f97316; font-size: 24px; font-weight: 900;">${totalTTC} €</span>
+              </div>
+              ` : ''}
+            </div>
+            
+            <div style="text-align: center; margin-top: 12px;">
+              <p style="color: #9a3412; font-size: 13px; font-weight: 600; margin: 0;">
+                <strong>Format :</strong> ${fileName.split('.').pop()?.toUpperCase()}
+              </p>
             </div>
           </div>
 

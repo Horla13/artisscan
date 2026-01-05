@@ -508,9 +508,17 @@ export default function Home() {
             </div>
             <span className="font-semibold text-slate-900"><span className="font-black">Artis</span>Scan</span>
           </div>
-          <p className="text-sm text-slate-500">
-            © 2024 ArtisScan. Gestion Intelligente universelle pour artisans.
-          </p>
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <Link 
+              href="/mentions-legales"
+              className="text-sm text-slate-500 hover:text-orange-500 transition-colors"
+            >
+              Mentions légales
+            </Link>
+            <p className="text-sm text-slate-500">
+              © 2024 ArtisScan. Gestion Intelligente universelle pour artisans.
+            </p>
+          </div>
           </div>
         </div>
       </footer>

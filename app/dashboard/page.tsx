@@ -1245,6 +1245,8 @@ export default function Dashboard() {
       let fileName = '';
       let fileType = '';
       let invoicesCount = 0;
+      let totalHT = 0;
+      let totalTVA = 0;
       let totalTTC = 0;
       let periodDescription = '';
 
@@ -1260,6 +1262,8 @@ export default function Dashboard() {
         }
 
         invoicesCount = folderInvoices.length;
+        totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
+        totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
         totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
         periodDescription = `le dossier "${folder.name}"`;
 
@@ -1279,15 +1283,15 @@ export default function Dashboard() {
           };
         });
 
-        const totalHT = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
-        const totalTVA = data.reduce((sum, row) => sum + row['TVA (€)'], 0);
+        const totalHTCalc = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
+        const totalTVACalc = data.reduce((sum, row) => sum + row['TVA (€)'], 0);
         const finalData = [...data, {}, {
           'Date': 'TOTAL',
           'Fournisseur': '',
           'Catégorie': '',
           'Description': '',
-          'Montant HT (€)': totalHT,
-          'TVA (€)': totalTVA,
+          'Montant HT (€)': totalHTCalc,
+          'TVA (€)': totalTVACalc,
           'Montant TTC (€)': totalTTC
         }];
 
@@ -1305,6 +1309,8 @@ export default function Dashboard() {
         // Export mensuel (sélection multiple)
         const filtered = filteredInvoices;
         invoicesCount = filtered.length;
+        totalHT = filtered.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
+        totalTVA = filtered.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
         totalTTC = filtered.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
         periodDescription = selectedMonths.length > 1 
           ? `${selectedMonths.length} mois sélectionnés` 
@@ -1390,6 +1396,8 @@ export default function Dashboard() {
           fileName,
           fileType,
           invoicesCount,
+          totalHT: totalHT.toFixed(2),
+          totalTVA: totalTVA.toFixed(2),
           totalTTC: totalTTC.toFixed(2),
           periodDescription
         })
