@@ -3,6 +3,203 @@ import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import { jsPDF } from 'jspdf';
 
+// ========== TYPES POUR LE FORMAT FEC ==========
+interface LigneEcriture {
+  journalCode: string;
+  journalLibelle: string;
+  ecritureNum: string;
+  ecritureDate: string;
+  compteNum: string;
+  compteLibelle: string;
+  compAuxNum?: string;
+  compAuxLibelle?: string;
+  pieceRef: string;
+  pieceDate: string;
+  ecritureLib: string;
+  debit?: number;
+  credit?: number;
+  ecritureLettrage?: string;
+  dateLettrage?: string;
+  validDate: string;
+  montantDevise?: number;
+  idevise: string;
+}
+
+// ========== VALIDATION D'ÉQUILIBRE DÉBIT/CRÉDIT ==========
+function validateEquilibre(ecritures: LigneEcriture[]): { 
+  valid: boolean; 
+  totalDebit: number; 
+  totalCredit: number; 
+  error?: string 
+} {
+  // Grouper par EcritureNum (pièce comptable)
+  const groupes = ecritures.reduce((acc, ligne) => {
+    if (!acc[ligne.ecritureNum]) {
+      acc[ligne.ecritureNum] = [];
+    }
+    acc[ligne.ecritureNum].push(ligne);
+    return acc;
+  }, {} as Record<string, LigneEcriture[]>);
+
+  // Vérifier l'équilibre pour chaque pièce
+  for (const [ecritureNum, lignes] of Object.entries(groupes)) {
+    const totalDebit = lignes.reduce((sum, l) => sum + (l.debit || 0), 0);
+    const totalCredit = lignes.reduce((sum, l) => sum + (l.credit || 0), 0);
+    
+    // Tolérance de 0.01€ pour les arrondis
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      return {
+        valid: false,
+        totalDebit,
+        totalCredit,
+        error: `Écriture ${ecritureNum} non équilibrée : Débit ${totalDebit.toFixed(2)}€ ≠ Crédit ${totalCredit.toFixed(2)}€`
+      };
+    }
+  }
+
+  const totalDebit = ecritures.reduce((sum, l) => sum + (l.debit || 0), 0);
+  const totalCredit = ecritures.reduce((sum, l) => sum + (l.credit || 0), 0);
+
+  return { valid: true, totalDebit, totalCredit };
+}
+
+// ========== GÉNÉRATION CSV FORMAT FEC (Point-virgule, Virgule décimale) ==========
+function generateFECCSV(invoices: any[]): string {
+  const lignesEcritures: LigneEcriture[] = [];
+
+  invoices.forEach((invoice, index) => {
+    const ecritureNum = `FAC${new Date(invoice.date_facture).toISOString().slice(0, 10).replace(/-/g, '')}-${String(index + 1).padStart(3, '0')}`;
+    const ecritureDate = new Date(invoice.date_facture).toLocaleDateString('fr-FR');
+    const validDate = ecritureDate;
+    const pieceRef = `FAC-${new Date(invoice.date_facture).getFullYear()}-${String(index + 1).padStart(3, '0')}`;
+    const pieceDate = ecritureDate;
+    
+    const ht = invoice.montant_ht || 0;
+    const tva = invoice.tva || ((invoice.montant_ttc || invoice.total_amount) - ht) || 0;
+    const ttc = invoice.montant_ttc || invoice.total_amount || 0;
+    
+    const fournisseur = invoice.entreprise || 'Fournisseur inconnu';
+    const description = invoice.description || `Achat - ${fournisseur}`;
+    
+    // Génération du code auxiliaire tiers (max 20 caractères)
+    const compAuxNum = `FOUR_${fournisseur.substring(0, 10).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+    
+    // ====== ÉCRITURE D'ACHAT (3 lignes par facture) ======
+    
+    // Ligne 1 : DÉBIT - Compte de charge (606)
+    lignesEcritures.push({
+      journalCode: 'AC',
+      journalLibelle: 'Achats',
+      ecritureNum,
+      ecritureDate,
+      compteNum: '606000',
+      compteLibelle: 'Achats non stockés de matières et fournitures',
+      compAuxNum: '',
+      compAuxLibelle: '',
+      pieceRef,
+      pieceDate,
+      ecritureLib: description,
+      debit: ht,
+      credit: undefined,
+      ecritureLettrage: '',
+      dateLettrage: '',
+      validDate,
+      montantDevise: undefined,
+      idevise: 'EUR',
+    });
+    
+    // Ligne 2 : DÉBIT - TVA déductible (44566)
+    if (tva > 0) {
+      lignesEcritures.push({
+        journalCode: 'AC',
+        journalLibelle: 'Achats',
+        ecritureNum,
+        ecritureDate,
+        compteNum: '445660',
+        compteLibelle: 'TVA déductible sur autres biens et services',
+        compAuxNum: '',
+        compAuxLibelle: '',
+        pieceRef,
+        pieceDate,
+        ecritureLib: `TVA 20% - ${description}`,
+        debit: tva,
+        credit: undefined,
+        ecritureLettrage: '',
+        dateLettrage: '',
+        validDate,
+        montantDevise: undefined,
+        idevise: 'EUR',
+      });
+    }
+    
+    // Ligne 3 : CRÉDIT - Fournisseurs (401)
+    lignesEcritures.push({
+      journalCode: 'AC',
+      journalLibelle: 'Achats',
+      ecritureNum,
+      ecritureDate,
+      compteNum: '401000',
+      compteLibelle: 'Fournisseurs',
+      compAuxNum,
+      compAuxLibelle: fournisseur,
+      pieceRef,
+      pieceDate,
+      ecritureLib: description,
+      debit: undefined,
+      credit: ttc,
+      ecritureLettrage: '',
+      dateLettrage: '',
+      validDate,
+      montantDevise: undefined,
+      idevise: 'EUR',
+    });
+  });
+
+  // ====== VALIDATION D'ÉQUILIBRE ======
+  const validation = validateEquilibre(lignesEcritures);
+  if (!validation.valid) {
+    console.error('❌ Erreur équilibre comptable:', validation.error);
+    throw new Error(validation.error);
+  }
+
+  console.log(`✅ Équilibre comptable validé : Débit ${validation.totalDebit.toFixed(2)}€ = Crédit ${validation.totalCredit.toFixed(2)}€`);
+
+  // ====== GÉNÉRATION DU CSV (Point-virgule, Virgule décimale) ======
+  const header = 'JournalCode;JournalLibelle;EcritureNum;EcritureDate;CompteNum;CompteLibelle;CompAuxNum;CompAuxLibelle;PieceRef;PieceDate;EcritureLib;Debit;Credit;EcritureLettrage;DateLettrage;ValidDate;MontantDevise;Idevise';
+  
+  const rows = lignesEcritures.map(ligne => {
+    // Utiliser la VIRGULE comme séparateur décimal (format français)
+    const debit = ligne.debit !== undefined ? ligne.debit.toFixed(2).replace('.', ',') : '';
+    const credit = ligne.credit !== undefined ? ligne.credit.toFixed(2).replace('.', ',') : '';
+    const montantDevise = ligne.montantDevise !== undefined ? ligne.montantDevise.toFixed(2).replace('.', ',') : '';
+    
+    return [
+      ligne.journalCode,
+      ligne.journalLibelle,
+      ligne.ecritureNum,
+      ligne.ecritureDate,
+      ligne.compteNum,
+      ligne.compteLibelle,
+      ligne.compAuxNum || '',
+      ligne.compAuxLibelle || '',
+      ligne.pieceRef,
+      ligne.pieceDate,
+      ligne.ecritureLib,
+      debit,
+      credit,
+      ligne.ecritureLettrage || '',
+      ligne.dateLettrage || '',
+      ligne.validDate,
+      montantDevise,
+      ligne.idevise,
+    ].join(';'); // Point-virgule comme séparateur
+  });
+
+  // UTF-8 avec BOM pour compatibilité Excel
+  const BOM = '\uFEFF';
+  return BOM + header + '\n' + rows.join('\n');
+}
+
 export async function POST(req: NextRequest) {
   console.log('📧 API send-accounting: Requête reçue');
 
@@ -39,20 +236,10 @@ export async function POST(req: NextRequest) {
     console.log('📧 Envoi à:', comptableEmail);
     console.log('📊 Factures:', invoicesCount);
 
-    // ========== GÉNÉRATION DU CSV ==========
-    const csvHeader = 'Date,Nom du fournisseur,Montant HT,Montant TVA,Montant TTC\n';
-    const csvRows = invoices.map((inv: any) => {
-      const date = new Date(inv.date_facture).toLocaleDateString('fr-FR');
-      const fournisseur = `"${inv.entreprise || 'N/A'}"`;
-      const ht = (inv.montant_ht || 0).toFixed(2);
-      const tva = (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0).toFixed(2);
-      const ttc = (inv.montant_ttc || inv.total_amount || 0).toFixed(2);
-      return `${date},${fournisseur},${ht},${tva},${ttc}`;
-    }).join('\n');
-    
-    const csvContent = csvHeader + csvRows;
+    // ========== GÉNÉRATION DU CSV FORMAT FEC ==========
+    const csvContent = generateFECCSV(invoices);
     const csvBase64 = Buffer.from(csvContent, 'utf-8').toString('base64');
-    const csvFileName = `export_comptable_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
+    const csvFileName = `export_comptable_FEC_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
 
     // ========== GÉNÉRATION DU PDF RÉCAPITULATIF ==========
     const doc = new jsPDF();
@@ -203,8 +390,12 @@ export async function POST(req: NextRequest) {
         <div style="background-color: #fff7ed; border-left: 4px solid #FF8C00; padding: 16px; margin: 20px 0; border-radius: 8px;">
           <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6;">
             <strong>📎 Pièces jointes :</strong><br>
-            • Récapitulatif PDF (lecture)<br>
-            • Export CSV (import comptable)
+            • Récapitulatif PDF (lecture rapide)<br>
+            • Export CSV format FEC (compatible Sage, Cegid, EBP)
+          </p>
+          <p style="color: #92400e; font-size: 12px; margin: 8px 0 0 0; line-height: 1.4;">
+            ✓ Format : Point-virgule (;) • Décimale virgule (,)<br>
+            ✓ Équilibre Débit/Crédit validé automatiquement
           </p>
         </div>
       </div>
