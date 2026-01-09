@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 function LoginForm() {
@@ -96,12 +97,14 @@ function LoginForm() {
   return (
     <div className="card-clean rounded-3xl p-8 w-full max-w-md bg-white shadow-xl border border-slate-100">
       <div className="text-center mb-8">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
-          <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h1 className="text-3xl font-black text-slate-900 mb-2">ArtisScan</h1>
+        <Link href="/" className="inline-block">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-black text-slate-900 mb-2">ArtisScan</h1>
+        </Link>
         <p className="text-slate-500 font-medium">
           {isSignUp ? 'Créez votre compte artisan' : 'Connectez-vous à votre espace'}
         </p>
@@ -167,10 +170,15 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
       <Suspense fallback={<div className="text-orange-500 font-black animate-pulse">Chargement...</div>}>
         <LoginForm />
       </Suspense>
+      <footer className="mt-8 text-xs text-slate-500 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+        <Link href="/legal/mentions-legales" className="hover:text-orange-500 transition-colors">Mentions légales</Link>
+        <Link href="/legal/confidentialite" className="hover:text-orange-500 transition-colors">Confidentialité</Link>
+        <Link href="/legal/cgu" className="hover:text-orange-500 transition-colors">CGU</Link>
+      </footer>
     </div>
   )
 }

@@ -7,9 +7,9 @@ export default function MentionsLegales() {
         <h2>1. Éditeur du site</h2>
         <p>
           <strong>Entrepreneur Individuel</strong><br />
-          [Votre Nom et Prénom]<br />
+          [Russo Giovanni]<br />
           <strong>Email :</strong> <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a><br />
-          <strong>Siège social :</strong> [Votre adresse]<br />
+          <strong>Siège social :</strong> [198 boulevard ange martin 13190]<br />
           <strong>SIRET :</strong> [Votre numéro SIRET]
         </p>
       </section>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Check, CheckCircle, ScanLine, Zap } from 'lucide-react';
@@ -44,14 +45,21 @@ function PricingContent() {
       const { data: { session } } = await supabase.auth.getSession();
       
       console.log(`[CHECKOUT] Lancement direct pour le cycle: ${cycle} (User: ${session?.user?.id || 'GUEST'})`);
+      
+      if (!session?.user) {
+        // Paiement doit être lié à un compte (sinon paiement orphelin)
+        router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
+        setCheckoutLoading(false);
+        return;
+      }
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session?.user?.id || null, 
-          userEmail: session?.user?.email || null
+          userId: session.user.id, 
+          userEmail: session.user.email
         }),
       });
 
@@ -93,7 +101,7 @@ function PricingContent() {
               Connecté : {user.email}
             </div>
           )}
-          <div className="flex items-center gap-3 mb-8">
+          <Link href="/" className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative">
               <ScanLine className="w-8 h-8 text-white" />
               <Zap className="w-4 h-4 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
@@ -102,7 +110,7 @@ function PricingContent() {
               <span className="text-3xl font-normal text-slate-900 tracking-tight"><span className="font-black">Artis</span>Scan</span>
               <span className="text-[10px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none text-center">Gestion Intelligente</span>
             </div>
-          </div>
+          </Link>
           
           <h1 className="text-4xl md:text-5xl font-black text-slate-900 text-center mb-4 tracking-tight">
             Choisissez votre <span className="text-orange-600">Formule Pro</span>
@@ -253,6 +261,18 @@ function PricingContent() {
           </div>
         </div>
       </div>
+
+      {/* Footer légal */}
+      <footer className="mt-16 border-t border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
+          <span>© {new Date().getFullYear()} ArtisScan</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <Link href="/legal/mentions-legales" className="hover:text-orange-500 transition-colors">Mentions légales</Link>
+            <Link href="/legal/confidentialite" className="hover:text-orange-500 transition-colors">Confidentialité</Link>
+            <Link href="/legal/cgu" className="hover:text-orange-500 transition-colors">CGU</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

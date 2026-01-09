@@ -25,6 +25,85 @@ interface LigneEcriture {
   idevise: string;
 }
 
+// ========== CSV "PIVOT" COMPTABLE (simple & universel) ==========
+function formatDateFR(raw?: string): string {
+  if (!raw) return '';
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('fr-FR'); // JJ/MM/AAAA
+}
+
+function formatDecimalFR(n: number): string {
+  const safe = Number.isFinite(n) ? n : 0;
+  return safe.toFixed(2).replace('.', ',');
+}
+
+function escapeCSV(value: any): string {
+  const v = (value ?? '').toString().replace(/\r?\n/g, ' ');
+  return `"${v.replace(/"/g, '""')}"`;
+}
+
+function getInvoiceAmounts(inv: any): { ht: number; tva: number; ttc: number } {
+  const ht = Number.isFinite(inv?.montant_ht) ? Number(inv.montant_ht) : 0;
+  const ttcBase = (inv?.montant_ttc ?? inv?.total_amount);
+  const ttc = Number.isFinite(ttcBase) ? Number(ttcBase) : 0;
+  const tva = (inv?.tva !== undefined && inv?.tva !== null && Number.isFinite(inv.tva))
+    ? Number(inv.tva)
+    : (ttc - ht);
+  return { ht, tva, ttc };
+}
+
+function isMathCoherent(ht: number, tva: number, ttc: number): boolean {
+  return Math.abs((ht + tva) - ttc) <= 0.05;
+}
+
+function generatePivotCSV(invoices: any[]): string {
+  const headers = [
+    'Date',
+    'Fournisseur',
+    'Numéro facture',
+    'Montant HT',
+    'Montant TVA',
+    'Montant TTC',
+    'Catégorie',
+    'Date d’ajout',
+    'Modifié manuellement',
+  ];
+
+  for (const inv of invoices) {
+    const { ht, tva, ttc } = getInvoiceAmounts(inv);
+    if (!isMathCoherent(ht, tva, ttc)) {
+      throw new Error('CSV pivot : montants incohérents (HT + TVA ≠ TTC).');
+    }
+  }
+
+  const rows = invoices.map((inv) => {
+    const { ht, tva, ttc } = getInvoiceAmounts(inv);
+    const dateFacture = formatDateFR(inv?.date_facture || inv?.created_at);
+    const fournisseur = (inv?.entreprise || 'Non renseigné').toString().trim() || 'Non renseigné';
+    const categorie = inv?.categorie || 'Non classé';
+    const dateAjout = formatDateFR(inv?.created_at);
+
+    // Numéro facture: non stocké en V1 (si dispo)
+    const numeroFacture = inv?.numero_facture || inv?.invoice_number || '';
+
+    return [
+      dateFacture,
+      escapeCSV(fournisseur),
+      escapeCSV(numeroFacture),
+      formatDecimalFR(ht),
+      formatDecimalFR(tva),
+      formatDecimalFR(ttc),
+      escapeCSV(categorie),
+      dateAjout,
+      'non',
+    ].join(';');
+  });
+
+  const BOM = '\uFEFF';
+  return BOM + headers.join(';') + '\n' + rows.join('\n');
+}
+
 // ========== VALIDATION D'ÉQUILIBRE DÉBIT/CRÉDIT ==========
 function validateEquilibre(ecritures: LigneEcriture[]): { 
   valid: boolean; 
@@ -323,6 +402,11 @@ export async function POST(req: NextRequest) {
     const csvBase64 = Buffer.from(csvContent, 'utf-8').toString('base64');
     const csvFileName = `export_comptable_FEC_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
 
+    // ========== GÉNÉRATION DU CSV PIVOT (SIMPLE) ==========
+    const pivotContent = generatePivotCSV(invoices);
+    const pivotBase64 = Buffer.from(pivotContent, 'utf-8').toString('base64');
+    const pivotFileName = `export_comptable_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
+
     // ========== GÉNÉRATION DU PDF RÉCAPITULATIF ==========
     const doc = new jsPDF();
     
@@ -473,7 +557,8 @@ export async function POST(req: NextRequest) {
           <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6;">
             <strong>📎 Pièces jointes :</strong><br>
             • Récapitulatif PDF (lecture rapide)<br>
-            • Export CSV format FEC (compatible Sage, Cegid, EBP)
+            • Export CSV (simple, colonnes lisibles)<br>
+            • Export CSV format FEC (Sage, Cegid, EBP)
           </p>
           <p style="color: #92400e; font-size: 12px; margin: 8px 0 0 0; line-height: 1.4;">
             ✓ Format : Point-virgule (;) • Décimale virgule (,)<br>
@@ -615,6 +700,10 @@ export async function POST(req: NextRequest) {
       {
         filename: pdfFileName,
         content: pdfBase64,
+      },
+      {
+        filename: pivotFileName,
+        content: pivotBase64,
       },
       {
         filename: csvFileName,

@@ -34,7 +34,7 @@ export default function Home() {
       {/* Barre de navigation */}
       <nav className="w-full border-b border-slate-100 sticky top-0 bg-white z-50">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative">
               <ScanLine className="w-6 h-6 text-white" />
               <Zap className="w-3.5 h-3.5 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
@@ -43,7 +43,7 @@ export default function Home() {
               <span className="text-2xl font-normal text-slate-900 tracking-tight"><span className="font-black">Artis</span>Scan</span>
               <span className="text-[8px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none">Gestion Intelligente</span>
             </div>
-          </div>
+          </Link>
           
           <div className="flex items-center gap-4">
             {userEmail ? (

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import Stripe from 'stripe';
 
 export async function POST(req: Request) {
   console.log('🔔 RECU DANS WEBHOOK - DEBUT');
@@ -8,71 +9,69 @@ export async function POST(req: Request) {
   // 1. Création du client Supabase avec SERVICE_ROLE_KEY dès le début
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey || !stripeSecretKey || !stripeWebhookSecret) {
     console.error('❌ Variables Supabase manquantes');
     return NextResponse.json({ received: true, error: 'Config missing' }, { status: 500 });
   }
   
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   console.log('✅ Client Supabase Admin créé');
+  const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
   
   try {
-    // 2. Récupération du body (sans validation de signature pour test)
-    const body = await req.json();
-    console.log('📦 Body reçu:', JSON.stringify(body, null, 2));
-    
-    const event = body;
+    // 2. Vérification de signature Stripe (OBLIGATOIRE en prod)
+    const signature = req.headers.get('stripe-signature');
+    if (!signature) {
+      console.error('❌ stripe-signature manquante');
+      return NextResponse.json({ received: true, error: 'Missing signature' }, { status: 400 });
+    }
+
+    const rawBody = await req.text();
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, stripeWebhookSecret);
+    } catch (err: any) {
+      console.error('❌ Signature Stripe invalide:', err?.message);
+      return NextResponse.json({ received: true, error: 'Invalid signature' }, { status: 400 });
+    }
+
     console.log('📋 Type événement:', event.type);
     
     // 3. Traitement de l'événement checkout.session.completed
     if (event.type === 'checkout.session.completed') {
       console.log('✅ Événement checkout.session.completed détecté');
       
-      const session = event.data.object;
-      const userEmail = session.customer_details?.email || session.customer_email;
-      const customerId = session.customer;
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userEmail = session.customer_details?.email || session.customer_email || '';
+      const customerId = (session.customer as string) || '';
+      const userId = (session.metadata?.supabase_user_id || '').trim();
       
       console.log('📧 Email client reçu:', userEmail);
-      console.log('📧 Type:', typeof userEmail);
-      console.log('📧 Longueur:', userEmail?.length);
       console.log('🆔 Customer ID:', customerId);
+      console.log('🆔 Supabase user_id (metadata):', userId);
       
-      if (!userEmail) {
-        console.error('❌ Pas d\'email trouvé dans la session');
-        return NextResponse.json({ received: true, error: 'No email' }, { status: 200 });
+      if (!userId) {
+        console.error('❌ supabase_user_id manquant dans metadata (checkout non lié à un compte)');
+        return NextResponse.json({ received: true, error: 'Missing supabase_user_id' }, { status: 200 });
       }
       
-      // 4. Récupération de l'utilisateur via son email dans auth.users
-      console.log('🔍 Recherche utilisateur par email:', userEmail);
-      const { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
-      
-      if (searchError) {
-        console.error('❌ Erreur recherche utilisateur:', searchError);
-        return NextResponse.json({ received: true, error: searchError.message }, { status: 200 });
-      }
-      
-      const user = users.find(u => u.email === userEmail);
-      
-      if (!user) {
-        console.error('❌ Utilisateur non trouvé pour email:', userEmail);
-        console.log('👥 Utilisateurs trouvés:', users.map(u => u.email));
-        return NextResponse.json({ received: true, error: 'User not found' }, { status: 200 });
-      }
-      
-      console.log('✅ Utilisateur trouvé - ID:', user.id);
-      
-      // 5. Update ultra-simple : is_pro = true + plan = 'pro'
-      console.log('📝 Tentative UPDATE is_pro = true + plan = pro pour email:', userEmail);
-      
+      // 4. Update par user_id (fiable) : is_pro + plan + statut
+      console.log('📝 Activation PRO pour user_id:', userId);
       const { data, error } = await supabase
         .from('profiles')
-        .update({ 
+        .upsert({
+          id: userId,
+          email: userEmail || null,
           is_pro: true,
           plan: 'pro',
-          updated_at: new Date().toISOString()
+          subscription_tier: 'pro',
+          subscription_status: 'active',
+          stripe_customer_id: customerId || null,
+          updated_at: new Date().toISOString(),
         })
-        .eq('email', userEmail)
         .select();
       
       if (error) {
@@ -89,6 +88,7 @@ export async function POST(req: Request) {
       
       // 6. Envoi de l'email de bienvenue via Resend
       const resendApiKey = process.env.RESEND_API_KEY;
+      const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.artisscan.fr').replace(/\/$/, '');
       
       if (resendApiKey) {
         try {
@@ -183,14 +183,14 @@ export async function POST(req: Request) {
 
                   <!-- Bouton CTA -->
                   <div style="text-align: center; margin: 40px 0 24px 0;">
-                    <a href="https://artisscan.vercel.app/dashboard" style="display: inline-block; padding: 18px 48px; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; text-decoration: none; border-radius: 16px; font-weight: 900; font-size: 16px; letter-spacing: 0.5px; box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.4); transition: transform 0.2s;">
+                    <a href="${siteUrl}/dashboard" style="display: inline-block; padding: 18px 48px; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; text-decoration: none; border-radius: 16px; font-weight: 900; font-size: 16px; letter-spacing: 0.5px; box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.4); transition: transform 0.2s;">
                       🎯 Accéder à mon Dashboard Pro
                     </a>
                   </div>
 
                   <p style="margin: 24px 0 0 0; text-align: center; color: #94a3b8; font-size: 13px; line-height: 1.6;">
                     Vous pouvez également copier ce lien :<br>
-                    <a href="https://artisscan.vercel.app/dashboard" style="color: #f97316; text-decoration: none; font-weight: 600;">https://artisscan.vercel.app/dashboard</a>
+                    <a href="${siteUrl}/dashboard" style="color: #f97316; text-decoration: none; font-weight: 600;">${siteUrl}/dashboard</a>
                   </p>
                 </div>
 
@@ -218,9 +218,9 @@ export async function POST(req: Request) {
                     Vous recevez cet email car vous venez de créer un compte ArtisScan Pro.
                   </p>
                   <div style="display: inline-flex; gap: 16px; margin-top: 16px;">
-                    <a href="https://artisscan.vercel.app" style="color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600;">Site web</a>
+                    <a href="${siteUrl}" style="color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600;">Site web</a>
                     <span style="color: #cbd5e1;">•</span>
-                    <a href="https://artisscan.vercel.app/dashboard" style="color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600;">Dashboard</a>
+                    <a href="${siteUrl}/dashboard" style="color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600;">Dashboard</a>
                     <span style="color: #cbd5e1;">•</span>
                     <a href="mailto:support@artisscan.fr" style="color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600;">Support</a>
                   </div>

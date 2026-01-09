@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const billingCycle = (body?.billingCycle as BillingCycle) || 'monthly';
     const userId = body?.userId;
+    const userEmail = body?.userEmail;
 
     const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
     const yearlyPriceId = process.env.STRIPE_PRICE_ID_YEARLY?.trim();
@@ -49,13 +50,14 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         trial_period_days: 14,
       },
-      customer_email: body?.userEmail || undefined,
+      // Exiger une session côté app : checkout doit être lié à un user Supabase
+      customer_email: userEmail || undefined,
       metadata: {
         supabase_user_id: userId || '',
-        supabase_user_email: body?.userEmail || '',
+        supabase_user_email: userEmail || '',
       },
-      // Retour direct vers le dashboard après paiement
-      success_url: `https://artisscan.vercel.app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      // Retour vers une page de vérification (redirection auto ensuite)
+      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       allow_promotion_codes: true,
     };
@@ -63,6 +65,14 @@ export async function POST(req: NextRequest) {
     // N'ajouter client_reference_id que si l'utilisateur est connecté (Bulldozer mode)
     if (userId && userId !== '') {
       sessionOptions.client_reference_id = userId;
+    }
+    
+    // Si pas d'utilisateur connecté, refuser : ça évite un paiement “orphelin”
+    if (!userId || userId === '') {
+      return NextResponse.json(
+        { error: "Veuillez vous connecter avant de démarrer le paiement." },
+        { status: 401 }
+      );
     }
 
     const session = await stripe.checkout.sessions.create(sessionOptions);

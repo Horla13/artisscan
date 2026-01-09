@@ -339,8 +339,8 @@ export default function Dashboard() {
           console.error('❌ SÉCURITÉ: Erreur auth:', JSON.stringify(authError));
           setError(`Erreur authentification: ${authError.message}`);
         }
-        
-        if (!user) {
+      
+      if (!user) {
           console.log('🚫 SÉCURITÉ: Aucun utilisateur connecté → Redirection /login');
           window.location.href = '/login?redirect=/dashboard';
           return;
@@ -580,7 +580,7 @@ export default function Dashboard() {
       // Récupérer le profil utilisateur
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('is_pro, plan, email')
+        .select('is_pro, plan, email, subscription_status')
         .eq('id', user.id)
         .single();
 
@@ -597,27 +597,21 @@ export default function Dashboard() {
         plan: profile?.plan 
       });
 
-      // Si retour de Stripe avec session_id, afficher l'écran d'activation
+      // Si retour de Stripe avec session_id : NE JAMAIS auto-upgrade côté client.
+      // On affiche un écran de vérification et on attend la confirmation serveur (webhook Stripe).
       if (sessionId) {
-        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ')');
-        
-        // Mise à jour préventive du profil
-        await supabase.from('profiles').update({ 
-          is_pro: true,
-          plan: 'pro',
-          updated_at: new Date().toISOString()
-        }).eq('id', user.id);
-
-        setUserTier('pro');
-        setCanScan(true);
-        setRemainingScans(-1);
+        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ') → attente confirmation serveur');
         setActivationPending(true);
         setIsLoadingProfile(false);
         return;
       }
 
-      // 🔒 VÉRIFICATION STRICTE : is_pro doit être true
-      if (!profile?.is_pro) {
+      // 🔒 VÉRIFICATION STRICTE : l'accès dépend d'un statut confirmé serveur
+      const planLower = profile?.plan?.toLowerCase();
+      const statusLower = profile?.subscription_status?.toLowerCase();
+      const isPro = profile?.is_pro === true || planLower === 'pro' || statusLower === 'active' || statusLower === 'trialing';
+
+      if (!isPro) {
         console.warn('⛔ ACCÈS REFUSÉ: Utilisateur non-PRO détecté');
         console.warn('   Email:', profile?.email);
         console.warn('   is_pro:', profile?.is_pro);
@@ -626,7 +620,7 @@ export default function Dashboard() {
         setUserTier('free');
         setCanScan(false);
         setRemainingScans(0);
-        setError('⛔ Abonnement requis pour accéder à cette fonctionnalité');
+        setError('Abonnement requis pour accéder au Dashboard.');
         
         // Redirection forcée vers la page de tarification
         setTimeout(() => {
@@ -843,14 +837,14 @@ export default function Dashboard() {
       
       if (user) {
         console.log('🔍 Requête Supabase: scans WHERE user_id =', user.id, 'AND archived != true');
-        const { data, error } = await supabase
+      const { data, error } = await supabase
           .from('scans')
-          .select('*')
+        .select('*')
           .eq('user_id', user.id)
           .neq('archived', true)  // ✅ Exclure les factures archivées
           .order('created_at', { ascending: false });
-        
-        if (error) {
+
+      if (error) {
           console.error('❌ Erreur Supabase:', error);
           throw error;
         }
@@ -1219,6 +1213,39 @@ export default function Dashboard() {
     showToastMessage('📊 Export Excel téléchargé !', 'success');
   };
 
+  // Helpers CSV comptable (format FR, Excel-friendly)
+  const formatDateFR = (raw?: string) => {
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('fr-FR'); // JJ/MM/AAAA
+  };
+
+  const formatDecimalFR = (n: number) => {
+    const safe = Number.isFinite(n) ? n : 0;
+    return safe.toFixed(2).replace('.', ',');
+  };
+
+  const escapeCSV = (value: string) => {
+    const v = (value ?? '').toString().replace(/\r?\n/g, ' ');
+    return `"${v.replace(/"/g, '""')}"`;
+  };
+
+  const getInvoiceAmounts = (inv: Invoice) => {
+    const ht = Number.isFinite(inv.montant_ht) ? inv.montant_ht : 0;
+    // Priorité à la TVA stockée; sinon calcul depuis TTC
+    const ttcBase = (Number.isFinite(inv.montant_ttc) ? inv.montant_ttc : inv.total_amount);
+    const ttc = Number.isFinite(ttcBase) ? ttcBase : 0;
+    const tva = (inv.tva !== undefined && inv.tva !== null && Number.isFinite(inv.tva))
+      ? inv.tva
+      : (ttc - ht);
+    return { ht, tva, ttc };
+  };
+
+  const isMathCoherent = (ht: number, tva: number, ttc: number) => {
+    return Math.abs((ht + tva) - ttc) <= 0.05;
+  };
+
   // Export CSV d'un dossier
   const exportFolderCSV = (folder: Folder) => {
     const folderInvoices = invoices.filter(inv => inv.folder_id === folder.id);
@@ -1226,19 +1253,46 @@ export default function Dashboard() {
       showToastMessage('❌ Aucune facture dans ce dossier', 'error');
       return;
     }
-    const headers = ['Date', 'Fournisseur', 'Catégorie', 'Description', 'Montant HT', 'TVA', 'Montant TTC'];
-    const rows = folderInvoices.map(inv => {
-      const tva = inv.tva !== undefined && inv.tva !== null 
-        ? inv.tva 
-        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
+
+    const headers = [
+      'Date',
+      'Fournisseur',
+      'Numéro facture',
+      'Montant HT',
+      'Montant TVA',
+      'Montant TTC',
+      'Catégorie',
+      'Date d’ajout',
+      'Modifié manuellement'
+    ];
+
+    // Hard fail si une facture est incohérente : on n’exporte pas un CSV “sale”
+    for (const inv of folderInvoices) {
+      const { ht, tva, ttc } = getInvoiceAmounts(inv);
+      if (!isMathCoherent(ht, tva, ttc)) {
+        showToastMessage('❌ Export impossible : au moins une facture a des montants incohérents (HT + TVA ≠ TTC). Corrigez-la avant export.', 'error');
+        return;
+      }
+    }
+
+    const rows = folderInvoices.map((inv) => {
+      const { ht, tva, ttc } = getInvoiceAmounts(inv);
+      const dateFacture = formatDateFR(inv.date_facture || inv.created_at);
+      const dateAjout = formatDateFR(inv.created_at);
+      const fournisseur = inv.entreprise?.trim() || 'Non renseigné';
+      const categorie = inv.categorie || 'Non classé';
+      const numeroFacture = ''; // Non stocké en V1 (colonne “si dispo”)
+
       return [
-        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-        `"${inv.entreprise}"`,
-        `"${inv.categorie || 'Non classé'}"`,
-        `"${inv.description || ''}"`,
-        inv.montant_ht.toFixed(2),
-        tva.toFixed(2),
-        (inv.montant_ttc || inv.total_amount).toFixed(2)
+        dateFacture,
+        escapeCSV(fournisseur),
+        escapeCSV(numeroFacture),
+        formatDecimalFR(ht),
+        formatDecimalFR(tva),
+        formatDecimalFR(ttc),
+        escapeCSV(categorie),
+        dateAjout,
+        'non',
       ];
     });
     const csvContent = "\uFEFF" + [
@@ -1350,9 +1404,9 @@ export default function Dashboard() {
 
       // Appeler l'API d'envoi (PDF + CSV générés côté serveur)
       const response = await fetch('/api/send-accounting', {
-        method: 'POST',
+            method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+            body: JSON.stringify({
           comptableEmail,
           userName,
           userEmail: user.email,
@@ -1367,7 +1421,7 @@ export default function Dashboard() {
 
       const result = await response.json();
 
-      if (!response.ok) {
+          if (!response.ok) {
         throw new Error(result.error || 'Erreur lors de l\'envoi');
       }
 
@@ -1379,7 +1433,7 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error('❌ Erreur envoi comptable:', err);
       showToastMessage(`❌ ${err.message}`, 'error');
-    } finally {
+        } finally {
       setSendingEmail(false);
     }
   };
@@ -1640,7 +1694,7 @@ export default function Dashboard() {
         .delete()
         .eq('id', invoiceToDelete)
         .select();
-      
+
       if (error) {
         console.error('❌ Erreur suppression:', error);
         throw error;
@@ -1685,23 +1739,34 @@ export default function Dashboard() {
 
   // Export CSV d'une facture individuelle
   const exportInvoiceCSV = (invoice: Invoice) => {
-    const headers = ['Date Facture', 'Fournisseur', 'Montant HT', 'TVA', 'Montant TTC', 'Catégorie', 'Description'];
-    
-    // Utiliser le champ tva s'il existe, sinon calculer
-    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
-      ? invoice.tva.toFixed(2)
-      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht).toFixed(2);
-    
-    const ttcAmount = (invoice.montant_ttc || invoice.total_amount).toFixed(2);
-    
+    const headers = [
+      'Date',
+      'Fournisseur',
+      'Numéro facture',
+      'Montant HT',
+      'Montant TVA',
+      'Montant TTC',
+      'Catégorie',
+      'Date d’ajout',
+      'Modifié manuellement'
+    ];
+
+    const { ht, tva, ttc } = getInvoiceAmounts(invoice);
+    if (!isMathCoherent(ht, tva, ttc)) {
+      showToastMessage('❌ Export impossible : montants incohérents (HT + TVA ≠ TTC). Corrigez la facture avant export.', 'error');
+      return;
+    }
+
     const row = [
-      new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
-      `"${invoice.entreprise}"`,
-      invoice.montant_ht.toFixed(2),
-      tvaAmount,
-      ttcAmount,
-      `"${invoice.categorie || 'Non classé'}"`,
-      `"${invoice.description || ''}"`
+      formatDateFR(invoice.date_facture || invoice.created_at),
+      escapeCSV(invoice.entreprise?.trim() || 'Non renseigné'),
+      escapeCSV(''),
+      formatDecimalFR(ht),
+      formatDecimalFR(tva),
+      formatDecimalFR(ttc),
+      escapeCSV(invoice.categorie || 'Non classé'),
+      formatDateFR(invoice.created_at),
+      'non',
     ];
 
     const csvContent = "\uFEFF" + [headers.join(';'), row.join(';')].join('\n');
@@ -1936,18 +2001,39 @@ export default function Dashboard() {
       return;
     }
 
-    const headers = ['Date Facture', 'Mois', 'Fournisseur', 'Catégorie', 'Description', 'Montant HT', 'Montant TVA', 'Montant TTC'];
+    const headers = [
+      'Date',
+      'Fournisseur',
+      'Numéro facture',
+      'Montant HT',
+      'Montant TVA',
+      'Montant TTC',
+      'Catégorie',
+      'Date d’ajout',
+      'Modifié manuellement'
+    ];
+
+    // Hard fail si incohérence sur au moins une facture
+    for (const inv of invoicesToExport) {
+      const { ht, tva, ttc } = getInvoiceAmounts(inv);
+      if (!isMathCoherent(ht, tva, ttc)) {
+        showToastMessage('❌ Export impossible : au moins une facture a des montants incohérents (HT + TVA ≠ TTC). Corrigez-la avant export.', 'error');
+        return;
+      }
+    }
+
     const rows = invoicesToExport.map((inv: Invoice) => {
-      const monthKey = getMonthKey(inv.date_facture || inv.created_at);
+      const { ht, tva, ttc } = getInvoiceAmounts(inv);
       return [
-        new Date(inv.date_facture).toLocaleDateString('fr-FR'),
-        monthKey ? getMonthLabel(monthKey) : 'Mois inconnu',
-        `"${inv.entreprise}"`,
-        `"${inv.categorie || 'Non classé'}"`,
-        `"${inv.description || ''}"`,
-        inv.montant_ht.toFixed(2),
-        (inv.total_amount - inv.montant_ht).toFixed(2),
-        inv.total_amount.toFixed(2)
+        formatDateFR(inv.date_facture || inv.created_at),
+        escapeCSV(inv.entreprise?.trim() || 'Non renseigné'),
+        escapeCSV(''),
+        formatDecimalFR(ht),
+        formatDecimalFR(tva),
+        formatDecimalFR(ttc),
+        escapeCSV(inv.categorie || 'Non classé'),
+        formatDateFR(inv.created_at),
+        'non',
       ];
     });
 
@@ -2743,7 +2829,7 @@ export default function Dashboard() {
                       <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
-                    </div>
+      </div>
                   ) : (
                     <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
                       <Zap className="w-7 h-7 text-orange-500 animate-pulse" />
@@ -2857,7 +2943,7 @@ export default function Dashboard() {
 
   // 🔒 ÉCRAN ACCÈS RESTREINT : Affichage si utilisateur non-PRO
   if (error && error.includes('Abonnement requis')) {
-    return (
+  return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-slate-50 flex items-center justify-center px-6 py-12">
         <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-8 max-w-lg w-full text-center space-y-6 animate-fade-in">
           {/* Icône et titre */}
@@ -2920,7 +3006,7 @@ export default function Dashboard() {
 
           {/* Boutons d'action */}
           <div className="space-y-3">
-            <button
+          <button
               onClick={() => router.push('/pricing')}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
             >
@@ -2933,8 +3019,8 @@ export default function Dashboard() {
               className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
             >
               ← Retour à l'accueil
-            </button>
-          </div>
+          </button>
+        </div>
 
           {/* Footer info */}
           <p className="text-xs text-slate-400 pt-4 border-t border-slate-200">
@@ -2981,9 +3067,9 @@ export default function Dashboard() {
                   <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
                     <Crown className="w-3.5 h-3.5" />
                     <span className="text-[10px] font-black uppercase tracking-widest">{getTierDisplayName(userTier)}</span>
-                  </div>
-                </div>
-              )}
+            </div>
+          </div>
+        )}
 
               {/* Bouton Paramètres (Engrenage) */}
               <button
@@ -3031,7 +3117,7 @@ export default function Dashboard() {
                     <div className="p-2 space-y-1">
                       {/* Option "Tous" */}
                       <label className="flex items-center gap-3 p-2 hover:bg-orange-50 rounded-lg cursor-pointer transition-colors">
-                        <input
+          <input
                           type="checkbox"
                           checked={selectedMonths.length === 0}
                           onChange={(e) => {
@@ -3067,12 +3153,12 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <div className="p-3 border-t border-slate-100 flex gap-2">
-                      <button
+          <button
                         onClick={() => setSelectedMonths([])}
                         className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                      >
+          >
                         Réinitialiser
-                      </button>
+          </button>
                       <button
                         onClick={() => setShowMonthSelector(false)}
                         className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
@@ -3084,15 +3170,15 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <button 
+                <button
                 onClick={refreshAllData}
                 disabled={loadingInvoices}
                 className="p-2 bg-white border border-slate-200 text-slate-400 rounded-lg hover:bg-slate-50 hover:text-orange-600 transition-all disabled:opacity-50 shadow-sm active:scale-95"
                 title="Forcer le rafraîchissement Supabase"
               >
                 <Clock className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+                </button>
+              </div>
             {selectedMonths.length > 0 && (
               <button
                 onClick={() => setSelectedMonths([])}
@@ -3155,7 +3241,7 @@ export default function Dashboard() {
                   </div>
                   
                   {/* Bouton CTA Principal */}
-                  <button
+                <button
                     onClick={() => router.push('/pricing')}
                     className="inline-flex items-center gap-3 px-8 py-4 bg-white text-orange-600 font-black text-lg rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
                   >
@@ -3317,8 +3403,8 @@ export default function Dashboard() {
                     >
                       <Crown className="w-4 h-4" />
                       Devenir PRO
-                    </button>
-                  </div>
+                </button>
+              </div>
                 </div>
               )}
               
@@ -3386,14 +3472,14 @@ export default function Dashboard() {
                   {userTier !== 'pro' && (
                     <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10">
                       <Crown className="w-6 h-6 text-white animate-pulse" />
-                    </div>
-                  )}
-                  
+                </div>
+              )}
+
                   {analyzing ? (
                   <span className="flex items-center justify-center">
                     <div className="spinner w-5 h-5 mr-3 border-white/30 border-t-white"></div>
                     {loadingMessage}
-                  </span>
+                      </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
                     <motion.div
@@ -3406,7 +3492,7 @@ export default function Dashboard() {
                   </span>
                   )}
           </motion.button>
-              </div>
+                    </div>
 
             {/* Erreur */}
             {error && (
@@ -3436,14 +3522,14 @@ export default function Dashboard() {
                     <span className="text-sm font-bold text-slate-600">Montant HT</span>
                     <span className="text-sm font-black text-slate-900">
                       {result.montant_ht ? `${result.montant_ht.toFixed(2)} €` : 'N/A'}
-                    </span>
-                  </div>
+                      </span>
+                    </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-bold text-slate-600">Montant TTC</span>
                     <span className="text-sm font-black text-slate-900">
                       {result.total_amount ? `${result.total_amount.toFixed(2)} €` : 'N/A'}
-                    </span>
-                  </div>
+                      </span>
+                    </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-bold text-slate-600">TVA</span>
                     <span className="text-sm font-black text-orange-500">
@@ -3451,22 +3537,22 @@ export default function Dashboard() {
                         ? `${(result.total_amount - result.montant_ht).toFixed(2)} €` 
                         : 'N/A'}
                       </span>
-                  </div>
+                    </div>
                   {result.date && (
                     <div className="flex justify-between py-2 border-b border-slate-100">
                       <span className="text-sm font-medium text-slate-600">Date</span>
                       <span className="text-sm font-semibold text-slate-900">{result.date}</span>
-                    </div>
+                  </div>
                   )}
                   {result.description && (
                     <div className="py-2">
                       <span className="text-sm font-medium text-slate-600 block mb-1">Description</span>
                       <p className="text-sm text-slate-700">{result.description}</p>
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
+              )}
+                </div>
+            </div>
+          )}
           </motion.div>
         )}
 
@@ -3493,8 +3579,8 @@ export default function Dashboard() {
                         <Crown className="w-6 h-6 text-white" />
                       </div>
                     </div>
-                  </div>
-                  
+        </div>
+
                   {/* Message principal */}
                   <div>
                     <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
@@ -3528,7 +3614,7 @@ export default function Dashboard() {
                         <span><strong>Filtres par période</strong> et catégorie</span>
                       </li>
                     </ul>
-                  </div>
+              </div>
 
                   {/* Badge essai gratuit */}
                   <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
@@ -3539,8 +3625,8 @@ export default function Dashboard() {
                     <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
                     <p className="text-sm opacity-90">
                       Testez toutes les fonctionnalités sans engagement
-                    </p>
-                  </div>
+                </p>
+              </div>
 
                   {/* Boutons d'action */}
                   <div className="space-y-3">
@@ -3775,9 +3861,9 @@ export default function Dashboard() {
                                 </p>
                                 <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
                                   Transmise le : {new Date(invoice.created_at).toLocaleDateString('fr-FR')} à {new Date(invoice.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
+                </p>
+              </div>
+            </div>
                             
                             {/* Menu actions discret */}
                             <div className="relative">
@@ -3894,7 +3980,7 @@ export default function Dashboard() {
                                       <Trash2 className="w-4 h-4" />
                                       Supprimer
                                     </button>
-                                  </div>
+          </div>
                                 </>
                               )}
                             </div>
@@ -4096,7 +4182,7 @@ export default function Dashboard() {
                           <div className="flex-1 min-w-0">
                             <h3 className="text-lg font-black text-slate-900 truncate group-hover:text-orange-600 transition-colors">
                               {folder.name}
-                            </h3>
+            </h3>
                             {folder.reference && (
                               <p className="text-sm text-slate-500 mt-1 truncate">
                                 Réf: {folder.reference}
@@ -4107,7 +4193,7 @@ export default function Dashboard() {
                         
                         {/* Menu actions discret */}
                         <div className="absolute top-4 right-4">
-                          <button
+              <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setOpenMenuId(openMenuId === folder.id ? null : folder.id);
@@ -4137,7 +4223,7 @@ export default function Dashboard() {
                                 >
                                   <Archive className="w-4 h-4 text-slate-500" />
                                   Archiver
-                                </button>
+              </button>
                                 
                                 <div className="h-px bg-slate-100 my-1"></div>
                                 
@@ -4212,9 +4298,9 @@ export default function Dashboard() {
                                 </button>
                               </div>
                             </>
-                          )}
-                        </div>
-                      </div>
+            )}
+          </div>
+            </div>
                     ))}
                   </div>
                 )}
@@ -4258,15 +4344,15 @@ export default function Dashboard() {
                     
                     if (folderInvoices.length === 0) {
                       return (
-                        <div className="text-center py-12">
+            <div className="text-center py-12">
                           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Receipt className="w-8 h-8 text-slate-400" />
                           </div>
                           <p className="text-slate-500 font-medium">Aucune facture dans ce dossier</p>
                           <p className="text-sm text-slate-400 mt-2">
                             Les factures que vous assignerez à ce dossier apparaîtront ici
-                          </p>
-                        </div>
+              </p>
+            </div>
                       );
                     }
 
@@ -4314,13 +4400,13 @@ export default function Dashboard() {
                                   <div className="flex items-center gap-2 mb-2">
                                     <span className="font-black text-slate-900">
                                       {invoice.entreprise || 'Fournisseur non spécifié'}
-                                    </span>
+                        </span>
                                     {invoice.categorie && (
                                       <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full font-bold">
                                         {invoice.categorie}
-                                      </span>
-                                    )}
-                                  </div>
+                          </span>
+                        )}
+                      </div>
                                   {invoice.description && (
                                     <p className="text-sm text-slate-600 mb-2">{invoice.description}</p>
                                   )}
@@ -4330,12 +4416,12 @@ export default function Dashboard() {
                                     <span className="font-bold text-orange-600">
                                       TTC: {(invoice.montant_ttc || invoice.total_amount || 0).toFixed(2)} €
                                     </span>
-                                  </div>
-                                </div>
+                    </div>
+                      </div>
 
                                 {/* Menu actions */}
                                 <div className="relative">
-                                  <button
+                      <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setInvoiceMenuOpen(invoiceMenuOpen === invoice.id ? null : invoice.id);
@@ -4392,14 +4478,14 @@ export default function Dashboard() {
                                       >
                                         <Trash2 className="w-4 h-4 text-red-500" />
                                         <span className="font-medium text-red-600">Supprimer</span>
-                                      </button>
+                      </button>
                                     </div>
                                   )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
                       </>
                     );
                   })()}
@@ -4691,13 +4777,13 @@ export default function Dashboard() {
           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 slide-up" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-black text-slate-900">Scanner une facture</h3>
-              <button
+        <button
                 onClick={() => setShowUploadMenu(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
+        >
                 <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
+        </button>
+      </div>
 
             <div className="space-y-3">
               <button
@@ -4714,7 +4800,7 @@ export default function Dashboard() {
               >
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Camera className="w-6 h-6" />
-                </div>
+    </div>
                 <div className="text-left flex-1">
                   <p className="font-black text-base">Prendre une photo</p>
                   <p className="text-xs opacity-90">Ouvrir l'appareil photo</p>
