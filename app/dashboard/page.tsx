@@ -716,6 +716,31 @@ export default function Dashboard() {
     return isNaN(num) ? 0 : num;
   };
 
+  // Normalisation catégorie (évite emojis/variantes → stable pour exports & compta)
+  const normalizeCategory = (val: any) => {
+    const raw = (val ?? '').toString();
+    // Retirer emojis + nettoyer espaces
+    const noEmoji = raw.replace(
+      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+      ''
+    );
+    return noEmoji.replace(/\s+/g, ' ').trim();
+  };
+
+  const formatDateLabel = (raw?: string) => {
+    const s = formatDateFR(raw);
+    return s || '—';
+  };
+
+  const formatDateTimeLabel = (raw?: string) => {
+    if (!raw) return '—';
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return '—';
+    const date = d.toLocaleDateString('fr-FR');
+    const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return `${date} à ${time}`;
+  };
+
   // Formatage des montants pour affichage (Espace pour les milliers, signe € à la fin)
   const formatDisplayAmount = (amount: number | string) => {
     const num = typeof amount === 'string' ? parseAmount(amount) : amount;
@@ -864,13 +889,35 @@ export default function Dashboard() {
           total_amount: inv.total_amount
         })));
         
-        setInvoices(data || []);
+        // Normaliser les champs (évite bugs historiques/excel/csv sur anciennes lignes)
+        const normalized = (data || []).map((inv: any) => {
+          const ht = parseAmount(inv.montant_ht);
+          const ttcFromDb = inv.total_amount ?? inv.montant_ttc ?? inv.montant_ttc ?? 0;
+          const ttc = parseAmount(ttcFromDb);
+          const tva = (inv.tva !== undefined && inv.tva !== null) ? parseAmount(inv.tva) : (ttc - ht);
+
+          const dateFacture = (inv.date_facture || inv.date || '').toString().trim() || (inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '');
+
+          return {
+            ...inv,
+            montant_ht: ht,
+            montant_ttc: parseAmount(inv.montant_ttc ?? ttc),
+            total_amount: ttc,
+            tva,
+            date_facture: dateFacture,
+            categorie: normalizeCategory(inv.categorie || ''),
+            modified_manually: inv.modified_manually === true,
+          } as Invoice;
+        });
+
+        setInvoices(normalized);
         console.log('💾 État invoices mis à jour avec', data?.length || 0, 'factures');
       } else {
         console.warn('⚠️ Aucun utilisateur connecté');
       }
     } catch (err) {
       console.error('❌ Erreur chargement factures:', err);
+      showToastMessage('Impossible de charger vos factures. Vérifiez votre connexion et réessayez.', 'error');
     } finally {
       setLoadingInvoices(false);
       console.log('✅ === FIN CHARGEMENT FACTURES ===');
@@ -1044,7 +1091,7 @@ export default function Dashboard() {
 
       if (!data || data.length === 0) {
         console.error('❌ Aucune ligne modifiée - Vérifiez les permissions RLS');
-        throw new Error('Impossible de modifier la facture. Vérifiez les permissions.');
+        throw new Error('Impossible de déplacer la facture. Réessayez dans quelques secondes.');
       }
       
       console.log('✅ Transfert réussi! folder_id:', data[0].folder_id);
@@ -2736,9 +2783,10 @@ export default function Dashboard() {
       }
 
       // Préparer les données pour l'insertion
-      const finalCategory = pendingInvoiceData.categorie === '📝 Autre' 
-        ? (customCategory.trim() || '📝 Autre') 
-        : pendingInvoiceData.categorie;
+      const pendingCat = pendingInvoiceData.categorie;
+      const isOther = pendingCat === '📝 Autre' || pendingCat === 'Autre';
+      const finalCategoryRaw = isOther ? (customCategory.trim() || 'Autre') : (pendingCat || 'Autre');
+      const finalCategory = normalizeCategory(finalCategoryRaw) || 'Autre';
 
       // Structure exacte conforme à la table SQL
       const dateFacture =
@@ -3781,14 +3829,14 @@ export default function Dashboard() {
                     className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-medium transition-all"
                   >
                     <option value="">Toutes les catégories</option>
-                    <option value="🧱 Matériaux">🧱 Matériaux</option>
-                    <option value="⛽ Carburant">⛽ Carburant</option>
-                    <option value="🍴 Restaurant">🍴 Restaurant</option>
-                    <option value="🛠️ Outillage">🛠️ Outillage</option>
-                    <option value="📦 Fournitures">📦 Fournitures</option>
-                    <option value="🚚 Location">🚚 Location</option>
-                    <option value="🤝 Sous-traitance">🤝 Sous-traitance</option>
-                    <option value="📝 Autre">📝 Autre</option>
+                    <option value="Matériaux">🧱 Matériaux</option>
+                    <option value="Carburant">⛽ Carburant</option>
+                    <option value="Restaurant">🍴 Restaurant</option>
+                    <option value="Outillage">🛠️ Outillage</option>
+                    <option value="Fournitures">📦 Fournitures</option>
+                    <option value="Location">🚚 Location</option>
+                    <option value="Sous-traitance">🤝 Sous-traitance</option>
+                    <option value="Autre">📝 Autre</option>
                   </select>
                 </div>
               </div>
@@ -3906,10 +3954,10 @@ export default function Dashboard() {
                               </div>
                               <div className="flex flex-col gap-1">
                                 <p className="text-xs font-bold text-slate-500">
-                                  Facture du : {new Date(invoice.date_facture).toLocaleDateString('fr-FR')}
+                                  Facture du : {formatDateLabel(invoice.date_facture || invoice.created_at)}
                                 </p>
                                 <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
-                                  Transmise le : {new Date(invoice.created_at).toLocaleDateString('fr-FR')} à {new Date(invoice.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  Transmise le : {formatDateTimeLabel(invoice.created_at)}
                 </p>
               </div>
             </div>
@@ -4496,18 +4544,8 @@ export default function Dashboard() {
                                       
                                       <button
                                         onClick={async () => {
-                                          // Retirer du dossier
-                                          const { error } = await supabase
-                                            .from('scans')
-                                            .update({ folder_id: null })
-                                            .eq('id', invoice.id);
-                                          
-                                          if (error) {
-                                            showToastMessage('❌ Erreur lors du retrait', 'error');
-                                          } else {
-                                            showToastMessage('✅ Facture retirée du dossier', 'success');
-                                            await loadInvoices();
-                                          }
+                                          // Retirer du dossier (via la fonction robuste avec RLS)
+                                          await removeInvoiceFromFolder(invoice.id);
                                           setInvoiceMenuOpen(null);
                                         }}
                                         className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-3 transition-colors"
@@ -5148,19 +5186,19 @@ export default function Dashboard() {
                     className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   >
                     <option value="">-- Sélectionner une catégorie --</option>
-                    <option value="🧱 Matériaux">🧱 Matériaux</option>
-                    <option value="⛽ Carburant">⛽ Carburant</option>
-                    <option value="🍴 Restaurant">🍴 Restaurant</option>
-                    <option value="🛠️ Outillage">🛠️ Outillage</option>
-                    <option value="📦 Fournitures">📦 Fournitures</option>
-                    <option value="🚚 Location">🚚 Location</option>
-                    <option value="🤝 Sous-traitance">🤝 Sous-traitance</option>
-                    <option value="📝 Autre">📝 Autre (Saisie libre...)</option>
+                  <option value="Matériaux">🧱 Matériaux</option>
+                  <option value="Carburant">⛽ Carburant</option>
+                  <option value="Restaurant">🍴 Restaurant</option>
+                  <option value="Outillage">🛠️ Outillage</option>
+                  <option value="Fournitures">📦 Fournitures</option>
+                  <option value="Location">🚚 Location</option>
+                  <option value="Sous-traitance">🤝 Sous-traitance</option>
+                  <option value="Autre">📝 Autre (Saisie libre...)</option>
                   </select>
                 </div>
 
                 {/* Champ dynamique si "Autre" est sélectionné */}
-                {pendingInvoiceData.categorie === '📝 Autre' && (
+                {(pendingInvoiceData.categorie === '📝 Autre' || pendingInvoiceData.categorie === 'Autre') && (
                   <div className="mt-3 fade-in">
                     <label className="block text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1.5 ml-1">
                       Spécifiez votre catégorie
