@@ -26,6 +26,8 @@ interface Invoice {
   created_at: string;
   folder_id?: string;
   archived?: boolean;
+  modified_manually?: boolean;
+  updated_at?: string;
 }
 
 interface Project {
@@ -204,6 +206,8 @@ export default function Dashboard() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
+  const [pendingInvoiceOriginal, setPendingInvoiceOriginal] = useState<any>(null);
+  const [pendingManuallyEdited, setPendingManuallyEdited] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1275,13 +1279,17 @@ export default function Dashboard() {
       }
     }
 
-    const rows = folderInvoices.map((inv) => {
+      const rows = folderInvoices.map((inv) => {
       const { ht, tva, ttc } = getInvoiceAmounts(inv);
       const dateFacture = formatDateFR(inv.date_facture || inv.created_at);
       const dateAjout = formatDateFR(inv.created_at);
       const fournisseur = inv.entreprise?.trim() || 'Non renseigné';
       const categorie = inv.categorie || 'Non classé';
       const numeroFacture = ''; // Non stocké en V1 (colonne “si dispo”)
+
+        if (!dateFacture || !dateAjout) {
+          throw new Error('Date manquante sur au moins une facture.');
+        }
 
       return [
         dateFacture,
@@ -1292,7 +1300,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(categorie),
         dateAjout,
-        'non',
+          inv.modified_manually ? 'oui' : 'non',
       ];
     });
     const csvContent = "\uFEFF" + [
@@ -1766,7 +1774,7 @@ export default function Dashboard() {
       formatDecimalFR(ttc),
       escapeCSV(invoice.categorie || 'Non classé'),
       formatDateFR(invoice.created_at),
-      'non',
+      invoice.modified_manually ? 'oui' : 'non',
     ];
 
     const csvContent = "\uFEFF" + [headers.join(';'), row.join(';')].join('\n');
@@ -2033,7 +2041,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(inv.categorie || 'Non classé'),
         formatDateFR(inv.created_at),
-        'non',
+        inv.modified_manually ? 'oui' : 'non',
       ];
     });
 
@@ -2544,14 +2552,29 @@ export default function Dashboard() {
     });
   };
 
+  // Helper : toute modification manuelle dans la modale doit être tracée
+  const updatePendingInvoice = (patch: Record<string, any>) => {
+    setPendingInvoiceData((prev: any) => ({ ...(prev || {}), ...patch }));
+    setPendingManuallyEdited(true);
+  };
+
   const handleAnalyze = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToastMessage('❌ Seules les photos (JPEG/PNG) sont supportées pour le moment.', 'error');
+      return;
+    }
 
     // Vérification taille fichier original
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > 10) {
       showToastMessage('Image trop lourde (>10MB). Essayez de reculer un peu.', 'error');
+      return;
+    }
+    if (file.size < 25 * 1024) {
+      showToastMessage('Photo trop compressée. Reprenez la photo en meilleure qualité.', 'error');
       return;
     }
 
@@ -2615,6 +2638,8 @@ export default function Dashboard() {
       console.log('📊 Données enrichies pour le formulaire:', enrichedData);
       
       setPendingInvoiceData(enrichedData);
+      setPendingInvoiceOriginal(enrichedData);
+      setPendingManuallyEdited(false);
       setShowValidationModal(true);
 
     } catch (err: any) {
@@ -2716,15 +2741,26 @@ export default function Dashboard() {
         : pendingInvoiceData.categorie;
 
       // Structure exacte conforme à la table SQL
-      const invoiceData = {
+      const dateFacture =
+        (pendingInvoiceData.date && String(pendingInvoiceData.date).trim()) ||
+        new Date().toISOString().slice(0, 10);
+
+      const invoiceDataBase: any = {
         user_id: user.id,
         entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
         montant_ht: Number(montantHT) || 0,
         montant_ttc: Number(montantTTC) || 0,
+        total_amount: Number(montantTTC) || 0,
         tva: Number(tva) || 0,
+        date_facture: dateFacture,
         categorie: finalCategory || 'Non classé',
         description: pendingInvoiceData.description || '',
         folder_id: pendingInvoiceData.folder_id || null,
+      };
+
+      const invoiceData: any = {
+        ...invoiceDataBase,
+        modified_manually: pendingManuallyEdited,
       };
 
       console.log('📤 DONNÉES ENVOYÉES À SUPABASE:');
@@ -2733,15 +2769,26 @@ export default function Dashboard() {
       console.log('   - montant_ht:', invoiceData.montant_ht);
       console.log('   - montant_ttc:', invoiceData.montant_ttc);
       console.log('   - tva:', invoiceData.tva);
+      console.log('   - date_facture:', invoiceData.date_facture);
+      console.log('   - modified_manually:', invoiceData.modified_manually);
       console.log('   - categorie:', invoiceData.categorie);
       console.log('   - description:', invoiceData.description);
       console.log('   - folder_id:', invoiceData.folder_id);
       console.log('   Objet complet:', JSON.stringify(invoiceData, null, 2));
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('scans')
         .insert([invoiceData])
         .select();
+
+      // Fallback si la colonne modified_manually n’existe pas encore en DB
+      if (error && (String(error.message || '').includes('modified_manually') || error.code === '42703')) {
+        console.warn('⚠️ Colonne modified_manually absente, retry insert sans ce champ');
+        ({ data, error } = await supabase
+          .from('scans')
+          .insert([invoiceDataBase])
+          .select());
+      }
 
       if (error) {
         console.error('❌ ERREUR SUPABASE COMPLÈTE:', {
@@ -2759,6 +2806,8 @@ export default function Dashboard() {
       // Fermer la modale
       setShowValidationModal(false);
       setPendingInvoiceData(null);
+      setPendingInvoiceOriginal(null);
+      setPendingManuallyEdited(false);
       setCustomCategory('');
 
       // Toast de succès
@@ -4765,7 +4814,7 @@ export default function Dashboard() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,application/pdf"
+        accept="image/*"
         capture="environment"
         onChange={handleAnalyze}
         className="hidden"
@@ -4813,7 +4862,7 @@ export default function Dashboard() {
                   const input = fileInputRef.current;
                   if (input) {
                     input.removeAttribute('capture');
-                    input.setAttribute('accept', 'image/*,application/pdf');
+                    input.setAttribute('accept', 'image/*');
                     input.click();
                   }
                 }}
@@ -4952,6 +5001,8 @@ export default function Dashboard() {
                 onClick={() => {
                   setShowValidationModal(false);
                   setPendingInvoiceData(null);
+                  setPendingInvoiceOriginal(null);
+                  setPendingManuallyEdited(false);
                   setCustomCategory('');
                 }}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -4974,10 +5025,7 @@ export default function Dashboard() {
                 <input
                   type="date"
                   value={pendingInvoiceData.date ? pendingInvoiceData.date.split('T')[0] : ''}
-                  onChange={(e) => setPendingInvoiceData({
-                    ...pendingInvoiceData,
-                    date: e.target.value
-                  })}
+                  onChange={(e) => updatePendingInvoice({ date: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                 />
               </div>
@@ -4991,10 +5039,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   value={pendingInvoiceData.entreprise || ''}
-                  onChange={(e) => setPendingInvoiceData({
-                    ...pendingInvoiceData,
-                    entreprise: e.target.value
-                  })}
+                  onChange={(e) => updatePendingInvoice({ entreprise: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   placeholder="Nom de l'entreprise"
                 />
@@ -5017,16 +5062,12 @@ export default function Dashboard() {
                     // Si TTC existe, calculer la TVA automatiquement
                     if (currentTTC) {
                       const calculatedTVA = parseFloat(currentTTC) - parseFloat(newHT || '0');
-                      setPendingInvoiceData({
-                        ...pendingInvoiceData,
+                      updatePendingInvoice({
                         montant_ht: newHT,
                         tva: calculatedTVA >= 0 ? calculatedTVA.toFixed(2) : '0'
                       });
                     } else {
-                      setPendingInvoiceData({
-                        ...pendingInvoiceData,
-                        montant_ht: newHT
-                      });
+                      updatePendingInvoice({ montant_ht: newHT });
                     }
                   }}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
@@ -5048,8 +5089,7 @@ export default function Dashboard() {
                     const newTVA = e.target.value;
                     const currentHT = pendingInvoiceData.montant_ht;
                     
-                    setPendingInvoiceData({
-                      ...pendingInvoiceData,
+                    updatePendingInvoice({
                       tva: newTVA,
                       // Calculer le TTC automatiquement si HT existe
                       total_amount: currentHT ? (parseFloat(currentHT) + parseFloat(newTVA || '0')).toFixed(2) : undefined,
@@ -5078,15 +5118,13 @@ export default function Dashboard() {
                     // Si HT existe, calculer la TVA automatiquement
                     if (currentHT) {
                       const calculatedTVA = parseFloat(newTTC || '0') - parseFloat(currentHT);
-                      setPendingInvoiceData({
-                        ...pendingInvoiceData,
+                      updatePendingInvoice({
                         total_amount: newTTC,
                         montant_ttc: newTTC,
                         tva: calculatedTVA >= 0 ? calculatedTVA.toFixed(2) : '0'
                       });
                     } else {
-                      setPendingInvoiceData({
-                        ...pendingInvoiceData,
+                      updatePendingInvoice({
                         total_amount: newTTC,
                         montant_ttc: newTTC
                       });
@@ -5106,10 +5144,7 @@ export default function Dashboard() {
                 <div className="relative">
                   <select
                     value={pendingInvoiceData.categorie || ''}
-                    onChange={(e) => setPendingInvoiceData({
-                      ...pendingInvoiceData,
-                      categorie: e.target.value
-                    })}
+                    onChange={(e) => updatePendingInvoice({ categorie: e.target.value })}
                     className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm font-medium"
                   >
                     <option value="">-- Sélectionner une catégorie --</option>

@@ -76,6 +76,17 @@ export async function POST(request: NextRequest) {
       ? imageData
       : `data:image/jpeg;base64,${imageData}`;
 
+    // Heuristique anti “photo trop petite/floue” : base64 trop court => on stoppe vite (message humain)
+    // (évite de payer un appel OpenAI pour une image inutilisable)
+    const rawBase64 = imageUrl.includes('base64,') ? imageUrl.split('base64,')[1] : imageData;
+    const approxBytes = Math.floor((rawBase64.length * 3) / 4);
+    if (approxBytes < 18 * 1024) {
+      return NextResponse.json(
+        { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
+        { status: 400 }
+      );
+    }
+
     // Appeler l'API OpenAI avec GPT-4o pour analyser l'image
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',

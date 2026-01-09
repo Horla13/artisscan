@@ -87,6 +87,8 @@ function generatePivotCSV(invoices: any[]): string {
     // Numéro facture: non stocké en V1 (si dispo)
     const numeroFacture = inv?.numero_facture || inv?.invoice_number || '';
 
+    const modifie = inv?.modified_manually === true ? 'oui' : 'non';
+
     return [
       dateFacture,
       escapeCSV(fournisseur),
@@ -96,7 +98,7 @@ function generatePivotCSV(invoices: any[]): string {
       formatDecimalFR(ttc),
       escapeCSV(categorie),
       dateAjout,
-      'non',
+      modifie,
     ].join(';');
   });
 
