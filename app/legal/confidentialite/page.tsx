@@ -1,20 +1,23 @@
 export default function Confidentialite() {
   return (
     <>
-      <h1>Politique de Confidentialité</h1>
+      <h1>Politique de confidentialité (RGPD)</h1>
       
       <p className="lead">
-        ArtisScan s'engage à protéger la confidentialité de vos données personnelles. 
-        Cette politique vous informe sur la manière dont nous collectons, utilisons et protégeons vos informations, 
-        conformément au Règlement Général sur la Protection des Données (RGPD).
+        La présente politique décrit comment <strong>VertexLab (SASU)</strong>, éditeur du service <strong>ArtisScan</strong>,
+        collecte, utilise et protège vos données personnelles conformément au RGPD.
       </p>
 
       <section>
         <h2>1. Responsable du traitement</h2>
         <p>
-          Le responsable du traitement des données personnelles est :<br />
-          <strong>[Votre Nom et Prénom]</strong>, Entrepreneur Individuel<br />
-          Email : <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a>
+          <strong>Responsable du traitement :</strong> VertexLab (SASU)
+          <br />
+          <strong>Propriétaire :</strong> Giovanni Russo
+          <br />
+          <strong>Adresse :</strong> 198 Boulevard Ange Martin, 13190 Allauch, France
+          <br />
+          <strong>Email (contact RGPD / DPO) :</strong> <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a>
         </p>
       </section>
 
@@ -22,10 +25,12 @@ export default function Confidentialite() {
         <h2>2. Données collectées</h2>
         <p>Dans le cadre de l'utilisation du service ArtisScan, nous collectons les données suivantes :</p>
         <ul>
-          <li><strong>Données d'identification :</strong> Nom, prénom, adresse email</li>
-          <li><strong>Données de facturation :</strong> Informations de paiement (traitées de manière sécurisée par Stripe)</li>
-          <li><strong>Données professionnelles :</strong> Nom de l'entreprise, données de factures numérisées (fournisseurs, montants, dates)</li>
-          <li><strong>Données de connexion :</strong> Adresse IP, logs de connexion, données de navigation</li>
+          <li><strong>Données d’identification :</strong> adresse email</li>
+          <li><strong>Données d’authentification :</strong> mot de passe (géré par Supabase Auth)</li>
+          <li><strong>Données documentaires/comptables :</strong> documents importés, métadonnées et exports</li>
+          <li><strong>Données de facturation :</strong> informations nécessaires à la facturation/abonnement (gérées par Paddle)</li>
+          <li><strong>Données techniques :</strong> logs, adresse IP, événements de sécurité, données de navigation</li>
+          <li><strong>Cookies :</strong> cookies essentiels et, le cas échéant, cookies de mesure d’audience</li>
         </ul>
       </section>
 
@@ -59,9 +64,10 @@ export default function Confidentialite() {
         <ul>
           <li><strong>ArtisScan :</strong> Accès limité aux données nécessaires à la fourniture du service</li>
           <li><strong>Supabase :</strong> Hébergement sécurisé de la base de données</li>
-          <li><strong>Stripe :</strong> Traitement sécurisé des paiements (soumis à ses propres conditions)</li>
-          <li><strong>Resend / Google Workspace :</strong> Envoi d'emails transactionnels</li>
-          <li><strong>Vercel :</strong> Hébergement de l'application web</li>
+          <li><strong>Paddle :</strong> Paiements, facturation et taxes (Merchant of Record)</li>
+          <li><strong>OVH :</strong> Hébergement</li>
+          <li><strong>Prestataires email :</strong> Envoi d’emails de service et support</li>
+          <li><strong>Stripe (éventuel) :</strong> Le cas échéant, si un module de paiement alternatif est utilisé</li>
         </ul>
         <p>
           <strong>Nous ne vendons, ne louons ni ne partageons vos données personnelles avec des tiers à des fins commerciales.</strong>
@@ -88,7 +94,7 @@ export default function Confidentialite() {
         <ul>
           <li>Chiffrement des données en transit (HTTPS/TLS)</li>
           <li>Authentification sécurisée (Supabase Auth)</li>
-          <li>Hébergement sur des serveurs sécurisés (Vercel, Supabase)</li>
+          <li>Hébergement sur des serveurs sécurisés (OVH, Supabase)</li>
           <li>Accès limité aux données (politique du moindre privilège)</li>
         </ul>
       </section>
@@ -124,15 +130,16 @@ export default function Confidentialite() {
           <li><strong>Cookies de préférences :</strong> Pour mémoriser vos choix (langue, paramètres d'affichage)</li>
         </ul>
         <p>
-          Nous n'utilisons pas de cookies publicitaires ou de suivi à des fins marketing.
+          Pour plus de détails, consultez la page <a href="/legal/cookies">Politique de cookies</a>.
         </p>
       </section>
 
       <section>
         <h2>10. Transferts de données hors UE</h2>
         <p>
-          Certains de nos prestataires techniques (Vercel, Supabase, Stripe) peuvent être situés en dehors de l'Union Européenne. 
-          Dans ce cas, nous nous assurons que des garanties appropriées sont en place, conformément au RGPD (clauses contractuelles types, Privacy Shield, etc.).
+          Certains prestataires techniques (notamment Supabase et Paddle) peuvent être situés en dehors de l’Union
+          Européenne ou impliquer des transferts internationaux. Lorsque cela est requis, nous veillons à la mise en
+          place de garanties appropriées conformément au RGPD (ex. clauses contractuelles types).
         </p>
       </section>
 

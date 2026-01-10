@@ -1,11 +1,12 @@
 export default function CGU() {
   return (
     <>
-      <h1>Conditions Générales d'Utilisation</h1>
-      
+      <h1>Conditions Générales d’Utilisation (CGU)</h1>
+
       <p className="lead">
-        Les présentes Conditions Générales d'Utilisation (CGU) régissent l'accès et l'utilisation du service ArtisScan. 
-        En utilisant ce service, vous acceptez sans réserve les présentes CGU.
+        Les présentes CGU encadrent l’accès et l’utilisation du service <strong>ArtisScan</strong>, édité par{' '}
+        <strong>VertexLab (SASU)</strong>. En créant un compte ou en utilisant le service, vous acceptez les présentes
+        CGU.
       </p>
 
       <section>
@@ -60,7 +61,7 @@ export default function CGU() {
       <section>
         <h2>4. Abonnement et tarification</h2>
         <p>
-          L'accès au service ArtisScan nécessite la souscription à un abonnement payant (formule mensuelle ou annuelle).
+          L'accès au service ArtisScan nécessite la souscription à un abonnement (formule mensuelle ou annuelle).
         </p>
         <p>
           Les tarifs en vigueur sont affichés sur la page <a href="/pricing">Tarifs</a> et peuvent être modifiés à tout moment. 
@@ -74,17 +75,34 @@ export default function CGU() {
           <strong>Résiliation :</strong> Vous pouvez résilier votre abonnement à tout moment depuis votre compte. 
           La résiliation prendra effet à la fin de la période d'abonnement en cours (pas de remboursement prorata temporis).
         </p>
+        <p>
+          <strong>Aucun remboursement après paiement :</strong> sauf obligation légale contraire, aucun remboursement n’est
+          accordé après paiement. Pour le détail : <a href="/legal/remboursement">Politique de remboursement</a>.
+        </p>
       </section>
 
       <section>
-        <h2>5. Utilisation du service</h2>
-        <h3>5.1. Usage autorisé</h3>
+        <h2>5. Paiement et facturation via Paddle (Merchant of Record)</h2>
+        <p>
+          Les paiements et la facturation sont opérés par <strong>Paddle</strong> en tant que{' '}
+          <strong>Merchant of Record</strong> (vendeur officiel). Paddle peut émettre les factures/reçus et gérer les taxes
+          applicables conformément à la réglementation.
+        </p>
+        <p>
+          ArtisScan (VertexLab) reste responsable de la fourniture du service logiciel, de l’accès à la plateforme et du
+          support.
+        </p>
+      </section>
+
+      <section>
+        <h2>6. Utilisation du service</h2>
+        <h3>6.1. Usage autorisé</h3>
         <p>
           Vous vous engagez à utiliser le service ArtisScan de manière loyale et conforme à sa destination, 
           c'est-à-dire pour la gestion de vos propres factures professionnelles.
         </p>
         
-        <h3>5.2. Usages interdits</h3>
+        <h3>6.2. Usages interdits</h3>
         <p>Il est strictement interdit de :</p>
         <ul>
           <li>Utiliser le service à des fins illégales ou frauduleuses</li>
@@ -97,7 +115,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>6. ⚠️ Clause de responsabilité importante</h2>
+        <h2>7. ⚠️ Clause de responsabilité importante (outil technique)</h2>
         <div className="p-6 bg-orange-50 border-2 border-orange-200 rounded-xl not-prose">
           <p className="text-slate-900 font-semibold mb-3">
             <strong className="text-orange-600">ATTENTION :</strong> ArtisScan est un <strong>outil technique d'aide à la gestion</strong>.
@@ -113,7 +131,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>7. Limitation de responsabilité</h2>
+        <h2>8. Limitation de responsabilité</h2>
         <p>
           L'éditeur met tout en œuvre pour assurer la disponibilité, la sécurité et la fiabilité du service, 
           mais ne peut garantir un fonctionnement sans interruption ni erreur.
@@ -133,10 +151,10 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>8. Protection des données personnelles</h2>
+        <h2>9. Protection des données personnelles</h2>
         <p>
           Le traitement de vos données personnelles est décrit en détail dans notre 
-          <a href="/legal/confidentialite"> Politique de Confidentialité</a>.
+          <a href="/legal/confidentialite"> Politique de Confidentialité</a> et notre <a href="/legal/cookies">Politique de cookies</a>.
         </p>
         <p>
           Nous nous engageons à respecter le Règlement Général sur la Protection des Données (RGPD) et à protéger la confidentialité de vos informations.
@@ -144,7 +162,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>9. Propriété intellectuelle</h2>
+        <h2>10. Propriété intellectuelle</h2>
         <p>
           Tous les éléments du service ArtisScan (code source, design, logo, textes, images, etc.) sont protégés par le droit d'auteur et le droit des marques.
         </p>
@@ -159,7 +177,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>10. Suspension et résiliation</h2>
+        <h2>11. Suspension et résiliation</h2>
         <p>
           Nous nous réservons le droit de suspendre ou de résilier votre accès au service, avec ou sans préavis, dans les cas suivants :
         </p>
@@ -175,7 +193,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>11. Force majeure</h2>
+        <h2>12. Force majeure</h2>
         <p>
           Nous ne pourrons être tenus responsables de l'inexécution de nos obligations en cas de force majeure, 
           telle que définie par la jurisprudence française (catastrophe naturelle, guerre, grève, panne généralisée d'Internet, 
@@ -184,7 +202,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>12. Droit applicable et juridiction</h2>
+        <h2>13. Droit applicable et juridiction</h2>
         <p>
           Les présentes CGU sont régies par le droit français.
         </p>
@@ -198,7 +216,7 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>13. Contact</h2>
+        <h2>14. Contact</h2>
         <p>
           Pour toute question concernant les présentes CGU ou l'utilisation du service ArtisScan, vous pouvez nous contacter à :
         </p>

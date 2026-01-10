@@ -221,8 +221,11 @@ function PricingContent() {
           <span>© {new Date().getFullYear()} ArtisScan</span>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <Link href="/legal/mentions-legales" className="hover:text-orange-500 transition-colors">Mentions légales</Link>
-            <Link href="/legal/confidentialite" className="hover:text-orange-500 transition-colors">Confidentialité</Link>
             <Link href="/legal/cgu" className="hover:text-orange-500 transition-colors">CGU</Link>
+            <Link href="/legal/confidentialite" className="hover:text-orange-500 transition-colors">Confidentialité</Link>
+            <Link href="/legal/cookies" className="hover:text-orange-500 transition-colors">Cookies</Link>
+            <Link href="/legal/remboursement" className="hover:text-orange-500 transition-colors">Remboursement</Link>
+            <Link href="/legal/facturation" className="hover:text-orange-500 transition-colors">Facturation</Link>
           </div>
         </div>
       </footer>

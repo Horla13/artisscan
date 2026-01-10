@@ -19,8 +19,11 @@ export default function SuccessPage() {
   const legalLinks = useMemo(
     () => ([
       { href: '/legal/mentions-legales', label: 'Mentions légales' },
-      { href: '/legal/confidentialite', label: 'Confidentialité' },
       { href: '/legal/cgu', label: 'CGU' },
+      { href: '/legal/confidentialite', label: 'Confidentialité' },
+      { href: '/legal/cookies', label: 'Cookies' },
+      { href: '/legal/remboursement', label: 'Remboursement' },
+      { href: '/legal/facturation', label: 'Facturation' },
     ]),
     []
   );

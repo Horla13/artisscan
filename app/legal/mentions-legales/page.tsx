@@ -6,25 +6,29 @@ export default function MentionsLegales() {
       <section>
         <h2>1. Éditeur du site</h2>
         <p>
-          <strong>Entrepreneur Individuel</strong><br />
-          [Russo Giovanni]<br />
-          <strong>Email :</strong> <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a><br />
-          <strong>Siège social :</strong> [198 boulevard ange martin 13190]<br />
-          <strong>SIRET :</strong> [Votre numéro SIRET]
+          <strong>Nom commercial :</strong> ArtisScan
+          <br />
+          <strong>Société :</strong> VertexLab (SASU)
+          <br />
+          <strong>Dirigeant et propriétaire :</strong> Giovanni Russo
+          <br />
+          <strong>Capital social :</strong> 1 €
+          <br />
+          <strong>Siège social :</strong> 198 Boulevard Ange Martin, 13190 Allauch, France
+          <br />
+          <strong>Email de contact :</strong> <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a>
         </p>
       </section>
 
       <section>
         <h2>2. Directeur de la publication</h2>
-        <p>[Votre Nom et Prénom]</p>
+        <p>Giovanni Russo</p>
       </section>
 
       <section>
         <h2>3. Hébergement</h2>
         <p>
-          <strong>Hébergeur :</strong> Vercel Inc.<br />
-          <strong>Adresse :</strong> 340 S Lemon Ave #4133, Walnut, CA 91789, USA<br />
-          <strong>Site web :</strong> <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">vercel.com</a>
+          <strong>Hébergeur :</strong> OVH
         </p>
       </section>
 
@@ -71,7 +75,7 @@ export default function MentionsLegales() {
         <p>
           <strong>Conception et développement :</strong> ArtisScan<br />
           <strong>Technologies :</strong> Next.js, React, Tailwind CSS, TypeScript<br />
-          <strong>Services :</strong> Supabase (base de données), Stripe (paiements), Resend (emails)<br />
+          <strong>Services :</strong> Supabase (authentification et stockage), Paddle (paiements), Services d’email (support)<br />
           <strong>Icônes :</strong> Lucide Icons
         </p>
       </section>

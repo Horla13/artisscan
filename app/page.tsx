@@ -517,17 +517,29 @@ export default function Home() {
             </Link>
             <span className="hidden sm:inline">•</span>
             <Link 
+              href="/legal/cgu"
+              className="hover:text-orange-500 transition-colors"
+            >
+              CGU
+            </Link>
+            <span className="hidden sm:inline">•</span>
+            <Link 
               href="/legal/confidentialite"
               className="hover:text-orange-500 transition-colors"
             >
               Confidentialité
             </Link>
             <span className="hidden sm:inline">•</span>
-            <Link 
-              href="/legal/cgu"
-              className="hover:text-orange-500 transition-colors"
-            >
-              CGU
+            <Link href="/legal/cookies" className="hover:text-orange-500 transition-colors">
+              Cookies
+            </Link>
+            <span className="hidden sm:inline">•</span>
+            <Link href="/legal/remboursement" className="hover:text-orange-500 transition-colors">
+              Remboursement
+            </Link>
+            <span className="hidden sm:inline">•</span>
+            <Link href="/legal/facturation" className="hover:text-orange-500 transition-colors">
+              Facturation
             </Link>
             <span className="hidden sm:inline">•</span>
             <span>© 2024 ArtisScan</span>
