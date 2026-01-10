@@ -313,7 +313,7 @@ useEffect(() => {
 ### **Court terme (1-2 semaines) :**
 1. ✅ **Tester avec un vrai comptable** → Obtenir feedback sur export FEC
 2. ⚠️ **Compléter les mentions légales** → Remplacer `[Votre Nom]` par vraies données
-3. 📧 **Passer Resend → Brevo** → Service email EU (RGPD)
+3. 📧 **Passer à Brevo** → Service email EU (RGPD)
 
 ### **Moyen terme (1-3 mois) :**
 1. 🔌 **API Cabinet Comptable** → Dashboard multi-clients pour comptables

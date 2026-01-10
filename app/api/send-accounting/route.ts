@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import { jsPDF } from 'jspdf';
+import { sendMail } from '@/lib/sendMail';
 
 // ========== TYPES POUR LE FORMAT FEC ==========
 interface LigneEcriture {
@@ -366,16 +366,17 @@ function generateFECCSV(invoices: any[]): string {
 export async function POST(req: NextRequest) {
   console.log('📧 API send-accounting: Requête reçue');
 
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL;
+  const brevoSenderName = process.env.BREVO_SENDER_NAME;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!resendApiKey || !supabaseUrl || !serviceRoleKey) {
+  if (!brevoApiKey || !brevoSenderEmail || !brevoSenderName || !supabaseUrl || !serviceRoleKey) {
     console.error('❌ Variables d\'environnement manquantes');
     return NextResponse.json({ error: 'Configuration manquante' }, { status: 500 });
   }
 
-  const resend = new Resend(resendApiKey);
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   try {
@@ -697,42 +698,28 @@ export async function POST(req: NextRequest) {
 </body>
 </html>`;
 
-    // Préparer les pièces jointes (PDF + CSV)
+    // Préparer les pièces jointes (PDF + CSV) - base64 inchangé
     const attachments = [
-      {
-        filename: pdfFileName,
-        content: pdfBase64,
-      },
-      {
-        filename: pivotFileName,
-        content: pivotBase64,
-      },
-      {
-        filename: csvFileName,
-        content: csvBase64,
-      }
+      { filename: pdfFileName, contentBase64: pdfBase64 },
+      { filename: pivotFileName, contentBase64: pivotBase64 },
+      { filename: csvFileName, contentBase64: csvBase64 },
     ];
 
-    // Envoyer l'email via Resend
-    const { data, error } = await resend.emails.send({
-      from: 'ArtisScan <contact@artisscan.fr>',
-      to: [comptableEmail],
-      subject: `Pièces comptables ${userName || userEmail || ''} - ${periodDescription || new Date().toLocaleDateString('fr-FR')}`,
+    // Envoyer l'email via Brevo (Sendinblue)
+    const subject = `Pièces comptables ${userName || userEmail || ''} - ${periodDescription || new Date().toLocaleDateString('fr-FR')}`;
+    const brevoRes = await sendMail({
+      to: comptableEmail,
+      subject,
       html: emailBody,
-      attachments: attachments,
-      ...(userEmail && { replyTo: userEmail }), // Répondre directement au client
+      attachments,
+      replyTo: userEmail || undefined, // Répondre directement au client (comportement identique)
     });
 
-    if (error) {
-      console.error('❌ Erreur Resend:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    console.log('✅ Email envoyé avec succès:', data);
+    console.log('✅ Email envoyé avec succès:', brevoRes);
 
     return NextResponse.json({ 
       success: true, 
-      messageId: data?.id,
+      messageId: (brevoRes as any)?.messageId || (brevoRes as any)?.id,
       message: `Email envoyé à ${comptableEmail} avec PDF et CSV`
     });
 

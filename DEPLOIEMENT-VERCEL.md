@@ -97,9 +97,11 @@ STRIPE_PRICE_ID_MONTHLY
 STRIPE_PRICE_ID_YEARLY
 ```
 
-### Resend (Email)
+### Brevo (Email)
 ```
-RESEND_API_KEY                   ⚠️ SECRET - Pour envoi emails comptable
+BREVO_API_KEY                    ⚠️ SECRET - Pour envoi emails comptable
+BREVO_SENDER_EMAIL               ⚠️ Email expéditeur (ex: contact@artisscan.fr)
+BREVO_SENDER_NAME                ⚠️ Nom expéditeur (ex: ArtisScan)
 ```
 
 ### OpenAI (IA Scan)
@@ -224,7 +226,7 @@ curl -X POST https://artisscan.vercel.app/api/scans \
 - ✅ Redirection automatique vers le Dashboard
 - ✅ Badge "PRO (Essai gratuit)" visible dans le header
 - ✅ Boutons de scan actifs et fonctionnels
-- ✅ Email de bienvenue reçu via Resend
+- ✅ Emails transactionnels envoyés via Brevo
 
 ---
 
@@ -305,7 +307,7 @@ git push origin feature/nouvelle-fonctionnalite
 - [ ] Effectuer un paiement test et vérifier :
   - [ ] Webhook reçu et traité correctement
   - [ ] `is_pro` mis à `true` dans Supabase
-  - [ ] Email de bienvenue envoyé via Resend
+  - [ ] Emails transactionnels envoyés via Brevo
   - [ ] Accès au Dashboard accordé
 - [ ] Vérifier les logs Vercel pour détecter des erreurs
 - [ ] Tester la navigation mobile (bouton central scan)
