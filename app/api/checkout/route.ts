@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
 
 type BillingCycle = 'monthly' | 'yearly';
 
@@ -21,8 +22,28 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const billingCycle = (body?.billingCycle as BillingCycle) || 'monthly';
-    const userId = body?.userId;
-    const userEmail = body?.userEmail;
+
+    // ✅ Récupération sécurisée du user Supabase via Bearer token (ne pas faire confiance au body)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ error: 'Configuration Supabase manquante.' }, { status: 500 });
+    }
+
+    const authHeader = req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : '';
+    if (!token) {
+      return NextResponse.json({ error: 'Veuillez vous connecter avant de démarrer le paiement.' }, { status: 401 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Veuillez vous reconnecter puis réessayer.' }, { status: 401 });
+    }
+
+    const userId = user.id;
+    const userEmail = user.email || undefined;
 
     const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
     const yearlyPriceId = process.env.STRIPE_PRICE_ID_YEARLY?.trim();
@@ -49,12 +70,15 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         trial_period_days: 14,
+        // ✅ Metadata sur la Subscription (utile si on traite d'autres events que checkout.session.completed)
+        metadata: {
+          supabase_user_id: userId,
+        },
       },
-      // Exiger une session côté app : checkout doit être lié à un user Supabase
-      customer_email: userEmail || undefined,
+      // Checkout doit être lié à un user Supabase
+      customer_email: userEmail,
       metadata: {
-        supabase_user_id: userId || '',
-        supabase_user_email: userEmail || '',
+        supabase_user_id: userId,
       },
       // Retour vers une page de vérification (redirection auto ensuite)
       success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -62,18 +86,8 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
     };
 
-    // N'ajouter client_reference_id que si l'utilisateur est connecté (Bulldozer mode)
-    if (userId && userId !== '') {
-      sessionOptions.client_reference_id = userId;
-    }
-    
-    // Si pas d'utilisateur connecté, refuser : ça évite un paiement “orphelin”
-    if (!userId || userId === '') {
-      return NextResponse.json(
-        { error: "Veuillez vous connecter avant de démarrer le paiement." },
-        { status: 401 }
-      );
-    }
+    // ✅ Fallback robuste côté webhook si metadata absente (visible sur la session)
+    sessionOptions.client_reference_id = userId;
 
     const session = await stripe.checkout.sessions.create(sessionOptions);
 

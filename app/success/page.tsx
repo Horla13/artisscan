@@ -79,22 +79,41 @@ export default function SuccessPage() {
         setTitle('Vérification de l’abonnement…');
         setSubtitle('Configuration de votre espace professionnel en cours…');
 
-        const profile = await getUserProfile();
-        const planLower = profile?.plan?.toLowerCase();
-        const pro = planLower === 'pro' || profile?.is_pro === true;
-        setIsPro(pro);
+        // ✅ Polling (max 30s, objectif < 5s) : attendre que le webhook ait upgradé is_pro
+        const startedAt = Date.now();
+        const softTargetMs = 5000; // objectif produit
+        const hardTimeoutMs = 30000; // évite de renvoyer un client payé vers /pricing trop tôt
 
-        if (pro) {
-          setStatusLabel('OK');
-          setTitle('Bienvenue sur ArtisScan Pro');
-          setSubtitle('Votre espace est prêt. Redirection…');
-          // Attendre la fin de la barre (si elle n’est pas terminée)
-          setTimeout(() => router.push('/dashboard'), 700);
-        } else {
-          setStatusLabel('Accès limité');
-          setTitle('Accès Pro requis');
-          setSubtitle('Votre abonnement n’est pas actif. Redirection vers les tarifs…');
-          setTimeout(() => router.push('/pricing'), 900);
+        while (!cancelled) {
+          const profile = await getUserProfile();
+          const planLower = profile?.plan?.toLowerCase();
+          const statusLower = profile?.subscription_status?.toLowerCase();
+          const pro = planLower === 'pro' || profile?.is_pro === true || statusLower === 'active' || statusLower === 'trialing';
+          setIsPro(pro);
+
+          if (pro) {
+            setStatusLabel('OK');
+            setTitle('Bienvenue sur ArtisScan Pro');
+            setSubtitle('Votre espace est prêt. Redirection…');
+            setTimeout(() => router.push('/dashboard'), 400);
+            return;
+          }
+
+          const elapsed = Date.now() - startedAt;
+          if (elapsed > softTargetMs) {
+            setStatusLabel('Activation en cours…');
+            setSubtitle('Nous finalisons votre accès (cela peut prendre quelques secondes).');
+          }
+
+          if (elapsed > hardTimeoutMs) {
+            setIsPro(false);
+            setStatusLabel('Toujours en cours');
+            setTitle('Activation en cours');
+            setSubtitle('Votre paiement est reçu, mais l’accès n’est pas encore confirmé. Veuillez patienter quelques instants.');
+            return; // on reste sur la page, sans rediriger
+          }
+
+          await new Promise((r) => setTimeout(r, 1000));
         }
       } catch (e) {
         console.error('Erreur vérification abonnement:', e);

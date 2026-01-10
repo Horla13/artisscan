@@ -114,6 +114,7 @@ export default function Dashboard() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [activationMessage, setActivationMessage] = useState('Vérification du compte...');
   const [isProVerified, setIsProVerified] = useState(false);
+  const [pendingRedirectTo, setPendingRedirectTo] = useState<string | null>(null);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -577,7 +578,8 @@ export default function Dashboard() {
       
       if (!user) {
         console.error('❌ Pas d\'utilisateur connecté');
-        router.push('/login');
+        // Ne pas rediriger pendant chargement: on planifie la redirection
+        setPendingRedirectTo('/login?redirect=/dashboard');
         return;
       }
 
@@ -591,7 +593,7 @@ export default function Dashboard() {
       if (profileError) {
         console.error('❌ Erreur récupération profil:', profileError);
         // En cas d'erreur, rediriger vers pricing par sécurité
-        router.push('/pricing');
+        setPendingRedirectTo('/pricing');
         return;
       }
 
@@ -626,10 +628,8 @@ export default function Dashboard() {
         setRemainingScans(0);
         setError('Abonnement requis pour accéder au Dashboard.');
         
-        // Redirection forcée vers la page de tarification
-        setTimeout(() => {
-          router.push('/pricing');
-        }, 1500);
+        // Redirection forcée vers la page de tarification (après fin de chargement)
+        setPendingRedirectTo('/pricing');
         return;
       }
 
@@ -643,11 +643,19 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Erreur checkSubscriptionLimits:', error);
       // En cas d'erreur, redirection sécurisée vers pricing
-      router.push('/pricing');
+      setPendingRedirectTo('/pricing');
     } finally {
       setIsLoadingProfile(false);
     }
   };
+
+  // Appliquer les redirections UNIQUEMENT hors état de chargement
+  useEffect(() => {
+    if (!pendingRedirectTo) return;
+    if (isLoadingProfile || activationPending) return;
+    router.push(pendingRedirectTo);
+    setPendingRedirectTo(null);
+  }, [pendingRedirectTo, isLoadingProfile, activationPending, router]);
 
   // Rotation des messages de chargement
   useEffect(() => {

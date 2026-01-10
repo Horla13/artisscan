@@ -47,14 +47,16 @@ export async function POST(req: Request) {
       const session = event.data.object as Stripe.Checkout.Session;
       const userEmail = session.customer_details?.email || session.customer_email || '';
       const customerId = (session.customer as string) || '';
-      const userId = (session.metadata?.supabase_user_id || '').trim();
+      const userId =
+        (session.metadata?.supabase_user_id || '').trim() ||
+        (session.client_reference_id || '').toString().trim();
       
       console.log('📧 Email client reçu:', userEmail);
       console.log('🆔 Customer ID:', customerId);
       console.log('🆔 Supabase user_id (metadata):', userId);
       
       if (!userId) {
-        console.error('❌ supabase_user_id manquant dans metadata (checkout non lié à un compte)');
+        console.error('❌ Impossible de déterminer le user_id Supabase (metadata + client_reference_id vides)');
         return NextResponse.json({ received: true, error: 'Missing supabase_user_id' }, { status: 200 });
       }
       

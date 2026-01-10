@@ -55,11 +55,14 @@ function PricingContent() {
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // ✅ Auth Supabase pour que le serveur récupère l’utilisateur de façon fiable
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ 
           billingCycle: cycle,
-          userId: session.user.id, 
-          userEmail: session.user.email
+          // Ne pas envoyer userId/userEmail : le serveur les déduit du token
         }),
       });
 
