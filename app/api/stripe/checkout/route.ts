@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const billingCycle = (body?.billingCycle as BillingCycle) || 'monthly';
+    const requestedPriceId = (body?.priceId as string | undefined)?.trim();
 
     // ✅ Récupération sécurisée du user Supabase via Bearer token
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -47,21 +48,25 @@ export async function POST(req: NextRequest) {
 
     const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
     const yearlyPriceId = process.env.STRIPE_PRICE_ID_YEARLY?.trim();
-    if (!monthlyPriceId || !yearlyPriceId) {
+    if ((!monthlyPriceId || !yearlyPriceId) && !requestedPriceId) {
       return NextResponse.json(
         { error: "STRIPE_PRICE_ID_MONTHLY / STRIPE_PRICE_ID_YEARLY manquants dans l'environnement." },
         { status: 500 }
       );
     }
 
-    const priceId = billingCycle === 'yearly' ? yearlyPriceId : monthlyPriceId;
-    console.log(`[STRIPE CHECKOUT] CYCLE: ${billingCycle} | PRICE_ID: ${priceId}`);
+    const priceId = requestedPriceId || (billingCycle === 'yearly' ? yearlyPriceId : monthlyPriceId);
+    if (!priceId) {
+      return NextResponse.json({ error: 'PriceId manquant.' }, { status: 400 });
+    }
+    console.log(`[STRIPE CHECKOUT] PRICE_ID: ${priceId} | USER: ${userId}`);
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const baseUrl = getBaseUrl(req);
 
     const sessionOptions: Stripe.Checkout.SessionCreateParams = {
       mode: 'subscription',
+      payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         trial_period_days: 14,

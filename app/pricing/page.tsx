@@ -62,6 +62,8 @@ function PricingContent() {
         },
         body: JSON.stringify({ 
           billingCycle: cycle,
+          // Optionnel (supporté côté serveur): priceId
+          // priceId: cycle === 'yearly' ? STRIPE_PRICE_ID_YEARLY : STRIPE_PRICE_ID_MONTHLY
           // Ne pas envoyer userId/userEmail : le serveur les déduit du token
         }),
       });
