@@ -7,8 +7,6 @@ import { supabase } from '@/lib/supabase';
 import { Check, CheckCircle, ScanLine, Zap } from 'lucide-react';
 
 function PricingContent() {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isWelcome, setIsWelcome] = useState(false);
   const router = useRouter();
@@ -36,55 +34,7 @@ function PricingContent() {
     return () => subscription.unsubscribe();
   }, [searchParams]);
 
-  const startCheckout = async (forcedCycle?: 'monthly' | 'yearly') => {
-    try {
-      setCheckoutLoading(true);
-      const cycle = forcedCycle || billingCycle;
-      
-      // On récupère la session si elle existe (Bulldozer mode: no redirection)
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      console.log(`[CHECKOUT] Lancement direct pour le cycle: ${cycle} (User: ${session?.user?.id || 'GUEST'})`);
-      
-      if (!session?.user) {
-        // Paiement doit être lié à un compte (sinon paiement orphelin)
-        router.push(`/login?mode=signup&cycle=${cycle}&redirect=/pricing`);
-        setCheckoutLoading(false);
-        return;
-      }
-
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // ✅ Auth Supabase pour que le serveur récupère l’utilisateur de façon fiable
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ 
-          billingCycle: cycle,
-          // Optionnel (supporté côté serveur): priceId
-          // priceId: cycle === 'yearly' ? STRIPE_PRICE_ID_YEARLY : STRIPE_PRICE_ID_MONTHLY
-          // Ne pas envoyer userId/userEmail : le serveur les déduit du token
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      
-      if (!res.ok) {
-        console.error('Erreur API Stripe:', data?.error);
-        throw new Error(data?.error || 'Erreur lors de la création du paiement.');
-      }
-
-      if (!data?.url) throw new Error('URL Stripe manquante');
-      
-      window.location.href = data.url;
-    } catch (e: any) {
-      console.error('Erreur startCheckout:', e);
-      // Alerte informative
-      alert(e?.message || 'Une erreur est survenue lors de la redirection vers Stripe.');
-      setCheckoutLoading(false);
-    }
-  };
+  // Paiement temporairement désactivé (Stripe retiré du projet)
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans py-20 px-6">
@@ -174,13 +124,12 @@ function PricingContent() {
             </ul>
 
             <button
-              onClick={() => startCheckout('monthly')}
-              disabled={checkoutLoading}
-              className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+              disabled
+              className="block w-full text-center bg-slate-300 text-slate-600 font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 cursor-not-allowed text-sm"
             >
-              {checkoutLoading ? 'Redirection…' : "Démarrer mon essai Pro (Mensuel)"}
+              Paiement temporairement désactivé
             </button>
-            <p className="text-xs text-center text-slate-400 mt-3 font-medium">14 jours gratuits • Sans engagement</p>
+            <p className="text-xs text-center text-slate-400 mt-3 font-medium">Le paiement en ligne est en maintenance.</p>
           </div>
 
           {/* Carte Annuelle (Recommandée) */}
@@ -238,13 +187,12 @@ function PricingContent() {
             </ul>
 
             <button
-              onClick={() => startCheckout('yearly')}
-              disabled={checkoutLoading}
-              className="block w-full text-center bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+              disabled
+              className="block w-full text-center bg-slate-300 text-slate-600 font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 cursor-not-allowed text-sm"
             >
-              {checkoutLoading ? 'Redirection…' : "Démarrer mon essai Pro (Annuel)"}
+              Paiement temporairement désactivé
             </button>
-            <p className="text-xs text-center text-slate-500 mt-3 font-medium">14 jours gratuits • Facturation annuelle</p>
+            <p className="text-xs text-center text-slate-500 mt-3 font-medium">Le paiement en ligne est en maintenance.</p>
           </div>
         </div>
 

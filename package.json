@@ -24,7 +24,6 @@
     "react-dom": "19.2.3",
     "recharts": "^3.6.0",
     "resend": "^6.6.0",
-    "stripe": "^16.9.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
