@@ -44,12 +44,15 @@ function escapeCSV(value: any): string {
 }
 
 function getInvoiceAmounts(inv: any): { ht: number; tva: number; ttc: number } {
-  const ht = Number.isFinite(inv?.montant_ht) ? Number(inv.montant_ht) : 0;
-  const ttcBase = (inv?.montant_ttc ?? inv?.total_amount);
-  const ttc = Number.isFinite(ttcBase) ? Number(ttcBase) : 0;
-  const tva = (inv?.tva !== undefined && inv?.tva !== null && Number.isFinite(inv.tva))
-    ? Number(inv.tva)
-    : (ttc - ht);
+  // ✅ Champs standard (DB)
+  const htRaw = inv?.amount_ht;
+  const tvaRaw = inv?.amount_tva;
+  const ttcRaw = inv?.total_amount;
+
+  const ht = Number.isFinite(Number(htRaw)) ? Number(htRaw) : 0;
+  const ttc = Number.isFinite(Number(ttcRaw)) ? Number(ttcRaw) : 0;
+  const tva = Number.isFinite(Number(tvaRaw)) ? Number(tvaRaw) : 0;
+
   return { ht, tva, ttc };
 }
 
@@ -222,9 +225,7 @@ function generateFECCSV(invoices: any[]): string {
     const pieceRef = `FAC-${new Date(invoice.date_facture).getFullYear()}-${String(index + 1).padStart(3, '0')}`;
     const pieceDate = ecritureDate;
     
-    const ht = invoice.montant_ht || 0;
-    const tva = invoice.tva || ((invoice.montant_ttc || invoice.total_amount) - ht) || 0;
-    const ttc = invoice.montant_ttc || invoice.total_amount || 0;
+    const { ht, tva, ttc } = getInvoiceAmounts(invoice);
     
     const fournisseur = invoice.entreprise || 'Fournisseur inconnu';
     const description = invoice.description || `Achat - ${fournisseur}`;

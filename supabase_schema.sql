@@ -34,6 +34,43 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_plan_check
 -- 2. Mettre à jour la table scans pour ajouter le champ chantier
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS nom_chantier TEXT;
 
+-- ✅ 2bis. Standardisation des champs monétaires (OBLIGATOIRE)
+-- Convention V1:
+-- - total_amount = TTC (NUMERIC)
+-- - amount_ht    = HT (NUMERIC)
+-- - amount_tva   = TVA (NUMERIC)
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_ht NUMERIC;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_tva NUMERIC;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_amount NUMERIC;
+
+-- Backfill SAFE depuis les anciennes colonnes si elles existent (idempotent)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'scans' AND column_name = 'montant_ht'
+  ) THEN
+    EXECUTE 'UPDATE scans SET amount_ht = COALESCE(amount_ht, montant_ht) WHERE amount_ht IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'scans' AND column_name = 'tva'
+  ) THEN
+    EXECUTE 'UPDATE scans SET amount_tva = COALESCE(amount_tva, tva) WHERE amount_tva IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'scans' AND column_name = 'montant_ttc'
+  ) THEN
+    EXECUTE 'UPDATE scans SET total_amount = COALESCE(total_amount, montant_ttc) WHERE total_amount IS NULL';
+  END IF;
+
+  -- Si total_amount encore NULL mais HT+TVA présents, recalculer TTC
+  EXECUTE 'UPDATE scans SET total_amount = (amount_ht + amount_tva) WHERE total_amount IS NULL AND amount_ht IS NOT NULL AND amount_tva IS NOT NULL';
+END $$;
+
 -- 3. Créer une vue pour compter les factures par utilisateur
 CREATE OR REPLACE VIEW user_invoice_counts AS
 SELECT 
@@ -101,6 +138,7 @@ CREATE POLICY "Users can insert own profile"
 -- 8. Index pour optimiser les performances
 CREATE INDEX IF NOT EXISTS idx_scans_user_id_date ON scans(user_id, date_facture);
 CREATE INDEX IF NOT EXISTS idx_scans_nom_chantier ON scans(nom_chantier) WHERE nom_chantier IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_scans_total_amount ON scans(total_amount);
 
 -- 9. Fonction pour mettre à jour le timestamp updated_at automatiquement
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -15,10 +15,9 @@ interface Invoice {
   id: string;
   user_id: string;
   entreprise: string;
-  montant_ht: number;
-  tva: number;
-  montant_ttc: number;
-  total_amount: number;  // Alias pour compatibilité avec l'ancienne structure
+  amount_ht: number;
+  amount_tva: number;
+  total_amount: number; // TTC (champ standard)
   date_facture: string;
   description: string;
   categorie?: string;
@@ -107,7 +106,7 @@ export default function Dashboard() {
   const [billingEndDate, setBillingEndDate] = useState<string | null>(null);
   const [billingCustomerId, setBillingCustomerId] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
-  const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'montant_ht' | 'total_amount' | 'categorie'>('date_facture');
+  const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'amount_ht' | 'total_amount' | 'categorie'>('date_facture');
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [companyAddress, setCompanyAddress] = useState('');
@@ -523,21 +522,9 @@ export default function Dashboard() {
 
   // Stats calculées depuis les factures filtrées
   const stats = {
-    totalHT: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.montant_ht), 0),
-    totalTTC: filteredInvoices.reduce((sum: number, inv: Invoice) => {
-      // Utiliser montant_ttc ou total_amount
-      return sum + parseAmount(inv.montant_ttc || inv.total_amount);
-    }, 0),
-    tvaRecuperable: filteredInvoices.reduce((sum: number, inv: Invoice) => {
-      // Si le champ tva existe, l'utiliser directement (toujours positif)
-      if (inv.tva !== undefined && inv.tva !== null) {
-        return sum + parseAmount(inv.tva);
-      }
-      // Sinon, calculer TTC - HT
-      const ttc = parseAmount(inv.montant_ttc || inv.total_amount);
-      const ht = parseAmount(inv.montant_ht);
-      return sum + (ttc - ht);
-    }, 0),
+    totalHT: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.amount_ht), 0),
+    totalTTC: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.total_amount), 0),
+    tvaRecuperable: filteredInvoices.reduce((sum: number, inv: Invoice) => sum + parseAmount(inv.amount_tva), 0),
     nombreFactures: filteredInvoices.length
   };
 
@@ -594,8 +581,7 @@ export default function Dashboard() {
         console.log(`  📅 Facture: ${s.entreprise}, Date: ${scanDateStr}, Comparé à: ${targetDateStr}`);
         
         if (scanDateStr === targetDateStr) {
-          // ✅ Utiliser montant_ttc ou total_amount
-          const montant = parseAmount(s.montant_ttc || s.total_amount);
+          const montant = parseAmount(s.total_amount);
           dayTotal += montant;
           console.log(`    ✅ MATCH! Montant: ${montant}€`);
         }
@@ -656,25 +642,24 @@ export default function Dashboard() {
           entreprise: inv.entreprise,
           date_facture: inv.date_facture,
           created_at: inv.created_at,
-          montant_ht: inv.montant_ht,
+          amount_ht: inv.amount_ht,
+          amount_tva: inv.amount_tva,
           total_amount: inv.total_amount
         })));
         
         // Normaliser les champs (évite bugs historiques/excel/csv sur anciennes lignes)
         const normalized = (data || []).map((inv: any) => {
-          const ht = parseAmount(inv.montant_ht);
-          const ttcFromDb = inv.total_amount ?? inv.montant_ttc ?? inv.montant_ttc ?? 0;
-          const ttc = parseAmount(ttcFromDb);
-          const tva = (inv.tva !== undefined && inv.tva !== null) ? parseAmount(inv.tva) : (ttc - ht);
+          const ht = parseAmount(inv.amount_ht);
+          const ttc = parseAmount(inv.total_amount);
+          const tva = parseAmount(inv.amount_tva);
 
           const dateFacture = (inv.date_facture || inv.date || '').toString().trim() || (inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '');
 
           return {
             ...inv,
-            montant_ht: ht,
-            montant_ttc: parseAmount(inv.montant_ttc ?? ttc),
             total_amount: ttc,
-            tva,
+            amount_ht: ht,
+            amount_tva: tva,
             date_facture: dateFacture,
             categorie: normalizeCategory(inv.categorie || ''),
             modified_manually: inv.modified_manually === true,
@@ -926,12 +911,9 @@ export default function Dashboard() {
       doc.setTextColor(100, 116, 139);
       doc.text(`Réf: ${folder.reference}`, 20, 62);
     }
-    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
-    const totalTVA = folderInvoices.reduce((sum, inv) => {
-      if (inv.tva !== undefined && inv.tva !== null) return sum + inv.tva;
-      return sum + ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
-    }, 0);
-    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.amount_ht || 0), 0);
+    const totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.amount_tva || 0), 0);
+    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     let yPos = 75;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
@@ -962,15 +944,12 @@ export default function Dashboard() {
     doc.text(`Liste des factures (${folderInvoices.length})`, 20, yPos);
     yPos += 5;
     const tableData = folderInvoices.map(inv => {
-      const tva = inv.tva !== undefined && inv.tva !== null 
-        ? inv.tva 
-        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
       return [
         new Date(inv.date_facture).toLocaleDateString('fr-FR'),
         inv.entreprise,
-        `${inv.montant_ht.toFixed(2)} €`,
-        `${tva.toFixed(2)} €`,
-        `${(inv.montant_ttc || inv.total_amount).toFixed(2)} €`
+        `${inv.amount_ht.toFixed(2)} €`,
+        `${inv.amount_tva.toFixed(2)} €`,
+        `${inv.total_amount.toFixed(2)} €`
       ];
     });
     autoTable(doc, {
@@ -1003,17 +982,14 @@ export default function Dashboard() {
       return;
     }
     const data = folderInvoices.map(inv => {
-      const tva = inv.tva !== undefined && inv.tva !== null 
-        ? inv.tva 
-        : ((inv.montant_ttc || inv.total_amount) - inv.montant_ht);
       return {
         'Date': new Date(inv.date_facture).toLocaleDateString('fr-FR'),
         'Fournisseur': inv.entreprise,
         'Catégorie': inv.categorie || 'Non classé',
         'Description': inv.description || '',
-        'Montant HT (€)': inv.montant_ht,
-        'TVA (€)': tva,
-        'Montant TTC (€)': inv.montant_ttc || inv.total_amount
+        'Montant HT (€)': inv.amount_ht,
+        'TVA (€)': inv.amount_tva,
+        'Montant TTC (€)': inv.total_amount
       };
     });
     const totalHT = data.reduce((sum, row) => sum + row['Montant HT (€)'], 0);
@@ -1054,13 +1030,9 @@ export default function Dashboard() {
   };
 
   const getInvoiceAmounts = (inv: Invoice) => {
-    const ht = Number.isFinite(inv.montant_ht) ? inv.montant_ht : 0;
-    // Priorité à la TVA stockée; sinon calcul depuis TTC
-    const ttcBase = (Number.isFinite(inv.montant_ttc) ? inv.montant_ttc : inv.total_amount);
-    const ttc = Number.isFinite(ttcBase) ? ttcBase : 0;
-    const tva = (inv.tva !== undefined && inv.tva !== null && Number.isFinite(inv.tva))
-      ? inv.tva
-      : (ttc - ht);
+    const ht = Number.isFinite(inv.amount_ht) ? inv.amount_ht : 0;
+    const tva = Number.isFinite(inv.amount_tva) ? inv.amount_tva : 0;
+    const ttc = Number.isFinite(inv.total_amount) ? inv.total_amount : 0;
     return { ht, tva, ttc };
   };
 
@@ -1199,9 +1171,9 @@ export default function Dashboard() {
 
         invoicesData = folderInvoices;
         invoicesCount = folderInvoices.length;
-        totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
-        totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
-        totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+        totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.amount_ht || 0), 0);
+        totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.amount_tva || 0), 0);
+        totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
         periodDescription = `le dossier "${folder.name}"`;
 
       } else if (emailContext.type === 'monthly') {
@@ -1216,9 +1188,9 @@ export default function Dashboard() {
         
         invoicesData = filtered;
         invoicesCount = filtered.length;
-        totalHT = filtered.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
-        totalTVA = filtered.reduce((sum, inv) => sum + (inv.tva || ((inv.montant_ttc || inv.total_amount) - inv.montant_ht) || 0), 0);
-        totalTTC = filtered.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+        totalHT = filtered.reduce((sum, inv) => sum + (inv.amount_ht || 0), 0);
+        totalTVA = filtered.reduce((sum, inv) => sum + (inv.amount_tva || 0), 0);
+        totalTTC = filtered.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
         periodDescription = selectedMonths.length > 1 
           ? `${selectedMonths.length} mois sélectionnés` 
           : selectedMonths[0] || 'la période sélectionnée';
@@ -1482,8 +1454,8 @@ export default function Dashboard() {
         return sorted.sort((a, b) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-      case 'montant_ht':
-        return sorted.sort((a, b) => b.montant_ht - a.montant_ht);
+      case 'amount_ht':
+        return sorted.sort((a, b) => b.amount_ht - a.amount_ht);
       case 'total_amount':
         return sorted.sort((a, b) => b.total_amount - a.total_amount);
       case 'categorie':
@@ -1607,17 +1579,13 @@ export default function Dashboard() {
 
   // Export Excel d'une facture individuelle
   const exportInvoiceExcel = (invoice: Invoice) => {
-    // Utiliser le champ tva s'il existe, sinon calculer
-    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
-      ? invoice.tva
-      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht);
-    
-    const ttcAmount = invoice.montant_ttc || invoice.total_amount;
+    const tvaAmount = invoice.amount_tva || 0;
+    const ttcAmount = invoice.total_amount || 0;
     
     const data = [{
       'Date Facture': new Date(invoice.date_facture).toLocaleDateString('fr-FR'),
       'Fournisseur': invoice.entreprise,
-      'Montant HT (€)': invoice.montant_ht,
+      'Montant HT (€)': invoice.amount_ht,
       'TVA (€)': tvaAmount,
       'Montant TTC (€)': ttcAmount,
       'Catégorie': invoice.categorie || 'Non classé',
@@ -1663,12 +1631,9 @@ export default function Dashboard() {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     
-    // Utiliser le champ tva s'il existe, sinon calculer
-    const tvaAmount = invoice.tva !== undefined && invoice.tva !== null 
-      ? invoice.tva
-      : ((invoice.montant_ttc || invoice.total_amount) - invoice.montant_ht);
-    const tvaPercent = invoice.montant_ht > 0 ? Math.round((tvaAmount / invoice.montant_ht) * 100) : 0;
-    const ttcAmount = invoice.montant_ttc || invoice.total_amount;
+    const tvaAmount = invoice.amount_tva || 0;
+    const tvaPercent = invoice.amount_ht > 0 ? Math.round((tvaAmount / invoice.amount_ht) * 100) : 0;
+    const ttcAmount = invoice.total_amount || 0;
     
     let yPos = 70;
     
@@ -1726,7 +1691,7 @@ export default function Dashboard() {
     // Montant HT
     doc.text('Montant HT:', 25, yPos);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${invoice.montant_ht.toFixed(2)} €`, 160, yPos, { align: 'right' });
+    doc.text(`${invoice.amount_ht.toFixed(2)} €`, 160, yPos, { align: 'right' });
     yPos += 10;
     
     // TVA
@@ -1890,7 +1855,7 @@ export default function Dashboard() {
     // Fonction helper pour formater les données d'une facture
     const formatInvoiceData = (inv: Invoice) => {
       const monthKey = getMonthKey(inv.date_facture || inv.created_at);
-      const ht = parseAmount(inv.montant_ht);
+      const ht = parseAmount(inv.amount_ht);
       const ttc = parseAmount(inv.total_amount);
       const tvaAmount = ttc - ht;
       const tvaPercent = ht > 0 ? Math.round((tvaAmount / ht) * 100) : 0;
@@ -1946,7 +1911,7 @@ export default function Dashboard() {
       // Onglet récapitulatif
       const recapData = selectedMonths.map(mk => {
         const monthInvoices = sortedInvoices.filter(inv => getMonthKey(inv.date_facture || inv.created_at) === mk);
-        const totalHT = monthInvoices.reduce((sum, inv) => sum + parseAmount(inv.montant_ht), 0);
+        const totalHT = monthInvoices.reduce((sum, inv) => sum + parseAmount(inv.amount_ht), 0);
         const totalTTC = monthInvoices.reduce((sum, inv) => sum + parseAmount(inv.total_amount), 0);
         const totalTVA = totalTTC - totalHT;
         return {
@@ -2199,7 +2164,7 @@ export default function Dashboard() {
       inv.entreprise,
       inv.categorie || 'Non classé',
       inv.description || '-',
-      formatPDFCurrency(parseAmount(inv.montant_ht)),
+      formatPDFCurrency(parseAmount(inv.amount_ht)),
       formatPDFCurrency(parseAmount(inv.total_amount))
     ]);
 
@@ -2251,7 +2216,7 @@ export default function Dashboard() {
 
     const wb = XLSX.utils.book_new();
     const data = projectInvoices.map((inv: Invoice) => {
-      const ht = parseAmount(inv.montant_ht);
+      const ht = parseAmount(inv.amount_ht);
       const ttc = parseAmount(inv.total_amount);
       const tvaAmount = ttc - ht;
       const tvaPercent = ht > 0 ? Math.round((tvaAmount / ht) * 100) : 0;
@@ -2578,63 +2543,53 @@ export default function Dashboard() {
         (pendingInvoiceData.date && String(pendingInvoiceData.date).trim()) ||
         new Date().toISOString().slice(0, 10);
 
-      const invoiceDataBase: any = {
-        user_id: user.id,
-        entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
-        montant_ht: Number(montantHT) || 0,
-        montant_ttc: Number(montantTTC) || 0,
-        total_amount: Number(montantTTC) || 0,
-        tva: Number(tva) || 0,
-        date_facture: dateFacture,
-        categorie: finalCategory || 'Non classé',
-        description: pendingInvoiceData.description || '',
-        folder_id: pendingInvoiceData.folder_id || null,
-      };
-
-      const invoiceData: any = {
-        ...invoiceDataBase,
-        modified_manually: pendingManuallyEdited,
-      };
-
-      console.log('📤 DONNÉES ENVOYÉES À SUPABASE:');
-      console.log('   - user_id:', invoiceData.user_id);
-      console.log('   - entreprise:', invoiceData.entreprise);
-      console.log('   - montant_ht:', invoiceData.montant_ht);
-      console.log('   - montant_ttc:', invoiceData.montant_ttc);
-      console.log('   - tva:', invoiceData.tva);
-      console.log('   - date_facture:', invoiceData.date_facture);
-      console.log('   - modified_manually:', invoiceData.modified_manually);
-      console.log('   - categorie:', invoiceData.categorie);
-      console.log('   - description:', invoiceData.description);
-      console.log('   - folder_id:', invoiceData.folder_id);
-      console.log('   Objet complet:', JSON.stringify(invoiceData, null, 2));
-
-      let { data, error } = await supabase
-        .from('scans')
-        .insert([invoiceData])
-        .select();
-
-      // Fallback si la colonne modified_manually n’existe pas encore en DB
-      if (error && (String(error.message || '').includes('modified_manually') || error.code === '42703')) {
-        console.warn('⚠️ Colonne modified_manually absente, retry insert sans ce champ');
-        ({ data, error } = await supabase
-          .from('scans')
-          .insert([invoiceDataBase])
-          .select());
-      }
-
-      if (error) {
-        console.error('❌ ERREUR SUPABASE COMPLÈTE:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        showToastMessage(`❌ Erreur: ${error.message}`, 'error');
+      // ✅ IMPORTANT: insertion côté serveur (cohérence DB → UI → CSV)
+      // Protection demandée: TTC obligatoire
+      if (!Number.isFinite(montantTTC)) {
+        showToastMessage('❌ Montant TTC manquant. Veuillez renseigner le TTC avant de valider.', 'error');
         return;
       }
 
-      console.log('✅ Facture enregistrée avec succès:', data);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        showToastMessage('❌ Session expirée. Reconnectez-vous.', 'error');
+        window.location.href = '/login?redirect=/dashboard';
+        return;
+      }
+
+      const payload = {
+        invoiceData: {
+          entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
+          description: pendingInvoiceData.description || '',
+          categorie: finalCategory || 'Non classé',
+          date_facture: dateFacture,
+          folder_id: pendingInvoiceData.folder_id || null,
+          modified_manually: pendingManuallyEdited,
+          amount_ht: Number(montantHT),
+          amount_tva: Number(tva),
+          total_amount: Number(montantTTC),
+        },
+      };
+
+      console.log('📤 DONNÉES ENVOYÉES AU SERVEUR (/api/scans):', payload);
+
+      const res = await fetch('/api/scans', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const saved = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToastMessage(saved?.message || saved?.error || '❌ Impossible d’enregistrer la facture', 'error');
+        return;
+      }
+
+      console.log('✅ Facture enregistrée avec succès:', saved);
 
       // Fermer la modale
       setShowValidationModal(false);
@@ -3227,14 +3182,14 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-slate-400" />
                 <select
-                  value={sortBy.startsWith('montant') ? sortBy : ''}
+                  value={sortBy.startsWith('amount') ? sortBy : ''}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   className={`text-sm font-medium bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all ${
-                    sortBy.startsWith('montant') ? 'text-orange-600 border-orange-200 ring-2 ring-orange-500/10' : 'text-slate-600'
+                    sortBy.startsWith('amount') ? 'text-orange-600 border-orange-200 ring-2 ring-orange-500/10' : 'text-slate-600'
                   }`}
                 >
                   <option value="" disabled>Trier par Montant</option>
-                  <option value="montant_ht">📉 Montant HT</option>
+                  <option value="amount_ht">📉 Montant HT</option>
                   <option value="total_amount">📈 Montant TTC</option>
                 </select>
               </div>
@@ -3452,7 +3407,7 @@ export default function Dashboard() {
                             <div className="flex-1">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">Montant HT</span>
                               <span className="font-black text-slate-900 text-base">
-                                {(invoice.montant_ht || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                {(invoice.amount_ht || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                               </span>
                             </div>
 
@@ -3461,23 +3416,14 @@ export default function Dashboard() {
                             <div className="flex-1">
                               <span className="text-[10px] text-orange-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
                               <span className="font-black text-orange-500 text-lg">
-                                {((invoice.montant_ttc || invoice.total_amount) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                {(invoice.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                               </span>
                             </div>
 
                             <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">TVA Récupérée</span>
                               <span className="font-black text-orange-500 italic text-base">
-                                {(() => {
-                                  // Si le champ tva existe, l'utiliser directement
-                                  if (invoice.tva !== undefined && invoice.tva !== null) {
-                                    return invoice.tva.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                  }
-                                  // Sinon, calculer TTC - HT
-                                  const ttc = (invoice.montant_ttc || invoice.total_amount) || 0;
-                                  const ht = invoice.montant_ht || 0;
-                                  return (ttc - ht).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                })()} €
+                                {(invoice.amount_tva || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                               </span>
                             </div>
                           </div>
@@ -3735,9 +3681,9 @@ export default function Dashboard() {
                     }
 
                     // Calcul des totaux
-                    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ht || 0), 0);
-                    const totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.tva || (inv.montant_ttc - inv.montant_ht) || 0), 0);
-                    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.montant_ttc || inv.total_amount || 0), 0);
+                    const totalHT = folderInvoices.reduce((sum, inv) => sum + (inv.amount_ht || 0), 0);
+                    const totalTVA = folderInvoices.reduce((sum, inv) => sum + (inv.amount_tva || 0), 0);
+                    const totalTTC = folderInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
                     return (
                       <>
@@ -3789,10 +3735,10 @@ export default function Dashboard() {
                                     <p className="text-sm text-slate-600 mb-2">{invoice.description}</p>
                                   )}
                                   <div className="flex items-center gap-4 text-xs text-slate-500">
-                                    <span>HT: {(invoice.montant_ht || 0).toFixed(2)} €</span>
-                                    <span>TVA: {(invoice.tva || (invoice.montant_ttc - invoice.montant_ht) || 0).toFixed(2)} €</span>
+                                    <span>HT: {(invoice.amount_ht || 0).toFixed(2)} €</span>
+                                    <span>TVA: {(invoice.amount_tva || 0).toFixed(2)} €</span>
                                     <span className="font-bold text-orange-600">
-                                      TTC: {(invoice.montant_ttc || invoice.total_amount || 0).toFixed(2)} €
+                                      TTC: {(invoice.total_amount || 0).toFixed(2)} €
                                     </span>
                     </div>
                       </div>
@@ -4740,7 +4686,7 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <p className="font-bold text-slate-900 mb-1">{invoiceToMove.entreprise}</p>
                   <p className="text-slate-600 text-xs">
-                    {new Date(invoiceToMove.date_facture).toLocaleDateString('fr-FR')} • {(invoiceToMove.montant_ttc || invoiceToMove.total_amount)?.toFixed(2)} €
+                    {new Date(invoiceToMove.date_facture).toLocaleDateString('fr-FR')} • {(invoiceToMove.total_amount || 0).toFixed(2)} €
                   </p>
                 </div>
               </div>
