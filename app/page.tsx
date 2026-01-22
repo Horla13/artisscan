@@ -297,7 +297,7 @@ export default function Home() {
             
             <div className="text-center mb-8">
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-black text-slate-900">19,90€</span>
+                <span className="text-5xl font-black text-slate-900">14,90€</span>
                 <span className="text-slate-500 font-bold">/mois</span>
               </div>
               <div className="h-5 mt-2"></div> {/* Espace pour alignement avec l'autre carte */}
@@ -361,10 +361,10 @@ export default function Home() {
             
             <div className="text-center mb-8">
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-black text-orange-600">14,90€</span>
-                <span className="text-slate-600 font-bold">/mois</span>
+                <span className="text-5xl font-black text-orange-600">149€</span>
+                <span className="text-slate-600 font-bold">/an</span>
               </div>
-              <p className="text-xs text-slate-500 font-bold mt-2 h-5">facturé 179€ / an</p>
+              <p className="text-xs text-slate-500 font-bold mt-2 h-5">facturé 149€ / an</p>
             </div>
 
             <ul className="space-y-4 mb-8 flex-grow">

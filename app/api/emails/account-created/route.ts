@@ -10,17 +10,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Configuration manquante' }, { status: 500 });
   }
 
-  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
-  }
-
-  const token = authHeader.slice('Bearer '.length);
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
-  if (userErr || !user?.email) {
-    console.warn('⛔ /api/emails/account-created: token invalide', userErr?.message);
-    return NextResponse.json({ error: 'Session invalide' }, { status: 401 });
+
+  // On privilégie le Bearer token (si session dispo), mais on supporte un fallback signup
+  // quand Supabase ne renvoie pas de session immédiatement après signUp.
+  let userEmail: string | null = null;
+  let userId: string | null = null;
+
+  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length);
+    const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    if (userErr || !user?.email) {
+      console.warn('⛔ /api/emails/account-created: token invalide', userErr?.message);
+      return NextResponse.json({ error: 'Session invalide' }, { status: 401 });
+    }
+    userEmail = user.email;
+    userId = user.id;
+  } else {
+    const body = await req.json().catch(() => ({}));
+    const fallbackUserId = (body?.userId || body?.user_id || '').toString().trim();
+    if (!fallbackUserId) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    // ✅ Fallback contrôlé: userId doit exister et être récent
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(fallbackUserId);
+    if (error || !data?.user?.email) {
+      console.warn('⛔ /api/emails/account-created: userId invalide', error?.message);
+      return NextResponse.json({ error: 'User invalide' }, { status: 400 });
+    }
+    const createdAt = data.user.created_at ? new Date(data.user.created_at) : null;
+    if (!createdAt || isNaN(createdAt.getTime())) {
+      return NextResponse.json({ error: 'User invalide' }, { status: 400 });
+    }
+    const ageMs = Date.now() - createdAt.getTime();
+    if (ageMs > 15 * 60 * 1000) {
+      // anti-abus simple: uniquement pour un signup récent
+      return NextResponse.json({ ok: true, skipped: true });
+    }
+    // Ne pas envoyer si déjà Pro (sécurité)
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('is_pro')
+      .eq('id', fallbackUserId)
+      .maybeSingle();
+    if (profile?.is_pro === true) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
+
+    userEmail = data.user.email;
+    userId = data.user.id;
   }
 
   // ⚠️ Lien EXACT demandé (ne pas modifier)
@@ -44,10 +83,10 @@ export async function POST(req: NextRequest) {
     'Vertex Labs',
   ].join('<br/>');
 
-  console.log('📧 Email compte créé: envoi', { to: user.email, user_id: user.id });
+  console.log('📧 Email compte créé: envoi', { to: userEmail, user_id: userId });
   try {
-    const res = await sendMail({ to: user.email, subject, html });
-    console.log('✅ Email compte créé: envoyé', { to: user.email, res });
+    const res = await sendMail({ to: userEmail!, subject, html });
+    console.log('✅ Email compte créé: envoyé', { to: userEmail, res });
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     // Ne pas bloquer le flow utilisateur: on log et on retourne OK.

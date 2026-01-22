@@ -89,6 +89,12 @@ function LoginForm() {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
           }).catch(() => {});
+        } else if (data?.user?.id) {
+          fetch('/api/emails/account-created', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: data.user.id }),
+          }).catch(() => {});
         }
       } catch {
         // ignore

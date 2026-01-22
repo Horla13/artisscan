@@ -540,7 +540,7 @@ export default function Dashboard() {
 
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION DYNAMIQUE
   const getLast7DaysData = () => {
-    console.log('🔍 === GÉNÉRATION GRAPHIQUE (DYNAMIQUE) ===');
+    console.log('🔍 === GRAPHIQUE 7 JOURS (created_at >= now-7j) ===');
     console.log('📦 Nombre total de factures disponibles:', invoices.length);
     
     // Helper pour extraire YYYY-MM-DD sans décalage de fuseau horaire
@@ -561,6 +561,14 @@ export default function Dashboard() {
 
     const processedData: any[] = [];
     const now = new Date();
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const last7 = invoices.filter((s: any) => {
+      const d = s?.created_at ? new Date(s.created_at) : null;
+      if (!d || isNaN(d.getTime())) return false;
+      return d >= cutoff;
+    });
+    console.log('📦 Factures sur 7 jours (created_at):', last7.length);
     
     // Générer les 7 derniers jours au format YYYY-MM-DD
     for (let i = 6; i >= 0; i--) {
@@ -575,15 +583,11 @@ export default function Dashboard() {
 
       let dayTotal = 0;
 
-      // ✅ Utiliser TOUTES les factures (invoices), pas filteredInvoices
-      invoices.forEach(s => {
-        const scanDateStr = getPureISODate(s.date_facture || s.created_at);
-        console.log(`  📅 Facture: ${s.entreprise}, Date: ${scanDateStr}, Comparé à: ${targetDateStr}`);
-        
-        if (scanDateStr === targetDateStr) {
-          const montant = parseAmount(s.total_amount);
-          dayTotal += montant;
-          console.log(`    ✅ MATCH! Montant: ${montant}€`);
+      // ✅ Agrégation TTC par jour basée sur created_at (règle V1)
+      last7.forEach((s: any) => {
+        const createdDay = getPureISODate(s.created_at);
+        if (createdDay === targetDateStr) {
+          dayTotal += parseAmount(s.total_amount);
         }
       });
 
@@ -2929,7 +2933,7 @@ export default function Dashboard() {
               <div className="relative">
                 {chartData.every(d => d.montant === 0) && (
                   <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/50 backdrop-blur-[1px]">
-                    <p className="text-sm text-slate-400 italic">Toutes vos factures sont plus anciennes</p>
+                    <p className="text-sm text-slate-400 italic">Aucune facture sur les 7 derniers jours</p>
                   </div>
                 )}
                 <ResponsiveContainer width="100%" height={200}>
