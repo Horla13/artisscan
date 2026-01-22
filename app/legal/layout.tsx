@@ -75,11 +75,7 @@ export default function LegalLayout({
                 Remboursement
               </Link>
               <span className="hidden sm:inline">•</span>
-              <Link href="/legal/facturation" className="hover:text-orange-500 transition-colors">
-                Facturation
-              </Link>
-              <span className="hidden sm:inline">•</span>
-              <span>© 2024 ArtisScan</span>
+              <span>© 2026 ArtisScan</span>
             </div>
           </div>
         </div>

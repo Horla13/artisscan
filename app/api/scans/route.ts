@@ -41,41 +41,33 @@ export async function POST(req: NextRequest) {
 
     console.log('👤 Utilisateur authentifié:', user.id);
 
-    // 2. Vérifier le statut PRO
+    // 2. Vérifier le statut PRO (serveur)
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('is_pro, plan, email')
+      .select('email, is_pro, plan, stripe_customer_id, stripe_subscription_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError) {
+    if (profileError && profileError.code !== 'PGRST116') {
       console.error('❌ Erreur récupération profil:', profileError);
-      return NextResponse.json({ 
-        error: 'Erreur de vérification',
-        message: 'Impossible de vérifier votre statut d\'abonnement'
-      }, { status: 500 });
     }
 
-    console.log('📊 Profil utilisateur:', { 
-      email: profile.email, 
-      is_pro: profile.is_pro,
-      plan: profile.plan 
-    });
-
-    // 🔒 BLOCAGE STRICT : is_pro doit être true
-    if (!profile.is_pro) {
-      console.warn('⛔ ACCÈS REFUSÉ: Utilisateur non-PRO tente d\'uploader');
-      console.warn('   Email:', profile.email);
-      console.warn('   is_pro:', profile.is_pro);
-      console.warn('   plan:', profile.plan);
-      
-      return NextResponse.json({ 
-        error: 'Abonnement requis',
-        message: '⛔ Abonnement requis pour accéder à cette fonctionnalité',
-        isPro: false,
-        redirectTo: '/pricing'
-      }, { status: 403 });
+    const isPro = profile?.is_pro === true;
+    if (!isPro) {
+      console.warn('⛔ Upload refusé (non-PRO)', {
+        email: profile?.email || user.email,
+        is_pro: profile?.is_pro,
+        plan: profile?.plan,
+        stripe_customer_id: profile?.stripe_customer_id,
+        stripe_subscription_id: profile?.stripe_subscription_id,
+      });
+      return NextResponse.json(
+        { error: 'Abonnement requis', message: '⛔ Abonnement PRO requis', redirectTo: '/pricing' },
+        { status: 403 }
+      );
     }
+
+    console.log('✅ Upload autorisé (PRO)', { user_id: user.id, email: profile?.email || user.email });
 
     // 3. Traiter l'upload de la facture
     const body = await req.json();

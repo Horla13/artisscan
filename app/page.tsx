@@ -542,7 +542,7 @@ export default function Home() {
               Facturation
             </Link>
             <span className="hidden sm:inline">•</span>
-            <span>© 2024 ArtisScan</span>
+            <span>© 2026 ArtisScan</span>
           </div>
           </div>
         </div>

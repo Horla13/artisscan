@@ -9,7 +9,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getUserProfile, canUserScan, canExportCSV, getTierDisplayName, getTierBadgeColor, updateSubscriptionTier, type SubscriptionTier } from '@/lib/subscription';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Invoice {
@@ -102,19 +101,18 @@ export default function Dashboard() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  // Abonnement (affiché dans Paramètres)
+  const [billingPlan, setBillingPlan] = useState<string | null>(null);
+  const [billingStatus, setBillingStatus] = useState<string | null>(null);
+  const [billingEndDate, setBillingEndDate] = useState<string | null>(null);
+  const [billingCustomerId, setBillingCustomerId] = useState<string | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'montant_ht' | 'total_amount' | 'categorie'>('date_facture');
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [companyAddress, setCompanyAddress] = useState('');
   const [companySiret, setCompanySiret] = useState('');
   const [companyProfession, setCompanyProfession] = useState('');
-  const [activationPending, setActivationPending] = useState(false);
-  const [showForceAccess, setShowForceAccess] = useState(false);
-  const [forceAccessClicks, setForceAccessClicks] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [activationMessage, setActivationMessage] = useState('Vérification du compte...');
-  const [isProVerified, setIsProVerified] = useState(false);
-  const [pendingRedirectTo, setPendingRedirectTo] = useState<string | null>(null);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -142,6 +140,73 @@ export default function Dashboard() {
       }
     }
   };
+
+  const loadBillingInfo = async () => {
+    setBillingLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setBillingPlan(null);
+        setBillingStatus(null);
+        setBillingEndDate(null);
+        setBillingCustomerId(null);
+        return;
+      }
+
+      // select('*') pour rester compatible si des colonnes évoluent côté DB
+      const { data: profile, error: pErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (pErr) {
+        console.warn('⚠️ Impossible de charger infos abonnement', pErr);
+        return;
+      }
+
+      setBillingPlan(profile?.plan ?? null);
+      setBillingStatus(profile?.subscription_status ?? null);
+      setBillingEndDate(profile?.end_date ?? null);
+      setBillingCustomerId(profile?.stripe_customer_id ?? null);
+    } catch (e) {
+      console.warn('⚠️ loadBillingInfo error', e);
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const startCustomerPortal = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        window.location.href = '/login?redirect=/dashboard';
+        return;
+      }
+
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const redirectTo = data?.redirectTo;
+        if (redirectTo) window.location.href = redirectTo;
+        throw new Error(data?.error || 'Impossible d’ouvrir le portail');
+      }
+      if (!data?.url) throw new Error('URL portal manquante');
+      window.location.href = data.url;
+    } catch (err: any) {
+      showToastMessage(err?.message || 'Erreur portail abonnement', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'parametres') {
+      loadBillingInfo();
+    }
+  }, [currentView]);
 
   // Helper pour formater les montants avec espaces (pas de /)
   const formatCurrency = (amount: number): string => {
@@ -233,12 +298,10 @@ export default function Dashboard() {
     budget_alloue: ''
   });
 
-  // États pour la gestion des abonnements
-  const [userTier, setUserTier] = useState<SubscriptionTier>('pro');
-  const [canScan, setCanScan] = useState(true);
-  const [remainingScans, setRemainingScans] = useState(-1);
-  // (Dossiers supprimés : organisation automatique par mois)
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  // Paiement/abonnement supprimé : on laisse toutes les fonctionnalités accessibles
+  const isLoadingProfile = false;
+  const loadingProgress = 100;
+  const activationMessage = '';
 
   // États pour les filtres de l'historique (Bloc 3)
   const [searchQuery, setSearchQuery] = useState('');
@@ -318,8 +381,7 @@ export default function Dashboard() {
     try {
       await Promise.all([
         loadInvoices(),
-        loadFolders(),
-        checkSubscriptionLimits()
+        loadFolders()
       ]);
       showToastMessage('Données actualisées', 'success');
     } catch (err) {
@@ -329,333 +391,34 @@ export default function Dashboard() {
     }
   };
 
-  // 🔒 SÉCURITÉ DASHBOARD : Vérification stricte de l'authentification et du plan PRO
+  // Accès Dashboard : authentification uniquement
   useEffect(() => {
-    const secureAccess = async () => {
-      setIsLoadingProfile(true);
-      
-      try {
-        console.log('🔒 SÉCURITÉ: Vérification accès Dashboard...');
-        
-        // 1. Vérifier l'utilisateur connecté avec getUser() (plus fiable)
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError) {
-          console.error('❌ SÉCURITÉ: Erreur auth:', JSON.stringify(authError));
-          setError(`Erreur authentification: ${authError.message}`);
-        }
-      
-      if (!user) {
-          console.log('🚫 SÉCURITÉ: Aucun utilisateur connecté → Redirection /login');
-          window.location.href = '/login?redirect=/dashboard';
-          return;
-        }
-        
-        console.log('✅ SÉCURITÉ: Utilisateur connecté:', user.email);
-        setUserEmail(user.email || null);
-        
-        // 2. Vérifier le plan dans la table profiles
-        console.log('📊 SÉCURITÉ: Récupération du profil...');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (profileError) {
-          console.error('❌ SÉCURITÉ: Erreur profil:', JSON.stringify(profileError));
-          setError(`Erreur récupération profil: ${profileError.message} - ${JSON.stringify(profileError)}`);
-          setIsLoadingProfile(false);
-          return;
-        }
-        
-        console.log('📋 SÉCURITÉ: Profil récupéré:', JSON.stringify(profile, null, 2));
-        
-        // 3. Vérification STRICTE du plan PRO
-        const planExact = profile?.plan;
-        console.log('🔍 SÉCURITÉ: Plan exact:', `"${planExact}"`, typeof planExact);
-        
-        if (planExact !== 'pro') {
-          console.log('⛔ SÉCURITÉ: Plan non-PRO détecté, blocage accès');
-          setError(`⛔ Accès refusé : Votre plan est "${planExact}" mais doit être exactement "pro". Profil complet: ${JSON.stringify(profile)}`);
-          setUserTier('free');
-          setCanScan(false);
-          setRemainingScans(0);
-          setIsLoadingProfile(false);
-          return;
-        }
-        
-        // 4. Accès PRO confirmé
-        console.log('🎉 SÉCURITÉ: Plan PRO confirmé → Accès autorisé');
-        setUserTier('pro');
-        setCanScan(true);
-        setRemainingScans(-1);
-        setActivationPending(false);
-        
-        await checkSubscriptionLimits();
-        router.refresh?.();
-        
-      } catch (err: any) {
-        console.error('💥 SÉCURITÉ: Exception:', err);
-        setError(`Exception sécurité: ${err.message} - ${JSON.stringify(err)}`);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-
-    secureAccess();
-
-    // Écouter les changements de session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('🔄 SÉCURITÉ: Auth state change:', event);
-      if (event === 'SIGNED_OUT') {
-        setUserEmail(null);
-        window.location.href = '/login';
-      } else if (session) {
-        setUserEmail(session.user.email || null);
-        secureAccess(); // Re-vérifier l'accès
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Polling automatique pendant l'activation pour détecter plan='pro' et rediriger
-  useEffect(() => {
-    if (!activationPending) return;
-
-    console.log('🔄 Démarrage du polling automatique (vérification toutes les 2s)');
-
-    const interval = setInterval(async () => {
-      console.log('🔍 Polling: Vérification statut PRO...');
-      
-      try {
-        const profile = await getUserProfile();
-        console.log('📊 Polling: Profil récupéré:', profile);
-        
-        // Vérification insensible à la casse
-        const planLower = profile?.plan?.toLowerCase();
-        const tierLower = profile?.subscription_tier?.toLowerCase();
-        const statusLower = profile?.subscription_status?.toLowerCase();
-        
-        const isPro = planLower === 'pro' || 
-                      tierLower === 'pro' || 
-                      statusLower === 'active' ||
-                      statusLower === 'trialing';
-        
-        if (profile && isPro) {
-          console.log('✅ Statut PRO détecté (plan:', profile.plan, 'tier:', profile.subscription_tier, 'status:', profile.subscription_status, ')');
-          
-          // 1. Rafraîchir la session Supabase (VITAL)
-          console.log('📡 Rafraîchissement de la session Supabase...');
-          const { data, error } = await supabase.auth.refreshSession();
-          
-          if (error) {
-            console.error('❌ Erreur refresh session:', error);
-          } else {
-            console.log('✅ Session rafraîchie avec succès');
-          }
-          
-          // 2. Redirection automatique vers le Dashboard
-          console.log('🚀 Redirection automatique vers /dashboard...');
-          clearInterval(interval);
-          setActivationPending(false);
-          setUserTier('pro');
-          window.location.href = '/dashboard';
-        } else {
-          console.log('⏳ Polling: Pas encore PRO, réessai dans 2s...');
-        }
-      } catch (err) {
-        console.error('❌ Erreur polling:', err);
-      }
-    }, 2000);
-
-    // Bouton de secours après 10 secondes
-    const timer = setTimeout(() => {
-      console.log('⏰ 10 secondes écoulées, affichage bouton secours');
-      setShowForceAccess(true);
-    }, 10000);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timer);
-    };
-  }, [activationPending]);
-
-  // 🎯 BARRE DE PROGRESSION AUTOMATIQUE (2 secondes pour atteindre 100%)
-  useEffect(() => {
-    if (!activationPending && !isLoadingProfile) return;
-
-    console.log('📊 Démarrage de la progression automatique...');
-    
-    // Progression de 0 à 100% en 2 secondes (20ms par tick = 100 ticks)
-    const progressInterval = setInterval(() => {
-      setLoadingProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 1;
-      });
-    }, 20); // 20ms * 100 = 2000ms (2 secondes)
-
-    // Messages dynamiques pendant la progression
-    const messageTimer1 = setTimeout(() => {
-      setActivationMessage('Vérification de l\'abonnement...');
-    }, 500);
-
-    const messageTimer2 = setTimeout(() => {
-      if (userTier === 'pro' || isProVerified) {
-        setActivationMessage('Abonnement PRO confirmé ✓');
-      } else {
-        setActivationMessage('Finalisation de la vérification...');
-      }
-    }, 1000);
-
-    const messageTimer3 = setTimeout(async () => {
-      // Vérifier le statut PRO une dernière fois
-      try {
-        const profile = await getUserProfile();
-        const planLower = profile?.plan?.toLowerCase();
-        const isPro = planLower === 'pro' || profile?.is_pro === true;
-        
-        if (isPro) {
-          setIsProVerified(true);
-          setActivationMessage('Configuration de votre espace professionnel...');
-        } else {
-          setActivationMessage('Vérification terminée');
-        }
-      } catch (err) {
-        console.error('❌ Erreur vérification finale:', err);
-      }
-    }, 1500);
-
-    // Redirection automatique après 2 secondes si PRO
-    const redirectTimer = setTimeout(async () => {
-      console.log('🎯 Progression terminée (100%), vérification finale...');
-      
-      try {
-        const profile = await getUserProfile();
-        const planLower = profile?.plan?.toLowerCase();
-        const isPro = planLower === 'pro' || profile?.is_pro === true;
-        
-        if (isPro) {
-          console.log('✅ PRO confirmé → Redirection automatique vers /dashboard');
-          await supabase.auth.refreshSession();
-          
-          // Attendre 500ms pour afficher le message de succès
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 500);
-        } else {
-          console.log('❌ Non-PRO détecté → Redirection vers /pricing');
-          setTimeout(() => {
-            router.push('/pricing');
-          }, 500);
-        }
-      } catch (err) {
-        console.error('❌ Erreur redirection automatique:', err);
-      }
-    }, 2500); // 2.5 secondes (progression + petit délai)
-
-    return () => {
-      clearInterval(progressInterval);
-      clearTimeout(messageTimer1);
-      clearTimeout(messageTimer2);
-      clearTimeout(messageTimer3);
-      clearTimeout(redirectTimer);
-    };
-  }, [activationPending, isLoadingProfile, userTier, isProVerified]);
-
-  const checkSubscriptionLimits = async () => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get('session_id');
-
-      console.log('🔍 checkSubscriptionLimits: Vérification statut PRO...');
-
+    const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
-        console.error('❌ Pas d\'utilisateur connecté');
-        // Ne pas rediriger pendant chargement: on planifie la redirection
-        setPendingRedirectTo('/login?redirect=/dashboard');
+        window.location.href = '/login?redirect=/dashboard';
         return;
       }
-
-      // Récupérer le profil utilisateur
+      // Vérification PRO : la source de vérité est `profiles.is_pro` (mise à jour par webhook Stripe)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('is_pro, plan, email, subscription_status')
+        .select('is_pro')
         .eq('id', user.id)
         .single();
 
       if (profileError) {
-        console.error('❌ Erreur récupération profil:', profileError);
-        // En cas d'erreur, rediriger vers pricing par sécurité
-        setPendingRedirectTo('/pricing');
+        console.error('❌ Dashboard: erreur récupération profil', profileError);
         return;
       }
 
-      console.log('👤 Profil utilisateur:', { 
-        email: profile?.email, 
-        is_pro: profile?.is_pro,
-        plan: profile?.plan 
-      });
-
-      // Si retour de Stripe avec session_id : NE JAMAIS auto-upgrade côté client.
-      // On affiche un écran de vérification et on attend la confirmation serveur (webhook Stripe).
-      if (sessionId) {
-        console.log('🎯 Retour Stripe détecté (ID: ' + sessionId + ') → attente confirmation serveur');
-        setActivationPending(true);
-        setIsLoadingProfile(false);
+      if (profile?.is_pro !== true) {
+        window.location.href = '/pricing';
         return;
       }
-
-      // 🔒 VÉRIFICATION STRICTE : l'accès dépend d'un statut confirmé serveur
-      const planLower = profile?.plan?.toLowerCase();
-      const statusLower = profile?.subscription_status?.toLowerCase();
-      const isPro = profile?.is_pro === true || planLower === 'pro' || statusLower === 'active' || statusLower === 'trialing';
-
-      if (!isPro) {
-        console.warn('⛔ ACCÈS REFUSÉ: Utilisateur non-PRO détecté');
-        console.warn('   Email:', profile?.email);
-        console.warn('   is_pro:', profile?.is_pro);
-        console.warn('   plan:', profile?.plan);
-        
-        setUserTier('free');
-        setCanScan(false);
-        setRemainingScans(0);
-        setError('Abonnement requis pour accéder au Dashboard.');
-        
-        // Redirection forcée vers la page de tarification (après fin de chargement)
-        setPendingRedirectTo('/pricing');
-        return;
-      }
-
-      // ✅ Utilisateur PRO confirmé
-      console.log('✅ ACCÈS AUTORISÉ: Utilisateur PRO confirmé');
-      setUserTier('pro');
-      setCanScan(true);
-      setRemainingScans(-1);
-      setActivationPending(false);
-
-    } catch (error) {
-      console.error('❌ Erreur checkSubscriptionLimits:', error);
-      // En cas d'erreur, redirection sécurisée vers pricing
-      setPendingRedirectTo('/pricing');
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
-  // Appliquer les redirections UNIQUEMENT hors état de chargement
-  useEffect(() => {
-    if (!pendingRedirectTo) return;
-    if (isLoadingProfile || activationPending) return;
-    router.push(pendingRedirectTo);
-    setPendingRedirectTo(null);
-  }, [pendingRedirectTo, isLoadingProfile, activationPending, router]);
+      setUserEmail(user.email || null);
+    };
+    checkAuth();
+  }, []);
 
   // Rotation des messages de chargement
   useEffect(() => {
@@ -2049,13 +1812,6 @@ export default function Dashboard() {
 
   // Export CSV
   const exportToCSV = (projectId?: string) => {
-    const canExport = userTier === 'pro';
-    
-    if (!canExport) {
-      showToastMessage('📊 Export CSV disponible uniquement en plan PRO', 'error');
-      return;
-    }
-
     // Export = ce que l'utilisateur voit (filtre mois + recherche + catégorie)
     const invoicesToExport = getSortedInvoices();
 
@@ -2123,13 +1879,6 @@ export default function Dashboard() {
 
   // Export Excel (.xlsx) - Version Multi-Mois avec onglets
   const exportToExcel = () => {
-    const canExport = userTier === 'pro';
-    
-    if (!canExport) {
-      showToastMessage('📊 Export Excel disponible uniquement en plan PRO', 'error');
-      return;
-    }
-
     const sortedInvoices = getSortedInvoices();
     if (sortedInvoices.length === 0) {
       showToastMessage('❌ Aucune facture à exporter', 'error');
@@ -2261,10 +2010,7 @@ export default function Dashboard() {
 
   // Générer Bilan PDF Global - Version Sublime Finale
   const generateGlobalPDF = () => {
-    if (userTier !== 'pro') {
-      showToastMessage('📊 Export PDF disponible uniquement en plan PRO', 'error');
-      return;
-    }
+    // Logic continued
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const sortedInvoices = getSortedInvoices();
@@ -2368,10 +2114,7 @@ export default function Dashboard() {
 
   // Générer Bilan PDF par Projet (Bloc 3 - Version Sublime Finale)
   const generateProjectPDF = (projectStats: ProjectStats) => {
-    if (userTier !== 'pro') {
-      showToastMessage('📊 Export PDF disponible uniquement en plan PRO', 'error');
-      return;
-    }
+    // Logic continued
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     
@@ -2498,10 +2241,7 @@ export default function Dashboard() {
 
   // Nouvelle fonction pour export Excel par projet
   const exportProjectToExcel = (projectStats: ProjectStats) => {
-    if (userTier !== 'pro') {
-      showToastMessage('📊 Export Excel disponible uniquement en plan PRO', 'error');
-      return;
-    }
+    // Logic continued
     // Note: La gestion par project_id a été remplacée par folder_id
     const projectInvoices = invoices.filter(inv => inv.folder_id === projectStats.id);
     if (projectInvoices.length === 0) {
@@ -2617,15 +2357,21 @@ export default function Dashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      showToastMessage('❌ Seules les photos (JPEG/PNG) sont supportées pour le moment.', 'error');
+    // Formats acceptés: PDF / PNG / JPEG (objectif V1)
+    const fileType = (file.type || '').toLowerCase();
+    const isPdf = fileType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isJpeg = fileType === 'image/jpeg' || fileType === 'image/jpg';
+    const isPng = fileType === 'image/png';
+
+    if (!isPdf && !isJpeg && !isPng) {
+      showToastMessage('❌ Format invalide. Formats acceptés : PDF, PNG, JPEG.', 'error');
       return;
     }
 
     // Vérification taille fichier original
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > 10) {
-      showToastMessage('Image trop lourde (>10MB). Essayez de reculer un peu.', 'error');
+      showToastMessage('Fichier trop lourd (>10MB). Essayez un fichier plus léger.', 'error');
       return;
     }
     if (file.size < 25 * 1024) {
@@ -2639,21 +2385,52 @@ export default function Dashboard() {
     setLoadingMessage(LOADING_MESSAGES[0]);
 
     try {
-      // Compresser l'image
-      const compressedImage = await compressImage(file);
+      // Convertir en image base64 (PDF -> rendu page 1 en JPEG; PNG/JPEG -> compression JPEG)
+      let imageDataUrl: string;
+      if (isPdf) {
+        showToastMessage('📄 Conversion du PDF en image…', 'success');
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+        // Turbopack: éviter la résolution du worker via bundler -> on désactive le worker
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Impossible de lire le PDF (canvas indisponible).');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      } else {
+        // Compresser l'image
+        imageDataUrl = await compressImage(file);
+      }
       
       // Vérifier la taille après compression
-      const compressedSize = (compressedImage.length * 3) / 4 / (1024 * 1024);
+      const compressedSize = (imageDataUrl.length * 3) / 4 / (1024 * 1024);
       if (compressedSize > 4) {
         showToastMessage('Image toujours trop lourde. Essayez de reculer.', 'error');
         setAnalyzing(false);
         return;
       }
 
+      // Récupérer le token Supabase pour auth serveur (bug "non authentifié")
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        showToastMessage('❌ Session expirée. Reconnectez-vous.', 'error');
+        window.location.href = '/login?redirect=/dashboard';
+        return;
+      }
+
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: compressedImage }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ image: imageDataUrl }),
       });
 
       const text = await response.text();
@@ -2877,7 +2654,6 @@ export default function Dashboard() {
       // ✅ Rafraîchissement immédiat + Reload pour compteur
       console.log('🔄 Rafraîchissement des données...');
       await loadInvoices();
-      await checkSubscriptionLimits();
       console.log('✅ Données rafraîchies');
       
       // ✅ REDIRECTION VERS L'HISTORIQUE (BLOC 4 FINITIONS)
@@ -2896,251 +2672,9 @@ export default function Dashboard() {
   
 
   const triggerFileInput = () => {
-    // 🔒 VÉRIFICATION PRO : Bloquer l'accès si non-PRO
-    if (userTier !== 'pro') {
-      showToastMessage('⛔ Abonnement PRO requis pour scanner des factures', 'error');
-      setTimeout(() => {
-        router.push('/pricing');
-      }, 1500);
-      return;
-    }
-    
     // Menu de sélection : Appareil photo OU Téléverser fichier
     setShowUploadMenu(true);
   };
-
-  // Affichage d'attente pendant l'activation PRO avec progression automatique
-  if (activationPending || isLoadingProfile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-slate-50 flex items-center justify-center px-6 py-12">
-        <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-lg w-full text-center space-y-6 animate-fade-in">
-          {/* Icône animée */}
-          <div className="flex items-center justify-center">
-            <div className="relative">
-              {/* Cercle de progression animé */}
-              <div className="w-24 h-24 rounded-full border-4 border-slate-100 flex items-center justify-center relative overflow-hidden">
-                {/* Fond du cercle */}
-                <div 
-                  className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600 transition-all duration-300"
-                  style={{ 
-                    clipPath: `inset(${100 - loadingProgress}% 0 0 0)` 
-                  }}
-                ></div>
-                
-                {/* Icône centrale */}
-                <div className="relative z-10">
-                  {isProVerified || userTier === 'pro' ? (
-                    <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
-                      <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-      </div>
-                  ) : (
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
-                      <Zap className="w-7 h-7 text-orange-500 animate-pulse" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Badge pourcentage */}
-              <div className="absolute -bottom-2 -right-2 bg-orange-500 text-white text-xs font-black px-3 py-1 rounded-full shadow-lg border-2 border-white">
-                {loadingProgress}%
-              </div>
-            </div>
-          </div>
-
-          {/* Message dynamique */}
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
-              {isProVerified || userTier === 'pro' 
-                ? '🎉 Bienvenue sur ArtisScan Pro' 
-                : activationMessage
-              }
-            </h2>
-            <p className="text-slate-600 text-base font-medium">
-              {isProVerified || userTier === 'pro'
-                ? 'Votre espace professionnel est prêt'
-                : 'Veuillez patienter quelques instants...'
-              }
-            </p>
-          </div>
-
-          {/* Barre de progression linéaire */}
-          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 shadow-inner">
-            <div 
-              className="h-full bg-gradient-to-r from-orange-500 to-orange-600 transition-all duration-100 ease-linear rounded-full shadow-lg"
-              style={{ width: `${loadingProgress}%` }}
-            ></div>
-          </div>
-
-          {/* Liste des étapes */}
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2">
-            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 25 ? 'text-green-600' : 'text-slate-400'}`}>
-              {loadingProgress >= 25 ? (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <div className="w-5 h-5 border-2 border-slate-300 rounded-full animate-spin border-t-orange-500 flex-shrink-0"></div>
-              )}
-              <span className="text-sm font-bold">Connexion sécurisée établie</span>
-            </div>
-            
-            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 50 ? 'text-green-600' : 'text-slate-400'}`}>
-              {loadingProgress >= 50 ? (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
-              )}
-              <span className="text-sm font-bold">Vérification de l'abonnement</span>
-            </div>
-            
-            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 75 ? 'text-green-600' : 'text-slate-400'}`}>
-              {loadingProgress >= 75 ? (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
-              )}
-              <span className="text-sm font-bold">Configuration de votre espace</span>
-            </div>
-            
-            <div className={`flex items-center gap-3 transition-all ${loadingProgress >= 100 ? 'text-green-600' : 'text-slate-400'}`}>
-              {loadingProgress >= 100 ? (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <div className="w-5 h-5 border-2 border-slate-300 rounded-full flex-shrink-0"></div>
-              )}
-              <span className="text-sm font-bold">Redirection automatique...</span>
-            </div>
-          </div>
-
-          {/* Message de réussite pour PRO */}
-          {(isProVerified || userTier === 'pro') && loadingProgress >= 100 && (
-            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-5 text-white shadow-lg animate-fade-in">
-              <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                Tout est prêt !
-              </p>
-              <p className="text-lg font-black">Accès au Dashboard en cours...</p>
-            </div>
-          )}
-
-          {/* Note */}
-          <p className="text-xs text-slate-400">
-            {loadingProgress < 100 
-              ? 'Ne fermez pas cette fenêtre'
-              : 'Redirection automatique dans un instant...'
-            }
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 🔒 ÉCRAN ACCÈS RESTREINT : Affichage si utilisateur non-PRO
-  if (error && error.includes('Abonnement requis')) {
-  return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-slate-50 flex items-center justify-center px-6 py-12">
-        <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-8 max-w-lg w-full text-center space-y-6 animate-fade-in">
-          {/* Icône et titre */}
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-50 rounded-full flex items-center justify-center border-4 border-orange-200 shadow-lg">
-                <Crown className="w-10 h-10 text-orange-500" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                <AlertCircle className="w-5 h-5 text-white" />
-              </div>
-            </div>
-            
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
-                🔒 Accès Restreint
-              </h2>
-              <p className="text-slate-500 text-sm font-medium">
-                Abonnement PRO requis
-              </p>
-            </div>
-          </div>
-
-          {/* Message principal */}
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left">
-            <p className="text-slate-700 text-sm leading-relaxed">
-              <strong className="text-slate-900">Vous devez souscrire à un abonnement PRO</strong> pour accéder au Dashboard ArtisScan et profiter de toutes les fonctionnalités :
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold mt-0.5">✓</span>
-                <span>Scans IA <strong>illimités</strong> de vos factures</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold mt-0.5">✓</span>
-                <span>Exports <strong>PDF, Excel, CSV</strong></span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold mt-0.5">✓</span>
-                <span>Organisation par <strong>dossiers</strong></span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold mt-0.5">✓</span>
-                <span>Envoi direct à votre <strong>comptable</strong></span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Offre spéciale */}
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
-            <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
-              <Zap className="w-4 h-4" />
-              Offre de lancement
-            </p>
-            <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
-            <p className="text-xs opacity-90">
-              Testez toutes les fonctionnalités PRO sans engagement
-            </p>
-          </div>
-
-          {/* Boutons d'action */}
-          <div className="space-y-3">
-          <button
-              onClick={() => router.push('/pricing')}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Crown className="w-5 h-5" />
-              Devenir PRO maintenant
-            </button>
-
-            <button
-              onClick={() => router.push('/')}
-              className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
-            >
-              ← Retour à l'accueil
-          </button>
-        </div>
-
-          {/* Footer info */}
-          <p className="text-xs text-slate-400 pt-4 border-t border-slate-200">
-            Déjà abonné ? Vérifiez votre email de confirmation ou{' '}
-            <button 
-              onClick={() => window.location.reload()} 
-              className="text-orange-500 hover:text-orange-600 font-bold underline"
-            >
-              rafraîchissez la page
-            </button>
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
@@ -3166,16 +2700,6 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center gap-4">
-              {/* Badge du plan - Affiché UNIQUEMENT si utilisateur est PRO */}
-              {!isLoadingProfile && userTier === 'pro' && (
-                <div className="hidden sm:block">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${getTierBadgeColor(userTier)} shadow-sm`}>
-                    <Crown className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{getTierDisplayName(userTier)}</span>
-            </div>
-          </div>
-        )}
-
               {/* Bouton Paramètres (Engrenage) */}
               <button
                 onClick={() => setCurrentView('parametres')}
@@ -3310,57 +2834,6 @@ export default function Dashboard() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="space-y-6"
           >
-            {/* 🎯 CTA PRO : Affiché si utilisateur non-PRO */}
-            {userTier !== 'pro' && !isLoadingProfile && (
-              <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 rounded-3xl p-8 text-white shadow-2xl shadow-orange-200 border-2 border-orange-400 relative overflow-hidden">
-                {/* Pattern décoratif */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24"></div>
-                
-                <div className="relative z-10 text-center max-w-2xl mx-auto">
-                  <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mb-6 border-2 border-white/20">
-                    <Crown className="w-10 h-10 text-white" />
-                  </div>
-                  
-                  <h2 className="text-3xl md:text-4xl font-black mb-3 tracking-tight">
-                    Activez votre accès ArtisScan Pro
-                  </h2>
-                  <p className="text-lg text-orange-100 mb-6 font-medium">
-                    Pour gérer vos factures, scanner vos documents et accéder à toutes les fonctionnalités
-                  </p>
-                  
-                  {/* Avantages en ligne */}
-                  <div className="flex flex-wrap items-center justify-center gap-4 mb-8 text-sm">
-                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
-                      <Zap className="w-4 h-4" />
-                      <span className="font-bold">Scans illimités</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
-                      <FileText className="w-4 h-4" />
-                      <span className="font-bold">Exports PDF/Excel</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20">
-                      <Folder className="w-4 h-4" />
-                      <span className="font-bold">Dossiers personnalisés</span>
-                    </div>
-                  </div>
-                  
-                  {/* Bouton CTA Principal */}
-                <button
-                    onClick={() => router.push('/pricing')}
-                    className="inline-flex items-center gap-3 px-8 py-4 bg-white text-orange-600 font-black text-lg rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
-                  >
-                    <Crown className="w-6 h-6" />
-                    Découvrir les offres PRO
-                  </button>
-                  
-                  <p className="mt-4 text-sm text-orange-200 font-medium">
-                    🎁 14 jours d'essai gratuit • Sans engagement
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Résumé Chronologie (mois sélectionné) - DESIGN CLAIR MODERNE */}
             <div className="bg-white rounded-3xl p-6 text-slate-900 overflow-hidden relative border border-slate-200 shadow-sm transition-all hover:shadow-md">
               <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
@@ -3489,30 +2962,6 @@ export default function Dashboard() {
 
             {/* Graphique 7 derniers jours (TTC) */}
             <div className="card-clean rounded-3xl p-6 relative bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              {/* Overlay de floutage si non-PRO */}
-              {userTier !== 'pro' && !isLoadingProfile && (
-                <div className="absolute inset-0 bg-white/80 backdrop-blur-md rounded-3xl z-20 flex items-center justify-center">
-                  <div className="text-center px-6">
-                    <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                      <Crown className="w-8 h-8 text-orange-500" />
-                    </div>
-                    <p className="text-lg font-black text-slate-900 mb-2">
-                      Graphique réservé aux abonnés PRO
-                    </p>
-                    <p className="text-sm text-slate-500 mb-4">
-                      Visualisez vos dépenses en temps réel
-                    </p>
-                    <button
-                      onClick={() => router.push('/pricing')}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-sm"
-                    >
-                      <Crown className="w-4 h-4" />
-                      Devenir PRO
-                </button>
-              </div>
-                </div>
-              )}
-              
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dépenses des 7 derniers jours</h3>
                 {chartData.every(d => d.montant === 0) && (
@@ -3565,21 +3014,12 @@ export default function Dashboard() {
 
           <motion.button
                 onClick={triggerFileInput}
-                disabled={analyzing || userTier !== 'pro'}
+                disabled={analyzing}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className={`btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all ${
-                  userTier !== 'pro' ? 'relative overflow-hidden' : ''
-                }`}
-                title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
+                className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all"
+                title="Scanner une facture"
                 >
-                  {/* Overlay de verrouillage si non-PRO */}
-                  {userTier !== 'pro' && (
-                    <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10">
-                      <Crown className="w-6 h-6 text-white animate-pulse" />
-                </div>
-              )}
-
                   {analyzing ? (
                   <span className="flex items-center justify-center">
                     <div className="spinner w-5 h-5 mr-3 border-white/30 border-t-white"></div>
@@ -3670,92 +3110,9 @@ export default function Dashboard() {
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
-            {userTier !== 'pro' && !isLoadingProfile ? (
-              <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
-                <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-2xl w-full text-center space-y-6">
-                  {/* Icône principale */}
-                  <div className="flex items-center justify-center">
-                    <div className="relative">
-                      <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-orange-50 rounded-2xl flex items-center justify-center border-4 border-orange-200 shadow-lg">
-                        <Clock className="w-12 h-12 text-orange-500" />
-                      </div>
-                      <div className="absolute -top-2 -right-2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                        <Crown className="w-6 h-6 text-white" />
-                      </div>
-                    </div>
-        </div>
-
-                  {/* Message principal */}
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
-                      Historique Réservé aux Membres PRO
-                    </h2>
-                    <p className="text-lg text-slate-600 font-medium">
-                      Accédez à l'historique complet de vos factures et suivez vos dépenses en temps réel
-                    </p>
-                  </div>
-
-                  {/* Liste des avantages */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left">
-                    <p className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wide">
-                      Avec ArtisScan Pro, vous débloquez :
-                    </p>
-                    <ul className="space-y-3 text-sm text-slate-700">
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Historique illimité</strong> de toutes vos factures</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Recherche avancée</strong> par fournisseur, catégorie, montant</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Exports CSV/Excel/PDF</strong> pour votre comptable</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Filtres par période</strong> et catégorie</span>
-                      </li>
-                    </ul>
-              </div>
-
-                  {/* Badge essai gratuit */}
-                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
-                    <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
-                      <Zap className="w-4 h-4" />
-                      Offre spéciale
-                    </p>
-                    <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
-                    <p className="text-sm opacity-90">
-                      Testez toutes les fonctionnalités sans engagement
-                </p>
-              </div>
-
-                  {/* Boutons d'action */}
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => router.push('/pricing')}
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 text-base"
-                    >
-                      <Crown className="w-5 h-5" />
-                      Débloquer l'Historique PRO
-                    </button>
-
-                    <button
-                      onClick={() => setCurrentView('dashboard')}
-                      className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
-                    >
-                      ← Retour au Dashboard
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // ✅ CONTENU NORMAL pour utilisateurs PRO
-          <div className="fade-in space-y-4">
-            {/* Header avec action */}
+            {/* ✅ CONTENU NORMAL */}
+            <div className="fade-in space-y-4">
+              {/* Header avec action */}
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historique</h2>
               <div className="flex flex-wrap items-center gap-2">
@@ -4051,7 +3408,7 @@ export default function Dashboard() {
                                         setShowMoveToFolderModal(true);
                                         setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center gap-3"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-3"
                                     >
                                       <Folder className="w-4 h-4" />
                                       Déplacer vers un dossier
@@ -4139,7 +3496,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-            )}
           </motion.div>
         )}
 
@@ -4152,106 +3508,23 @@ export default function Dashboard() {
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            {/* 🔒 PAYWALL pour utilisateurs non-PRO */}
-            {userTier !== 'pro' && !isLoadingProfile ? (
-              <div className="min-h-[600px] flex items-center justify-center px-6 py-12 fade-in">
-                <div className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-10 max-w-2xl w-full text-center space-y-6">
-                  {/* Icône principale */}
-                  <div className="flex items-center justify-center">
-                    <div className="relative">
-                      <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-orange-50 rounded-2xl flex items-center justify-center border-4 border-orange-200 shadow-lg">
-                        <Folder className="w-12 h-12 text-orange-500" />
-                      </div>
-                      <div className="absolute -top-2 -right-2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                        <Crown className="w-6 h-6 text-white" />
-                      </div>
+            {/* ✅ CONTENU NORMAL */}
+            <div className="fade-in">
+              {!selectedFolder ? (
+                <>
+                  {/* Header avec bouton création */}
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-3xl font-black text-slate-900 tracking-tight">Mes Dossiers</h2>
                     </div>
-                  </div>
-                  
-                  {/* Message principal */}
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
-                      Dossiers Réservés aux Membres PRO
-                    </h2>
-                    <p className="text-lg text-slate-600 font-medium">
-                      Organisez vos factures par projets, clients ou périodes avec des dossiers personnalisés
-                    </p>
-                  </div>
-
-                  {/* Liste des avantages */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left">
-                    <p className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wide">
-                      Avec ArtisScan Pro, vous débloquez :
-                    </p>
-                    <ul className="space-y-3 text-sm text-slate-700">
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Dossiers illimités</strong> pour organiser vos factures</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Références comptables</strong> personnalisées par dossier</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Exports groupés</strong> par dossier (PDF, Excel, CSV)</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-green-500 font-bold text-lg mt-0.5">✓</span>
-                        <span><strong>Envoi direct</strong> au comptable par dossier</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Badge essai gratuit */}
-                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
-                    <p className="text-sm font-black uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
-                      <Zap className="w-4 h-4" />
-                      Offre spéciale
-                    </p>
-                    <p className="text-2xl font-black mb-2">14 jours d'essai gratuit</p>
-                    <p className="text-sm opacity-90">
-                      Testez toutes les fonctionnalités sans engagement
-                    </p>
-                  </div>
-
-                  {/* Boutons d'action */}
-                  <div className="space-y-3">
                     <button
-                      onClick={() => router.push('/pricing')}
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 text-base"
+                      onClick={() => setShowFolderModal(true)}
+                      className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95 shadow-md"
                     >
-                      <Crown className="w-5 h-5" />
-                      Débloquer les Dossiers PRO
-                    </button>
-
-                    <button
-                      onClick={() => setCurrentView('dashboard')}
-                      className="w-full text-slate-500 hover:text-slate-700 font-semibold text-sm py-3 transition-colors rounded-lg hover:bg-slate-100"
-                    >
-                      ← Retour au Dashboard
+                      <Plus className="w-5 h-5" />
+                      Créer un dossier
                     </button>
                   </div>
-                </div>
-              </div>
-            ) : (
-              // ✅ CONTENU NORMAL pour utilisateurs PRO
-          <div className="fade-in">
-            {!selectedFolder ? (
-              <>
-                {/* Header avec bouton création */}
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Mes Dossiers</h2>
-                  </div>
-                  <button
-                    onClick={() => setShowFolderModal(true)}
-                    className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95 shadow-md"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Créer un dossier
-                  </button>
-                </div>
 
                 {/* Liste des dossiers */}
                 {loadingFolders ? (
@@ -4381,7 +3654,7 @@ export default function Dashboard() {
                                     setShowEmailModal(true);
                                     setOpenMenuId(null);
                                   }}
-                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center gap-3"
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-3"
                                 >
                                   <Mail className="w-4 h-4" />
                                   Envoyer au comptable
@@ -4546,7 +3819,7 @@ export default function Dashboard() {
                                         }}
                                         className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-3 transition-colors"
                                       >
-                                        <Folder className="w-4 h-4 text-purple-500" />
+                                        <Folder className="w-4 h-4 text-orange-500" />
                                         <span className="font-medium text-slate-700">Déplacer vers un autre dossier</span>
                                       </button>
                                       
@@ -4588,7 +3861,6 @@ export default function Dashboard() {
               </>
             )}
           </div>
-            )}
           </motion.div>
         )}
 
@@ -4803,16 +4075,60 @@ export default function Dashboard() {
             </div>
 
             {/* Abonnement */}
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-8 mb-6 shadow-lg text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-orange-100 text-sm font-medium mb-2">Votre abonnement</p>
-                  <div className="flex items-center gap-3">
-                    <Crown className="w-6 h-6" />
-                    <span className="text-2xl font-black">ArtisScan PRO</span>
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <Crown className="w-5 h-5 text-orange-500" />
+                Abonnement
+              </h3>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Plan</p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {billingLoading ? 'Chargement…' : billingPlan === 'monthly' ? 'Pro (Mensuel)' : billingPlan === 'yearly' ? 'Pro (Annuel)' : 'Free'}
+                    </p>
                   </div>
-                  <p className="text-orange-100 text-sm mt-2">Accès illimité à toutes les fonctionnalités</p>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Statut</p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {billingLoading ? 'Chargement…' : (billingStatus || (billingPlan ? 'active' : 'free'))}
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Fin de période (end_date)</p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {billingLoading
+                        ? 'Chargement…'
+                        : billingEndDate
+                          ? new Date(billingEndDate).toLocaleDateString('fr-FR')
+                          : '—'}
+                    </p>
+                  </div>
                 </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={startCustomerPortal}
+                    disabled={billingLoading || !billingCustomerId}
+                    className="flex-1 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Gérer mon abonnement
+                  </button>
+                  <button
+                    onClick={startCustomerPortal}
+                    disabled={billingLoading || !billingCustomerId}
+                    className="flex-1 px-6 py-3 bg-white border-2 border-orange-500 text-orange-600 hover:bg-orange-50 font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Résilier mon abonnement
+                  </button>
+                </div>
+
+                {!billingCustomerId && !billingLoading && (
+                  <p className="text-xs text-slate-500">
+                    Aucun abonnement Stripe détecté. Pour activer Pro, rendez-vous sur <Link className="font-bold hover:text-orange-600" href="/pricing">/pricing</Link>.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -4860,7 +4176,7 @@ export default function Dashboard() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="application/pdf,image/png,image/jpeg"
         capture="environment"
         onChange={handleAnalyze}
         className="hidden"
@@ -4887,7 +4203,7 @@ export default function Dashboard() {
                   const input = fileInputRef.current;
                   if (input) {
                     input.setAttribute('capture', 'environment');
-                    input.setAttribute('accept', 'image/*');
+                    input.setAttribute('accept', 'image/jpeg,image/png');
                     input.click();
                   }
                 }}
@@ -4908,7 +4224,7 @@ export default function Dashboard() {
                   const input = fileInputRef.current;
                   if (input) {
                     input.removeAttribute('capture');
-                    input.setAttribute('accept', 'image/*');
+                    input.setAttribute('accept', 'application/pdf,image/png,image/jpeg');
                     input.click();
                   }
                 }}
@@ -5398,7 +4714,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-3xl p-8 max-w-md w-full slide-up shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
                   <Folder className="w-6 h-6 text-white" />
                 </div>
                 <div>
@@ -5457,13 +4773,13 @@ export default function Dashboard() {
                     <button
                       key={folder.id}
                       onClick={() => moveInvoiceToFolder(invoiceToMove.id, folder.id)}
-                      className="w-full flex items-center gap-4 p-4 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all group text-left"
+                      className="w-full flex items-center gap-4 p-4 border-2 border-slate-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition-all group text-left"
                     >
-                      <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                      <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
                         <Folder className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-black text-slate-900 text-sm truncate group-hover:text-purple-600 transition-colors">
+                        <p className="font-black text-slate-900 text-sm truncate group-hover:text-orange-600 transition-colors">
                           {folder.name}
                         </p>
                         {folder.reference && (
@@ -5472,7 +4788,7 @@ export default function Dashboard() {
                           </p>
                         )}
                       </div>
-                      <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90 group-hover:text-purple-500 transition-colors" />
+                      <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90 group-hover:text-orange-500 transition-colors" />
                     </button>
                   ))}
                 </>
@@ -5497,7 +4813,7 @@ export default function Dashboard() {
                     setInvoiceToMove(null);
                     setShowFolderModal(true);
                   }}
-                  className="px-4 py-3 border-2 border-purple-500 text-purple-600 rounded-xl hover:bg-purple-50 transition-colors font-bold text-sm flex items-center gap-2"
+                  className="px-4 py-3 border-2 border-orange-500 text-orange-600 rounded-xl hover:bg-orange-50 transition-colors font-bold text-sm flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   Nouveau dossier
@@ -5538,21 +4854,12 @@ export default function Dashboard() {
             {/* Scanner central plus gros avec animations */}
             <motion.button
               onClick={triggerFileInput}
-              disabled={analyzing || userTier !== 'pro'}
+              disabled={analyzing}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative ${
-                userTier !== 'pro' ? 'saturate-50' : ''
-              }`}
-              title={userTier !== 'pro' ? 'Abonnement PRO requis' : 'Scanner une facture'}
+              className="flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative"
+              title="Scanner une facture"
             >
-              {/* Badge de verrouillage si non-PRO */}
-              {userTier !== 'pro' && (
-                <div className="absolute -top-2 -right-2 w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center border-2 border-white shadow-lg z-10">
-                  <Crown className="w-4 h-4 text-orange-400 animate-pulse" />
-                </div>
-              )}
-              
               {analyzing ? (
                 <motion.div
                   animate={{ rotate: 360 }}

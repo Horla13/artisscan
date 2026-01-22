@@ -1,0 +1,19 @@
+0 verbose cli /usr/local/bin/node /usr/local/bin/npm
+1 info using npm@11.6.2
+2 info using node@v24.12.0
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/giovannirusso/artisscan/.npmrc
+5 silly config load:file:/Users/giovannirusso/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm install @resvg/resvg-js@^2.6.2
+8 verbose argv "install" "--save-dev" "@resvg/resvg-js@^2.6.2" "--no-fund" "--no-audit"
+9 verbose logfile logs-max:10 dir:/Users/giovannirusso/artisscan/.npm-cache/_logs/2026-01-18T18_25_11_664Z-
+10 verbose logfile /Users/giovannirusso/artisscan/.npm-cache/_logs/2026-01-18T18_25_11_664Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/giovannirusso/artisscan
+13 verbose os Darwin 25.2.0
+14 verbose node v24.12.0
+15 verbose npm  v11.6.2
+16 verbose exit 1
+17 verbose code 1
+18 error A complete log of this run can be found in: /Users/giovannirusso/artisscan/.npm-cache/_logs/2026-01-18T18_25_11_664Z-debug-0.log

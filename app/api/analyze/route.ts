@@ -14,37 +14,46 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    // Vérifier les limites d'abonnement côté serveur
+    // Vérifier l'accès PRO côté serveur via JWT Supabase
     const authHeader = request.headers.get('authorization');
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      
-      if (user && !authError) {
-        // Récupérer le profil utilisateur
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('subscription_tier')
-          .eq('id', user.id)
-          .single();
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Non authentifié' },
+        { status: 401 }
+      );
+    }
 
-        const tier = profile?.subscription_tier || 'free';
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Session invalide ou expirée' },
+        { status: 401 }
+      );
+    }
 
-        // Si Free, vérifier la limite de 5 scans
-        if (tier === 'free') {
-          const { count } = await supabase
-            .from('scans')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id);
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_pro, plan, stripe_customer_id, stripe_subscription_id')
+      .eq('id', user.id)
+      .single();
 
-          if (count && count >= 5) {
-            return NextResponse.json(
-              { error: 'Limite de 5 scans atteinte. Passez au plan Pro pour continuer.' },
-              { status: 403 }
-            );
-          }
-        }
-      }
+    if (profileError) {
+      console.error('❌ /api/analyze: erreur profil', profileError);
+      return NextResponse.json({ error: 'Erreur de vérification' }, { status: 500 });
+    }
+
+    if (profile?.is_pro !== true) {
+      console.warn('⛔ /api/analyze: accès refusé (non-PRO)', {
+        user_id: user.id,
+        plan: profile?.plan,
+        stripe_customer_id: profile?.stripe_customer_id,
+        stripe_subscription_id: profile?.stripe_subscription_id,
+      });
+      return NextResponse.json(
+        { error: 'Abonnement requis', redirectTo: '/pricing' },
+        { status: 403 }
+      );
     }
 
     // Récupérer le body de la requête

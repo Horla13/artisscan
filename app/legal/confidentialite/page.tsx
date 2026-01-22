@@ -67,7 +67,6 @@ export default function Confidentialite() {
           <li><strong>Paddle :</strong> Paiements, facturation et taxes (Merchant of Record)</li>
           <li><strong>OVH :</strong> Hébergement</li>
           <li><strong>Prestataires email :</strong> Envoi d’emails de service et support</li>
-          <li><strong>Stripe (éventuel) :</strong> Le cas échéant, si un module de paiement alternatif est utilisé</li>
         </ul>
         <p>
           <strong>Nous ne vendons, ne louons ni ne partageons vos données personnelles avec des tiers à des fins commerciales.</strong>

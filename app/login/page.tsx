@@ -80,6 +80,19 @@ function LoginForm() {
       
       // Force la récupération de la session pour s'assurer qu'elle est active localement
       const { data: { session } } = await supabase.auth.getSession();
+
+      // ✅ Email transactionnel "Compte créé" (Brevo) - ne doit pas bloquer le flow
+      try {
+        const token = session?.access_token;
+        if (token) {
+          fetch('/api/emails/account-created', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
       
       // Forcer le rafraîchissement des composants
       router.refresh()
