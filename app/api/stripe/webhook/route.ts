@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { sendMail } from '@/lib/sendMail';
 
 type Plan = 'monthly' | 'yearly';
 
@@ -11,6 +12,34 @@ function planFromPriceId(priceId: string | null | undefined): Plan | null {
   if (priceId === monthly) return 'monthly';
   if (priceId === yearly) return 'yearly';
   return null;
+}
+
+async function sendSubscriptionActivatedEmail(supabaseUserId: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(supabaseUserId);
+  if (error) throw new Error(error.message);
+  const email = data?.user?.email;
+  if (!email) throw new Error('Email introuvable');
+
+  const subject = 'Bienvenue sur ArtisScan Pro';
+  const html = `
+    Bonjour,<br/><br/>
+    Votre abonnement ArtisScan est désormais actif.<br/>
+    Vous pouvez dès maintenant :<br/>
+    - scanner vos factures et justificatifs<br/>
+    - exporter des CSV prêts pour votre comptable<br/>
+    - envoyer directement les documents à votre cabinet<br/><br/>
+    👉 Accéder à votre espace : https://www.artisscan.fr/dashboard<br/><br/>
+    Merci de votre confiance,<br/>
+    L’équipe ArtisScan<br/>
+    Vertex Labs
+  `;
+
+  console.log('📧 Envoi email abonnement activé', { to: email, user_id: supabaseUserId });
+  return await sendMail({ to: email, subject, html });
 }
 
 export async function POST(req: NextRequest) {
@@ -48,19 +77,20 @@ export async function POST(req: NextRequest) {
       });
 
       // ✅ Ne rien faire si Stripe ne fournit pas (encore) la subscription ici
-      if (!session.subscription) {
+      const subId =
+        typeof session.subscription === 'string'
+          ? session.subscription
+          : (session.subscription as any)?.id || null;
+      if (!subId) {
         console.log('ℹ️ Session sans subscription (null) → pas de mise à jour Supabase', { session_id: session.id, supabaseUserId });
         return NextResponse.json({ received: true });
       }
 
-      const subId = session.subscription.toString();
       const subscription = (await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price'] })) as any as Stripe.Subscription;
       const priceId = subscription.items.data[0]?.price?.id || null;
       const plan = planFromPriceId(priceId) || ((subscription.metadata?.billingCycle as Plan | undefined) ?? null);
       const active = subscription.status === 'active' || subscription.status === 'trialing';
-      const endDate = (subscription as any).current_period_end
-        ? new Date((subscription as any).current_period_end * 1000).toISOString()
-        : null;
+      const endDate = (subscription as any).current_period_end ? new Date((subscription as any).current_period_end * 1000).toISOString() : null;
 
       await supabaseAdmin
         .from('profiles')
@@ -75,6 +105,15 @@ export async function POST(req: NextRequest) {
         .eq('id', supabaseUserId);
 
       console.log('✅ Supabase updated PRO status', { supabaseUserId, plan, active, endDate, subId });
+
+      if (active && endDate) {
+        try {
+          await sendSubscriptionActivatedEmail(supabaseUserId);
+          console.log('✅ Email envoyé', { supabaseUserId });
+        } catch (err: any) {
+          console.error('❌ Email erreur', err?.message || err);
+        }
+      }
     } else {
       console.log('ℹ️ Event ignoré', event.type);
     }
