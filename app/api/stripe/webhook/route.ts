@@ -53,55 +53,54 @@ async function updateProfile(params: {
     subscription_end_date: params.endDateIso,
   });
 
-  const { data, error, count } = await supabaseAdmin
+  // ✅ Upsert: crée la ligne si elle n'existe pas encore (source de vérité Stripe)
+  const payload: any = {
+    id: params.supabaseUserId,
+    stripe_customer_id: params.stripeCustomerId,
+    stripe_subscription_id: params.stripeSubscriptionId,
+    plan: params.plan,
+    is_pro: params.isPro,
+    subscription_status: params.subscriptionStatus ?? null,
+    subscription_end_date: params.endDateIso ?? null,
+    // compat: on continue de remplir end_date, mais le code n'en dépend plus
+    end_date: params.endDateIso ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabaseAdmin
     .from('profiles')
-    .update({
-      stripe_customer_id: params.stripeCustomerId,
-      stripe_subscription_id: params.stripeSubscriptionId,
-      plan: params.plan,
-      is_pro: params.isPro,
-      subscription_status: params.subscriptionStatus ?? null,
-      // compat: on remplit les 2 colonnes (ancienne + nouvelle)
-      end_date: params.endDateIso ?? null,
-      subscription_end_date: params.endDateIso ?? null,
-      updated_at: new Date().toISOString(),
-    }, { count: 'exact' })
-    .eq('id', params.supabaseUserId);
+    .upsert(payload, { onConflict: 'id' })
+    .select('id');
 
   console.log('📌 Supabase update result', {
     supabaseUserId: params.supabaseUserId,
-    count,
     error: error ? { message: error.message, code: (error as any).code, details: (error as any).details } : null,
     data,
   });
-  if (count === 0) {
-    console.warn('⚠️ Supabase update: utilisateur introuvable', { supabaseUserId: params.supabaseUserId });
-  }
 
   if (error) {
-    // Fallback si les colonnes subscription_status/end_date n'existent pas encore en DB
+    // Fallback si les colonnes subscription_status/subscription_end_date/end_date n'existent pas encore en DB
     const msg = String(error.message || '');
     if (msg.includes('subscription_status') || msg.includes('end_date') || msg.includes('subscription_end_date') || error.code === '42703') {
       console.warn('⚠️ Colonnes abonnement manquantes en DB, retry update sans subscription_status/end_date/subscription_end_date');
-      const { data: retryData, error: retryErr, count: retryCount } = await supabaseAdmin
+      const retryPayload: any = {
+        id: params.supabaseUserId,
+        stripe_customer_id: params.stripeCustomerId,
+        stripe_subscription_id: params.stripeSubscriptionId,
+        plan: params.plan,
+        is_pro: params.isPro,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: retryData, error: retryErr } = await supabaseAdmin
         .from('profiles')
-        .update({
-          stripe_customer_id: params.stripeCustomerId,
-          stripe_subscription_id: params.stripeSubscriptionId,
-          plan: params.plan,
-          is_pro: params.isPro,
-          updated_at: new Date().toISOString(),
-        }, { count: 'exact' })
-        .eq('id', params.supabaseUserId);
+        .upsert(retryPayload, { onConflict: 'id' })
+        .select('id');
       console.log('📌 Supabase update result (retry)', {
         supabaseUserId: params.supabaseUserId,
-        count: retryCount,
         error: retryErr ? { message: retryErr.message, code: (retryErr as any).code, details: (retryErr as any).details } : null,
         data: retryData,
       });
-      if (retryCount === 0) {
-        console.warn('⚠️ Supabase update (retry): utilisateur introuvable', { supabaseUserId: params.supabaseUserId });
-      }
       if (retryErr) {
         console.error('❌ Supabase update error (retry)', retryErr);
         throw new Error(retryErr.message);
