@@ -53,7 +53,7 @@ async function updateProfile(params: {
     subscription_end_date: params.endDateIso,
   });
 
-  const { error } = await supabaseAdmin
+  const { data, error, count } = await supabaseAdmin
     .from('profiles')
     .update({
       stripe_customer_id: params.stripeCustomerId,
@@ -65,15 +65,25 @@ async function updateProfile(params: {
       end_date: params.endDateIso ?? null,
       subscription_end_date: params.endDateIso ?? null,
       updated_at: new Date().toISOString(),
-    })
+    }, { count: 'exact' })
     .eq('id', params.supabaseUserId);
+
+  console.log('📌 Supabase update result', {
+    supabaseUserId: params.supabaseUserId,
+    count,
+    error: error ? { message: error.message, code: (error as any).code, details: (error as any).details } : null,
+    data,
+  });
+  if (count === 0) {
+    console.warn('⚠️ Supabase update: utilisateur introuvable', { supabaseUserId: params.supabaseUserId });
+  }
 
   if (error) {
     // Fallback si les colonnes subscription_status/end_date n'existent pas encore en DB
     const msg = String(error.message || '');
     if (msg.includes('subscription_status') || msg.includes('end_date') || msg.includes('subscription_end_date') || error.code === '42703') {
       console.warn('⚠️ Colonnes abonnement manquantes en DB, retry update sans subscription_status/end_date/subscription_end_date');
-      const { error: retryErr } = await supabaseAdmin
+      const { data: retryData, error: retryErr, count: retryCount } = await supabaseAdmin
         .from('profiles')
         .update({
           stripe_customer_id: params.stripeCustomerId,
@@ -81,8 +91,17 @@ async function updateProfile(params: {
           plan: params.plan,
           is_pro: params.isPro,
           updated_at: new Date().toISOString(),
-        })
+        }, { count: 'exact' })
         .eq('id', params.supabaseUserId);
+      console.log('📌 Supabase update result (retry)', {
+        supabaseUserId: params.supabaseUserId,
+        count: retryCount,
+        error: retryErr ? { message: retryErr.message, code: (retryErr as any).code, details: (retryErr as any).details } : null,
+        data: retryData,
+      });
+      if (retryCount === 0) {
+        console.warn('⚠️ Supabase update (retry): utilisateur introuvable', { supabaseUserId: params.supabaseUserId });
+      }
       if (retryErr) {
         console.error('❌ Supabase update error (retry)', retryErr);
         throw new Error(retryErr.message);
@@ -173,12 +192,6 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        console.log('✅ checkout.session.completed', {
-          session_id: session.id,
-          subscription: session.subscription,
-          customer: session.customer,
-        });
-
         const supabaseUserId =
           (session.metadata?.supabase_user_id as string | undefined) ||
           (session.client_reference_id as string | undefined);
@@ -188,47 +201,32 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        const stripeCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id || null;
-        const stripeSubscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id || null;
-
-        if (!stripeSubscriptionId) {
-          console.warn('⚠️ Webhook checkout.session.completed sans subscription id', { supabaseUserId });
-          break;
-        }
-
-        const sub = (await stripe.subscriptions.retrieve(stripeSubscriptionId, { expand: ['items.data.price'] })) as any as Stripe.Subscription;
-        const status = sub.status;
-        const active = status === 'active' || status === 'trialing';
-        const priceId = sub.items.data[0]?.price?.id;
-        const plan = planFromPriceId(priceId) || ((sub.metadata?.billingCycle as Plan | undefined) ?? null);
-        const endDateIso = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000).toISOString() : null;
-        console.log('📌 Subscription Stripe', {
-          subscription_id: stripeSubscriptionId,
-          status,
-          current_period_end: (sub as any).current_period_end || null,
-          endDateIso,
-        });
-
-        const { alreadyProSameSub } = await updateProfile({
+        // ✅ Ne pas dépendre de session.subscription (peut être null)
+        console.log('✅ checkout.session.completed reçu', {
+          session_id: session.id,
           supabaseUserId,
-          stripeCustomerId,
-          stripeSubscriptionId,
-          plan: active ? plan : null,
-          isPro: active,
-          subscriptionStatus: status,
-          endDateIso,
+          subscription: session.subscription,
+          customer: session.customer,
         });
 
-        // Email "Abonnement activé" UNIQUEMENT après checkout.session.completed + endDate dispo
-        if (active && !!endDateIso && !alreadyProSameSub) {
+        // Optionnel: si Stripe donne quand même l'ID subscription, on "répare" la metadata
+        // pour garantir que customer.subscription.created/updated contiennent supabase_user_id.
+        const maybeSubId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id || null;
+        const billingCycle = (session.metadata?.billingCycle as Plan | undefined) || null;
+        if (maybeSubId) {
           try {
-            const res = await sendSubscriptionActivatedEmail({ supabaseUserId });
-            console.log('✅ Email abonnement activé: envoyé', { supabaseUserId, res });
-          } catch (err: any) {
-            // ne pas bloquer le webhook
-            console.error('❌ Email abonnement activé: erreur envoi', err?.message || err);
+            await stripe.subscriptions.update(maybeSubId, {
+              metadata: {
+                supabase_user_id: supabaseUserId,
+                ...(billingCycle ? { billingCycle } : {}),
+              },
+            });
+            console.log('🩹 Subscription metadata ensured', { subscription_id: maybeSubId, supabaseUserId, billingCycle });
+          } catch (e: any) {
+            console.warn('⚠️ Unable to update subscription metadata', { subscription_id: maybeSubId, err: e?.message || e });
           }
         }
+
         break;
       }
 
@@ -252,7 +250,7 @@ export async function POST(req: NextRequest) {
         const plan = planFromPriceId(priceId) || ((sub.metadata?.billingCycle as Plan | undefined) ?? null);
         const endDateIso = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000).toISOString() : null;
 
-        await updateProfile({
+        const { alreadyProSameSub } = await updateProfile({
           supabaseUserId,
           stripeCustomerId,
           stripeSubscriptionId: active ? stripeSubscriptionId : null,
@@ -261,6 +259,16 @@ export async function POST(req: NextRequest) {
           subscriptionStatus: status,
           endDateIso: active ? endDateIso : null,
         });
+
+        // Email post-paiement: UNIQUEMENT quand la subscription est réellement active/trialing ET endDate existe
+        if (active && !!endDateIso && !alreadyProSameSub) {
+          try {
+            await sendSubscriptionActivatedEmail({ supabaseUserId });
+            console.log('✅ Email abonnement activé envoyé', { supabaseUserId });
+          } catch (err: any) {
+            console.error('❌ Email abonnement activé: erreur', err?.message || err);
+          }
+        }
         break;
       }
       default:
