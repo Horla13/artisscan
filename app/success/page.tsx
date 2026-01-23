@@ -24,17 +24,25 @@ function SuccessContent() {
         return;
       }
 
-      // Polling léger : attendre que le webhook synchronise is_pro
+      // Polling léger : attendre que le webhook synchronise la subscription Stripe (source de vérité)
       const startedAt = Date.now();
       const timeoutMs = 30000;
       while (!cancelled) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_pro, plan')
+          .select('stripe_subscription_id, subscription_status, subscription_end_date, end_date, plan')
           .eq('id', session.user.id)
           .single();
 
-        if (profile?.is_pro === true) {
+        const endDate = (profile as any)?.subscription_end_date || (profile as any)?.end_date;
+        const statusStr = ((profile as any)?.subscription_status || '').toString();
+        const ok =
+          !!(profile as any)?.stripe_subscription_id &&
+          (statusStr === 'active' || statusStr === 'trialing') &&
+          !!endDate &&
+          new Date(endDate).getTime() > Date.now() - 60 * 1000;
+
+        if (ok) {
           setStatus('ok');
           setMessage('Abonnement activé. Redirection vers le dashboard…');
           setTimeout(() => router.push('/dashboard'), 900);

@@ -50,7 +50,7 @@ async function updateProfile(params: {
     plan: params.plan,
     is_pro: params.isPro,
     subscription_status: params.subscriptionStatus,
-    end_date: params.endDateIso,
+    subscription_end_date: params.endDateIso,
   });
 
   const { error } = await supabaseAdmin
@@ -61,7 +61,9 @@ async function updateProfile(params: {
       plan: params.plan,
       is_pro: params.isPro,
       subscription_status: params.subscriptionStatus ?? null,
+      // compat: on remplit les 2 colonnes (ancienne + nouvelle)
       end_date: params.endDateIso ?? null,
+      subscription_end_date: params.endDateIso ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.supabaseUserId);
@@ -69,8 +71,8 @@ async function updateProfile(params: {
   if (error) {
     // Fallback si les colonnes subscription_status/end_date n'existent pas encore en DB
     const msg = String(error.message || '');
-    if (msg.includes('subscription_status') || msg.includes('end_date') || error.code === '42703') {
-      console.warn('⚠️ Colonnes abonnement manquantes en DB, retry update sans subscription_status/end_date');
+    if (msg.includes('subscription_status') || msg.includes('end_date') || msg.includes('subscription_end_date') || error.code === '42703') {
+      console.warn('⚠️ Colonnes abonnement manquantes en DB, retry update sans subscription_status/end_date/subscription_end_date');
       const { error: retryErr } = await supabaseAdmin
         .from('profiles')
         .update({
@@ -135,6 +137,11 @@ export async function POST(req: NextRequest) {
     console.error('❌ Webhook: config Stripe manquante');
     return NextResponse.json({ error: 'Configuration manquante' }, { status: 500 });
   }
+  // 🔒 Interdire Stripe Live (V1 = test mode uniquement)
+  if (stripeSecretKey.startsWith('sk_live_')) {
+    console.error('⛔ Webhook: clé Stripe LIVE détectée (interdit en V1)');
+    return NextResponse.json({ error: 'Stripe live interdit. Utilisez une clé sk_test.' }, { status: 500 });
+  }
 
   const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-12-15.clover' });
 
@@ -154,12 +161,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Signature invalide' }, { status: 400 });
   }
 
-  console.log('🔔 Webhook reçu', { type: event.type, id: event.id });
+  console.log('🔔 Webhook reçu', { type: event.type, id: event.id, livemode: (event as any).livemode });
+
+  // 🔒 Refuser les events live (sécurité V1)
+  if ((event as any).livemode === true) {
+    console.error('⛔ Webhook: event livemode reçu (refusé)', { id: event.id, type: event.type });
+    return NextResponse.json({ received: true, ignored: true });
+  }
 
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
+        console.log('✅ checkout.session.completed', {
+          session_id: session.id,
+          subscription: session.subscription,
+          customer: session.customer,
+        });
 
         const supabaseUserId =
           (session.metadata?.supabase_user_id as string | undefined) ||
@@ -184,6 +202,12 @@ export async function POST(req: NextRequest) {
         const priceId = sub.items.data[0]?.price?.id;
         const plan = planFromPriceId(priceId) || ((sub.metadata?.billingCycle as Plan | undefined) ?? null);
         const endDateIso = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000).toISOString() : null;
+        console.log('📌 Subscription Stripe', {
+          subscription_id: stripeSubscriptionId,
+          status,
+          current_period_end: (sub as any).current_period_end || null,
+          endDateIso,
+        });
 
         const { alreadyProSameSub } = await updateProfile({
           supabaseUserId,

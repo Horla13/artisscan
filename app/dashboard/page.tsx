@@ -166,7 +166,7 @@ export default function Dashboard() {
 
       setBillingPlan(profile?.plan ?? null);
       setBillingStatus(profile?.subscription_status ?? null);
-      setBillingEndDate(profile?.end_date ?? null);
+      setBillingEndDate(profile?.subscription_end_date ?? profile?.end_date ?? null);
       setBillingCustomerId(profile?.stripe_customer_id ?? null);
     } catch (e) {
       console.warn('⚠️ loadBillingInfo error', e);
@@ -398,10 +398,10 @@ export default function Dashboard() {
         window.location.href = '/login?redirect=/dashboard';
         return;
       }
-      // Vérification PRO : la source de vérité est `profiles.is_pro` (mise à jour par webhook Stripe)
+      // Vérification PRO : Stripe est la source de vérité (subscription réelle)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('is_pro')
+        .select('stripe_subscription_id, subscription_status, subscription_end_date, end_date')
         .eq('id', user.id)
         .single();
 
@@ -410,7 +410,13 @@ export default function Dashboard() {
         return;
       }
 
-      if (profile?.is_pro !== true) {
+      const endDate = profile?.subscription_end_date || profile?.end_date;
+      const status = (profile?.subscription_status || '').toString();
+      const hasSub = !!profile?.stripe_subscription_id;
+      const isActive = status === 'active' || status === 'trialing';
+      const endOk = !!endDate && new Date(endDate).getTime() > Date.now() - 60 * 1000;
+
+      if (!(hasSub && isActive && endOk)) {
         window.location.href = '/pricing';
         return;
       }
@@ -4046,7 +4052,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Fin de période (end_date)</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Fin de période</p>
                     <p className="text-sm font-bold text-slate-900">
                       {billingLoading
                         ? 'Chargement…'

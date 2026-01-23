@@ -23,6 +23,11 @@ export async function POST(req: NextRequest) {
     console.error('❌ /api/stripe/checkout: configuration manquante');
     return NextResponse.json({ error: 'Configuration manquante' }, { status: 500 });
   }
+  // 🔒 Interdire Stripe Live (V1 = test mode uniquement)
+  if (stripeSecretKey.startsWith('sk_live_')) {
+    console.error('⛔ /api/stripe/checkout: clé Stripe LIVE détectée (interdit en V1)');
+    return NextResponse.json({ error: 'Stripe live interdit. Utilisez une clé sk_test.' }, { status: 500 });
+  }
 
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -55,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-12-15.clover' });
 
-  console.log('🧾 Checkout: création session', { supabase_user_id: user.id, billingCycle });
+  console.log('🧾 Checkout: création session', { supabase_user_id: user.id, billingCycle, priceId });
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
     cancel_url: `${siteUrl}/pricing`,
   });
 
-  console.log('✅ Checkout: session créée', { id: session.id });
+  console.log('✅ Checkout: session créée', { session_id: session.id, url: session.url });
 
   if (!session.url) {
     console.error('❌ Checkout: session.url manquante', { id: session.id });

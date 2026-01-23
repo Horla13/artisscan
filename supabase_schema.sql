@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   plan TEXT, -- 'monthly', 'yearly', ou NULL
   subscription_status TEXT, -- ex: 'trialing', 'active', 'canceled', 'unpaid'
   end_date TIMESTAMP WITH TIME ZONE, -- fin de période (current_period_end Stripe)
+  subscription_end_date TIMESTAMP WITH TIME ZONE, -- ✅ fin de période (source de vérité affichage)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -25,6 +26,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_pro BOOLEAN DEFAULT FALSE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS plan TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_status TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS end_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMP WITH TIME ZONE;
 
 -- Contrainte pour valider les valeurs de plan (optionnelle)
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_plan_check;
