@@ -30,17 +30,15 @@ function SuccessContent() {
       while (!cancelled) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('stripe_subscription_id, subscription_status, subscription_end_date, end_date, plan')
+          .select('stripe_subscription_id, subscription_status, subscription_end_date, plan')
           .eq('id', session.user.id)
           .single();
 
-        const endDate = (profile as any)?.subscription_end_date || (profile as any)?.end_date;
         const statusStr = ((profile as any)?.subscription_status || '').toString();
         const ok =
           !!(profile as any)?.stripe_subscription_id &&
           (statusStr === 'active' || statusStr === 'trialing') &&
-          !!endDate &&
-          new Date(endDate).getTime() > Date.now() - 60 * 1000;
+          !!(profile as any)?.subscription_end_date;
 
         if (ok) {
           setStatus('ok');

@@ -166,7 +166,7 @@ export default function Dashboard() {
 
       setBillingPlan(profile?.plan ?? null);
       setBillingStatus(profile?.subscription_status ?? null);
-      setBillingEndDate(profile?.subscription_end_date ?? profile?.end_date ?? null);
+      setBillingEndDate(profile?.subscription_end_date ?? null);
       setBillingCustomerId(profile?.stripe_customer_id ?? null);
     } catch (e) {
       console.warn('⚠️ loadBillingInfo error', e);
@@ -401,7 +401,7 @@ export default function Dashboard() {
       // Vérification PRO : Stripe est la source de vérité (subscription réelle)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('stripe_subscription_id, subscription_status, subscription_end_date, end_date')
+        .select('stripe_subscription_id, subscription_status, subscription_end_date')
         .eq('id', user.id)
         .single();
 
@@ -410,11 +410,10 @@ export default function Dashboard() {
         return;
       }
 
-      const endDate = profile?.subscription_end_date || profile?.end_date;
       const status = (profile?.subscription_status || '').toString();
       const hasSub = !!profile?.stripe_subscription_id;
       const isActive = status === 'active' || status === 'trialing';
-      const endOk = !!endDate && new Date(endDate).getTime() > Date.now() - 60 * 1000;
+      const endOk = !!profile?.subscription_end_date && new Date(profile.subscription_end_date).getTime() > Date.now() - 60 * 1000;
 
       if (!(hasSub && isActive && endOk)) {
         window.location.href = '/pricing';

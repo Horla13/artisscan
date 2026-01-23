@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     // 2. Vérifier le statut PRO (serveur)
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('email, is_pro, plan, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end_date, end_date')
+      .select('email, is_pro, plan, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end_date')
       .eq('id', user.id)
       .single();
 
@@ -67,13 +67,12 @@ export async function POST(req: NextRequest) {
       console.error('❌ Erreur récupération profil:', profileError);
     }
 
-    const endDate = (profile as any)?.subscription_end_date || (profile as any)?.end_date;
     const statusStr = ((profile as any)?.subscription_status || '').toString();
     const isStripePro =
       !!profile?.stripe_subscription_id &&
       (statusStr === 'active' || statusStr === 'trialing') &&
-      !!endDate &&
-      new Date(endDate).getTime() > Date.now() - 60 * 1000;
+      !!(profile as any)?.subscription_end_date &&
+      new Date((profile as any).subscription_end_date).getTime() > Date.now() - 60 * 1000;
 
     if (!isStripePro) {
       console.warn('⛔ Upload refusé (non-PRO)', {
@@ -83,7 +82,7 @@ export async function POST(req: NextRequest) {
         stripe_customer_id: profile?.stripe_customer_id,
         stripe_subscription_id: profile?.stripe_subscription_id,
         subscription_status: (profile as any)?.subscription_status,
-        subscription_end_date: (profile as any)?.subscription_end_date || (profile as any)?.end_date,
+        subscription_end_date: (profile as any)?.subscription_end_date,
       });
       return NextResponse.json(
         { error: 'Abonnement requis', message: '⛔ Abonnement PRO requis', redirectTo: '/pricing' },

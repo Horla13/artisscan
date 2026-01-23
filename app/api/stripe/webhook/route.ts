@@ -219,8 +219,8 @@ export async function POST(req: NextRequest) {
           endDateIso,
         });
 
-        // Email "Abonnement activé" UNIQUEMENT après checkout.session.completed confirmé
-        if (active && !alreadyProSameSub) {
+        // Email "Abonnement activé" UNIQUEMENT après checkout.session.completed + endDate dispo
+        if (active && !!endDateIso && !alreadyProSameSub) {
           try {
             const res = await sendSubscriptionActivatedEmail({ supabaseUserId });
             console.log('✅ Email abonnement activé: envoyé', { supabaseUserId, res });
