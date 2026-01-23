@@ -91,6 +91,10 @@ export async function POST(req: NextRequest) {
       const plan = planFromPriceId(priceId) || ((subscription.metadata?.billingCycle as Plan | undefined) ?? null);
       const active = subscription.status === 'active' || subscription.status === 'trialing';
       const endDate = (subscription as any).current_period_end ? new Date((subscription as any).current_period_end * 1000).toISOString() : null;
+      const stripeCustomerId =
+        typeof (subscription as any).customer === 'string'
+          ? ((subscription as any).customer as string)
+          : ((subscription as any).customer?.id as string | undefined) || (session.customer?.toString() ?? null);
 
       await supabaseAdmin
         .from('profiles')
@@ -100,11 +104,12 @@ export async function POST(req: NextRequest) {
           subscription_status: subscription.status,
           subscription_end_date: endDate,
           stripe_subscription_id: subId,
+          stripe_customer_id: stripeCustomerId,
           updated_at: new Date().toISOString(),
         })
         .eq('id', supabaseUserId);
 
-      console.log('✅ Supabase updated PRO status', { supabaseUserId, plan, active, endDate, subId });
+      console.log('✅ Supabase updated PRO status', { supabaseUserId, plan, active, endDate, subId, stripeCustomerId });
 
       if (active && endDate) {
         try {
