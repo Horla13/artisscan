@@ -401,7 +401,7 @@ export default function Dashboard() {
       // Vérification PRO : Stripe est la source de vérité (subscription réelle)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('stripe_subscription_id, subscription_status, subscription_end_date')
+        .select('stripe_subscription_id, subscription_status')
         .eq('id', user.id)
         .single();
 
@@ -413,7 +413,7 @@ export default function Dashboard() {
       const status = (profile?.subscription_status || '').toString();
       const hasSub = !!profile?.stripe_subscription_id;
       const isActive = status === 'active' || status === 'trialing';
-      const endOk = !!profile?.subscription_end_date && new Date(profile.subscription_end_date).getTime() > Date.now() - 60 * 1000;
+      const endOk = true; // webhook minimal: pas de date gérée pour l'instant
 
       if (!(hasSub && isActive && endOk)) {
         window.location.href = '/pricing';

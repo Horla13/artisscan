@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('is_pro, plan, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end_date')
+      .select('is_pro, plan, stripe_customer_id, stripe_subscription_id, subscription_status')
       .eq('id', user.id)
       .single();
 
@@ -46,9 +46,7 @@ export async function POST(request: NextRequest) {
     const statusStr = ((profile as any)?.subscription_status || '').toString();
     const isStripePro =
       !!profile?.stripe_subscription_id &&
-      (statusStr === 'active' || statusStr === 'trialing') &&
-      !!(profile as any)?.subscription_end_date &&
-      new Date((profile as any).subscription_end_date).getTime() > Date.now() - 60 * 1000;
+      (statusStr === 'active' || statusStr === 'trialing');
 
     if (!isStripePro) {
       console.warn('⛔ /api/analyze: accès refusé (non-PRO)', {
@@ -57,7 +55,7 @@ export async function POST(request: NextRequest) {
         stripe_customer_id: profile?.stripe_customer_id,
         stripe_subscription_id: profile?.stripe_subscription_id,
         subscription_status: (profile as any)?.subscription_status,
-        subscription_end_date: (profile as any)?.subscription_end_date,
+        subscription_end_date: null,
       });
       return NextResponse.json(
         { error: 'Abonnement requis', redirectTo: '/pricing' },
