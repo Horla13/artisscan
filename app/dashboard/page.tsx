@@ -92,6 +92,8 @@ export default function Dashboard() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
+  // UX: si l’utilisateur lance un scan depuis un dossier, on pré-sélectionne ce dossier dans la modale de validation
+  const [preselectFolderId, setPreselectFolderId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState('');
   const [folderReference, setFolderReference] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
@@ -276,6 +278,25 @@ export default function Dashboard() {
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
         <div className="h-6 bg-slate-200 rounded w-24"></div>
         <div className="h-4 w-12 bg-slate-100 rounded"></div>
+      </div>
+    </div>
+  );
+
+  const FolderCardSkeleton = () => (
+    <div className="as-card p-6 animate-pulse">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="h-12 w-12 rounded-2xl bg-slate-100 border border-slate-200" />
+          <div className="min-w-0">
+            <div className="h-4 w-40 bg-slate-200 rounded" />
+            <div className="mt-2 h-3 w-28 bg-slate-100 rounded" />
+          </div>
+        </div>
+        <div className="h-6 w-16 bg-slate-100 rounded-full border border-slate-200" />
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className="h-10 bg-slate-100 rounded-2xl border border-slate-200" />
+        <div className="h-10 bg-slate-100 rounded-2xl border border-slate-200" />
       </div>
     </div>
   );
@@ -506,6 +527,14 @@ export default function Dashboard() {
     return matchMonth && matchCategory && matchSearch;
   });
 
+  const historiqueSummary = useMemo(() => {
+    const list = filteredInvoices || [];
+    const totalHT = list.reduce((sum, inv) => sum + (Number(inv.amount_ht) || 0), 0);
+    const totalTVA = list.reduce((sum, inv) => sum + (Number(inv.amount_tva) || 0), 0);
+    const totalTTC = list.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+    return { totalHT, totalTVA, totalTTC, count: list.length };
+  }, [filteredInvoices]);
+
   // Fonction helper pour parser n'importe quel montant en nombre (Bloc 2)
   const parseAmount = (val: any) => {
     if (typeof val === 'number') return val;
@@ -541,8 +570,9 @@ export default function Dashboard() {
   };
 
   // Formatage des montants pour affichage (Espace pour les milliers, signe € à la fin)
-  const formatDisplayAmount = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseAmount(amount) : amount;
+  const formatDisplayAmount = (amount?: number | string | null) => {
+    // Ultra défensif: certaines anciennes lignes peuvent avoir des montants manquants
+    const num = typeof amount === 'string' ? parseAmount(amount) : parseAmount(amount);
     return num.toLocaleString('fr-FR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
@@ -2455,7 +2485,9 @@ export default function Dashboard() {
         tva: data.tva || (data.total_amount && data.montant_ht 
           ? (parseFloat(data.total_amount) - parseFloat(data.montant_ht)).toFixed(2)
           : '0'),
-        montant_ttc: data.total_amount || data.montant_ttc
+        montant_ttc: data.total_amount || data.montant_ttc,
+        // Dossier pré-sélectionné (ex: scan lancé depuis la page Dossiers)
+        folder_id: data.folder_id ?? preselectFolderId ?? null,
       };
       
       devLog('📊 Données enrichies pour le formulaire:', enrichedData);
@@ -2464,6 +2496,7 @@ export default function Dashboard() {
       setPendingInvoiceOriginal(enrichedData);
       setPendingManuallyEdited(false);
       setShowValidationModal(true);
+      setPreselectFolderId(null);
 
     } catch (err: any) {
       console.error('Erreur:', err);
@@ -2647,6 +2680,11 @@ export default function Dashboard() {
     }
   };
   
+
+  const startScanIntoFolder = (folderId: string) => {
+    setPreselectFolderId(folderId);
+    triggerFileInput();
+  };
 
   const triggerFileInput = () => {
     // Menu de sélection : Appareil photo OU Téléverser fichier
@@ -3150,133 +3188,57 @@ export default function Dashboard() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
             {/* ✅ CONTENU NORMAL */}
-            <div className="fade-in space-y-4">
-              {/* Header avec action */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historique</h2>
-              <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => exportToCSV()}
-            disabled={invoices.length === 0 || isProUser === false}
-            className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Exporter en CSV"
-          >
-            <Download className="w-4 h-4" />
-            CSV
-          </button>
-          <button
-            onClick={exportToExcel}
-            disabled={invoices.length === 0 || isProUser === false}
-            className="as-btn as-btn-primary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Exporter en Excel"
-          >
-            <Download className="w-4 h-4" />
-            Excel
-          </button>
-          <button
-            onClick={generateGlobalPDF}
-            disabled={invoices.length === 0 || isProUser === false}
-            className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Générer PDF Global"
-          >
-            <FileDown className="w-4 h-4" />
-            PDF
-          </button>
-              </div>
-            </div>
-
-            {/* Barre de Recherche et Filtres (Bloc 3) */}
-            <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-              {/* Recherche */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  placeholder="Rechercher une facture (nom, description, catégorie...)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-base sm:text-sm"
-                />
-                {searchQuery && (
-                <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                    <X className="h-5 w-5 text-slate-400 hover:text-slate-600" />
-                </button>
-                )}
-              </div>
-              
-              {/* Filtres Dropdowns */}
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-medium transition-all"
+            <div className="fade-in">
+              <div className="grid grid-cols-12 gap-6">
+                {/* LISTE / HISTORIQUE */}
+                <div className="col-span-12 lg:col-span-8">
+                  <BentoCard
+                    title="Historique"
+                    subtitle="Vos documents, prêts à filtrer et exporter."
+                    icon={<Clock className="w-4 h-4" />}
+                    right={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => exportToCSV()}
+                          disabled={invoices.length === 0 || isProUser === false}
+                          className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Exporter en CSV"
+                        >
+                          <Download className="w-4 h-4" />
+                          CSV
+                        </button>
+                        <button
+                          onClick={exportToExcel}
+                          disabled={invoices.length === 0 || isProUser === false}
+                          className="as-btn as-btn-primary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Exporter en Excel"
+                        >
+                          <Download className="w-4 h-4" />
+                          Excel
+                        </button>
+                        <button
+                          onClick={generateGlobalPDF}
+                          disabled={invoices.length === 0 || isProUser === false}
+                          className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Générer PDF Global"
+                        >
+                          <FileDown className="w-4 h-4" />
+                          PDF
+                        </button>
+                      </div>
+                    }
                   >
-                    <option value="">Toutes les catégories</option>
-                    <option value="Matériaux">🧱 Matériaux</option>
-                    <option value="Carburant">⛽ Carburant</option>
-                    <option value="Restaurant">🍴 Restaurant</option>
-                    <option value="Outillage">🛠️ Outillage</option>
-                    <option value="Fournitures">📦 Fournitures</option>
-                    <option value="Location">🚚 Location</option>
-                    <option value="Sous-traitance">🤝 Sous-traitance</option>
-                    <option value="Autre">📝 Autre</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-              
-            {/* Filtres de tri */}
-            <div className="flex flex-wrap gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <select
-                  value={sortBy.startsWith('date') ? sortBy : ''}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className={`text-sm font-medium bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all ${
-                    sortBy.startsWith('date') ? 'text-orange-600 border-orange-200 ring-2 ring-orange-500/10' : 'text-slate-600'
-                  }`}
-                >
-                  <option value="" disabled>Trier par Date</option>
-                  <option value="date_facture">📅 Date de la facture</option>
-                  <option value="date_scan">🕒 Date de transmission</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-slate-400" />
-                <select
-                  value={sortBy.startsWith('amount') ? sortBy : ''}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className={`text-sm font-medium bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all ${
-                    sortBy.startsWith('amount') ? 'text-orange-600 border-orange-200 ring-2 ring-orange-500/10' : 'text-slate-600'
-                  }`}
-                >
-                  <option value="" disabled>Trier par Montant</option>
-                  <option value="amount_ht">📉 Montant HT</option>
-                  <option value="total_amount">📈 Montant TTC</option>
-                </select>
-              </div>
-
-                <button
-                onClick={() => setSortBy('categorie')}
-                className={`hidden md:block px-4 py-1.5 rounded-lg text-sm font-bold transition-all border ${
-                  sortBy === 'categorie' 
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200' 
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                📂 Par Catégorie
-                </button>
-              </div>
+                    {analyzing ? (
+                      <div className="mb-5 rounded-2xl border border-[var(--color-brand-100)] bg-[var(--color-brand-50)] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-black text-slate-900">Analyse en cours…</div>
+                            <div className="text-sm text-slate-600">{loadingMessage}</div>
+                          </div>
+                          <StatusBadge tone="processing" pulse size="md">En cours</StatusBadge>
+                        </div>
+                      </div>
+                    ) : null}
 
             {loadingInvoices ? (
               <div className="space-y-3">
@@ -3345,7 +3307,7 @@ export default function Dashboard() {
                       </div>
 
                       {g.invoices.map((invoice) => (
-                        <div key={invoice.id} className="card-clean rounded-2xl p-5 bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                        <div key={invoice.id} className="as-card as-card-hover p-6">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
@@ -3355,6 +3317,11 @@ export default function Dashboard() {
                                 )}
                                 {invoice.modified_manually === true && (
                                   <StatusBadge tone="warning">Modifiée</StatusBadge>
+                                )}
+                                {invoice.archived === true ? (
+                                  <StatusBadge tone="neutral">Archivé</StatusBadge>
+                                ) : (
+                                  <StatusBadge tone="success">Validé</StatusBadge>
                                 )}
                     </div>
                               <div className="flex flex-col gap-1">
@@ -3420,7 +3387,7 @@ export default function Dashboard() {
                                         exportInvoiceExcel(invoice);
                                         setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-3"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-[var(--primary)] transition-colors flex items-center gap-3"
                                     >
                                       <Download className="w-4 h-4" />
                                       Exporter en Excel
@@ -3432,7 +3399,7 @@ export default function Dashboard() {
                                         exportInvoiceCSV(invoice);
                                         setOpenMenuId(null);
                                       }}
-                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                      className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-[var(--primary)] transition-colors flex items-center gap-3"
                                     >
                                       <FileText className="w-4 h-4" />
                                       Exporter en CSV
@@ -3524,9 +3491,128 @@ export default function Dashboard() {
                     </div>
                   ));
                 })()}
+                    </div>
+                  )}
+                  </BentoCard>
+                </div>
+
+                {/* COLONNE DROITE: FILTRES + RÉSUMÉ */}
+                <div className="col-span-12 lg:col-span-4 space-y-6">
+                  <BentoCard title="Filtres" subtitle="Affinez en quelques clics." icon={<Receipt className="w-4 h-4" />}>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                          Recherche
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Fournisseur, description, catégorie…"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="as-input pr-10"
+                          />
+                          {searchQuery ? (
+                            <button
+                              onClick={() => setSearchQuery('')}
+                              className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-700 transition"
+                              aria-label="Effacer la recherche"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                          Catégorie
+                        </label>
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
+                          className="as-input"
+                        >
+                          <option value="">Toutes</option>
+                          <option value="Matériaux">🧱 Matériaux</option>
+                          <option value="Carburant">⛽ Carburant</option>
+                          <option value="Restaurant">🍴 Restaurant</option>
+                          <option value="Outillage">🛠️ Outillage</option>
+                          <option value="Fournitures">📦 Fournitures</option>
+                          <option value="Location">🚚 Location</option>
+                          <option value="Sous-traitance">🤝 Sous-traitance</option>
+                          <option value="Autre">📝 Autre</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                          Tri
+                        </label>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value as any)}
+                          className="as-input"
+                        >
+                          <option value="date_facture">📅 Date facture</option>
+                          <option value="date_scan">🕒 Date transmission</option>
+                          <option value="total_amount">💶 Montant TTC</option>
+                          <option value="amount_ht">📄 Montant HT</option>
+                          <option value="categorie">🏷️ Catégorie</option>
+                        </select>
+                      </div>
+
+                      <div className="pt-2 flex flex-wrap gap-2">
+                        {selectedMonths.length > 0 ? (
+                          <StatusBadge tone="brand" size="md">{selectedMonths.length} mois sélectionné(s)</StatusBadge>
+                        ) : (
+                          <StatusBadge tone="neutral" size="md">Tous les mois</StatusBadge>
+                        )}
+                        {(searchQuery || categoryFilter || selectedMonths.length > 0) ? (
+                          <button
+                            onClick={() => {
+                              setSearchQuery('');
+                              setCategoryFilter('');
+                              setSelectedMonths([]);
+                            }}
+                            className="as-btn as-btn-secondary px-4 py-2 text-xs"
+                          >
+                            Réinitialiser
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </BentoCard>
+
+                  <BentoCard title="Résumé" subtitle="Sur la sélection actuelle." icon={<TrendingUp className="w-4 h-4" />}>
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Total TTC</div>
+                      <div className="mt-2 text-4xl font-black text-slate-900 tabular-nums">
+                        {historiqueSummary.totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </div>
+                      <div className="mt-5 grid grid-cols-3 gap-3">
+                        <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Docs</div>
+                          <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{historiqueSummary.count}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">HT</div>
+                          <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">
+                            {historiqueSummary.totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">TVA</div>
+                          <div className="mt-1 text-xl font-black text-[var(--primary)] tabular-nums">
+                            {historiqueSummary.totalTVA.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </BentoCard>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
           </motion.div>
         )}
 
@@ -3543,53 +3629,131 @@ export default function Dashboard() {
             <div className="fade-in">
               {!selectedFolder ? (
                 <>
-                  {/* Header avec bouton création */}
-                  <div className="flex items-center justify-between mb-8">
-                    <div>
-                      <h2 className="text-3xl font-black text-slate-900 tracking-tight">Mes Dossiers</h2>
+                  {/* ✅ Layout premium: bento header + dropzone visuel */}
+                  <div className="grid grid-cols-12 gap-6 mb-8">
+                    <div className="col-span-12 lg:col-span-8">
+                      <BentoCard
+                        title="Dossiers"
+                        subtitle="Organisez vos factures par chantier, client ou période. Importez en 1 clic."
+                        icon={<FolderKanban className="w-4 h-4" />}
+                        right={
+                          <button onClick={() => setShowFolderModal(true)} className="as-btn as-btn-primary px-4 py-2 text-xs">
+                            <Plus className="w-4 h-4" />
+                            Créer
+                          </button>
+                        }
+                      >
+                        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="text-sm font-black text-slate-900">Glissez-déposez un PDF ou une photo</div>
+                              <div className="mt-1 text-sm text-slate-600">
+                                Ou importez depuis votre téléphone/ordinateur. (Aperçu + analyse IA)
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (isProUser === false) {
+                                  showToastMessage('🔒 Import Pro — Passez à Pro pour numériser', 'error');
+                                  window.location.href = '/pricing';
+                                  return;
+                                }
+                                setPreselectFolderId(null);
+                                triggerFileInput();
+                              }}
+                              className="as-btn as-btn-primary px-5 py-3 text-sm"
+                            >
+                              <ScanLine className="w-4 h-4" />
+                              Importer
+                            </button>
+                          </div>
+                        </div>
+                      </BentoCard>
                     </div>
-                    <button
-                      onClick={() => setShowFolderModal(true)}
-                      className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95 shadow-md"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Créer un dossier
-                    </button>
+                    <div className="col-span-12 lg:col-span-4">
+                      <BentoCard title="Raccourcis" subtitle="Accès rapide aux actions clés." icon={<Zap className="w-4 h-4" />}>
+                        {isProUser === false ? (
+                          <Link href="/pricing" className="as-btn as-btn-primary w-full text-center">
+                            <Crown className="w-4 h-4" />
+                            Passer à Pro
+                          </Link>
+                        ) : (
+                          <StatusBadge tone="success" size="md">Pro actif</StatusBadge>
+                        )}
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <button onClick={() => setShowFolderModal(true)} className="as-btn as-btn-secondary w-full px-4 py-3 text-xs">
+                            <Plus className="w-4 h-4" />
+                            Nouveau dossier
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (isProUser === false) {
+                                showToastMessage('🔒 Import Pro — Passez à Pro pour numériser', 'error');
+                                window.location.href = '/pricing';
+                                return;
+                              }
+                              setPreselectFolderId(null);
+                              triggerFileInput();
+                            }}
+                            className="as-btn as-btn-secondary w-full px-4 py-3 text-xs"
+                          >
+                            <ScanLine className="w-4 h-4" />
+                            Importer
+                          </button>
+                        </div>
+                      </BentoCard>
+                    </div>
                   </div>
 
                 {/* Liste des dossiers */}
                 {loadingFolders ? (
-                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
-                    <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
-                    <h3 className="text-lg font-bold text-slate-900 mb-2">Chargement des dossiers...</h3>
-                    <p className="text-slate-500">Veuillez patienter</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <FolderCardSkeleton />
+                    <FolderCardSkeleton />
+                    <FolderCardSkeleton />
+                    <FolderCardSkeleton />
+                    <FolderCardSkeleton />
+                    <FolderCardSkeleton />
                   </div>
                 ) : folders.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
-                    <Folder className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-bold text-slate-900 mb-2">Aucun dossier</h3>
-                    <p className="text-slate-500 mb-6">Créez votre premier dossier pour organiser vos factures</p>
-                    <button
-                      onClick={() => setShowFolderModal(true)}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all active:scale-95"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Créer un dossier
-                    </button>
-                  </div>
+                  <EmptyState
+                    title="Créez votre premier dossier"
+                    description="Organisez vos factures par chantier ou client. Vous gardez le contrôle."
+                    icon={<Folder className="w-8 h-8 text-slate-300" />}
+                    illustration={
+                      <svg viewBox="0 0 800 400" className="w-full h-full">
+                        <defs>
+                          <linearGradient id="asFolderGrad" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+                        <circle cx="640" cy="130" r="140" fill="url(#asFolderGrad)" />
+                        <circle cx="140" cy="290" r="160" fill="url(#asFolderGrad)" />
+                        <path d="M210 150h160l30 34h190a24 24 0 0 1 24 24v120a24 24 0 0 1-24 24H210a24 24 0 0 1-24-24V174a24 24 0 0 1 24-24Z" fill="rgba(15,23,42,0.06)" />
+                        <path d="M250 235h300M250 270h230" stroke="rgba(15,23,42,0.18)" strokeWidth="10" strokeLinecap="round" />
+                      </svg>
+                    }
+                    action={
+                      <button onClick={() => setShowFolderModal(true)} className="as-btn as-btn-primary">
+                        <Plus className="w-4 h-4" />
+                        Créer un dossier
+                      </button>
+                    }
+                  />
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {folders.map(folder => (
                       <div
                         key={folder.id}
-                        className="bg-white rounded-2xl border-2 border-slate-200 p-6 hover:border-orange-400 hover:shadow-xl transition-all group relative"
+                        className="as-card as-card-hover p-6 group relative"
                       >
-                        <div onClick={() => setSelectedFolder(folder)} className="flex items-start gap-4 mb-4 cursor-pointer">
-                          <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                            <Folder className="w-7 h-7 text-white" />
+                        <div onClick={() => setSelectedFolder(folder)} className="flex items-start gap-4 mb-5 cursor-pointer">
+                          <div className="w-12 h-12 bg-[var(--color-brand-50)] rounded-2xl flex items-center justify-center border border-[var(--color-brand-100)]">
+                            <Folder className="w-6 h-6 text-[var(--primary)]" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-black text-slate-900 truncate group-hover:text-orange-600 transition-colors">
+                            <h3 className="text-lg font-black text-slate-900 truncate group-hover:text-[var(--primary)] transition-colors">
                               {folder.name}
             </h3>
                             {folder.reference && (
@@ -3597,6 +3761,37 @@ export default function Dashboard() {
                                 Réf: {folder.reference}
                               </p>
                             )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                          <StatusBadge tone="neutral" size="md">
+                            {invoices.filter((inv) => inv.folder_id === folder.id && inv.archived !== true).length} docs
+                          </StatusBadge>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedFolder(folder);
+                              }}
+                              className="as-btn as-btn-secondary px-3 py-2 text-xs"
+                            >
+                              Voir
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isProUser === false) {
+                                  showToastMessage('🔒 Import Pro — Passez à Pro pour numériser', 'error');
+                                  window.location.href = '/pricing';
+                                  return;
+                                }
+                                startScanIntoFolder(folder.id);
+                              }}
+                              className="as-btn as-btn-primary px-3 py-2 text-xs"
+                            >
+                              Importer
+                            </button>
                           </div>
                         </div>
                         
@@ -3656,7 +3851,7 @@ export default function Dashboard() {
                                     exportFolderExcel(folder);
                                     setOpenMenuId(null);
                                   }}
-                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-3"
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-[var(--primary)] transition-colors flex items-center gap-3"
                                 >
                                   <Download className="w-4 h-4" />
                                   Exporter en Excel
@@ -3669,7 +3864,7 @@ export default function Dashboard() {
                                     exportFolderCSV(folder);
                                     setOpenMenuId(null);
                                   }}
-                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                  className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-[var(--primary)] transition-colors flex items-center gap-3"
                                 >
                                   <FileText className="w-4 h-4" />
                                   Exporter en CSV
@@ -3903,7 +4098,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="max-w-4xl mx-auto"
+            className="max-w-6xl mx-auto"
           >
             {/* Header */}
             <div className="mb-8">
@@ -3911,8 +4106,15 @@ export default function Dashboard() {
               <p className="text-slate-500 mt-2">Gérez votre profil et vos préférences</p>
             </div>
 
+            <div className="grid grid-cols-12 gap-6">
+              <div className="col-span-12 lg:col-span-7 space-y-6">
+
             {/* Avatar/Logo Section */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
+            <BentoCard
+              title="Profil"
+              subtitle="Votre identité — utilisée dans vos exports."
+              icon={<Camera className="w-4 h-4" />}
+            >
               <div className="flex items-center gap-6">
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full border-4 border-slate-100 overflow-hidden bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center group">
@@ -3964,14 +4166,14 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-            </div>
+            </BentoCard>
 
             {/* Informations Personnelles */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <LayoutDashboard className="w-5 h-5 text-orange-500" />
-                Informations Personnelles
-            </h3>
+            <BentoCard
+              title="Informations"
+              subtitle="Renseignez vos informations (stockées localement)."
+              icon={<LayoutDashboard className="w-4 h-4" />}
+            >
               
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4051,14 +4253,17 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-            </div>
+            </BentoCard>
+
+              </div>
+              <div className="col-span-12 lg:col-span-5 space-y-6">
 
             {/* Sécurité */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-orange-500" />
-                Sécurité
-              </h3>
+            <BentoCard
+              title="Sécurité"
+              subtitle="Accès au compte et actions sensibles."
+              icon={<Settings className="w-4 h-4" />}
+            >
               
               <div className="space-y-6">
                 <div>
@@ -4103,16 +4308,16 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-            </div>
+            </BentoCard>
 
             {/* Abonnement */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <Crown className="w-5 h-5 text-[var(--primary)]" />
-                Mon Plan
-              </h3>
-
-              <div className="as-card p-5 bg-gradient-to-br from-white to-[var(--color-brand-50)] border-2 border-[var(--color-brand-100)]">
+            <BentoCard
+              title="Mon Plan"
+              subtitle="Abonnement & facturation via Stripe."
+              icon={<Crown className="w-4 h-4" />}
+              className="bg-gradient-to-br from-white to-[var(--color-brand-50)] border-2 border-[var(--color-brand-100)]"
+            >
+              <div className="rounded-3xl border border-slate-200 bg-white/60 p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <div className="text-xs font-black uppercase tracking-widest text-slate-500">Plan actuel</div>
@@ -4156,14 +4361,10 @@ export default function Dashboard() {
                   </p>
                 )}
               </div>
-            </div>
+            </BentoCard>
 
             {/* Exports */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 mb-4">Exports de données</h3>
-              <p className="text-sm text-slate-500 mb-6">
-                Exportez vos factures aux formats professionnels
-              </p>
+            <BentoCard title="Exports" subtitle="Formats professionnels (Pro)." icon={<FileText className="w-4 h-4" />}>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
@@ -4184,6 +4385,9 @@ export default function Dashboard() {
                   Exporter en Excel
                 </button>
             </div>
+            </BentoCard>
+
+              </div>
             </div>
           </motion.div>
         )}

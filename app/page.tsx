@@ -8,6 +8,10 @@ import { SiteFooter } from '@/app/components/SiteFooter';
 
 export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const monthlyPrice = 14.9;
+  const yearlyPrice = 149;
+  const annualSaving = (monthlyPrice * 12) - yearlyPrice;
 
   useEffect(() => {
     // Vérifier la session initiale
@@ -310,129 +314,96 @@ export default function Home() {
             Choisissez la formule qui vous convient. Sans engagement, résiliable à tout moment.
           </p>
         </div>
-        
-        {/* Deux cartes harmonisées */}
-        <div className="flex flex-col md:flex-row gap-6 max-w-5xl mx-auto">
-          {/* Carte Mensuelle */}
-          <div className="flex-1 as-card as-card-hover p-8 md:p-10 border-2 border-slate-200 relative flex flex-col">
+
+        {/* ✅ Toggle mensuel / annuel (cohérence premium avec l’app) */}
+        <div className="mt-8 flex items-center justify-center">
+          <div className="inline-flex rounded-[var(--radius-control)] bg-slate-100 p-1 shadow-inner">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={[
+                'px-5 py-2 text-sm font-black rounded-[var(--radius-control)] transition-all',
+                billingCycle === 'monthly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              Mensuel
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={[
+                'px-5 py-2 text-sm font-black rounded-[var(--radius-control)] transition-all',
+                billingCycle === 'yearly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              Annuel <span className="ml-2 text-[var(--primary)] font-black">(-{Math.round(annualSaving)}€)</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-10 grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {/* Mensuel */}
+          <div className={[
+            'as-card as-card-hover p-8 md:p-10 border-2 flex flex-col',
+            billingCycle === 'monthly' ? 'border-[var(--primary)] bg-gradient-to-br from-[var(--color-brand-50)] to-white' : 'border-slate-200 bg-white',
+          ].join(' ')}>
             <div className="text-center mb-8">
-              <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Mensuelle</h4>
-              <p className="text-slate-500 font-medium text-sm h-5">Souplesse maximale</p>
+              <h4 className="text-2xl font-black text-slate-900 mb-2">Mensuel</h4>
+              <p className="text-slate-500 font-medium text-sm">Souplesse maximale</p>
             </div>
-            
             <div className="text-center mb-8">
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-black text-slate-900">14,90€</span>
+                <span className="text-5xl font-black text-slate-900">{monthlyPrice.toFixed(2).replace('.', ',')}€</span>
                 <span className="text-slate-500 font-bold">/mois</span>
               </div>
-              <div className="h-5 mt-2"></div> {/* Espace pour alignement avec l'autre carte */}
             </div>
-
             <ul className="space-y-4 mb-8 flex-grow">
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-orange-600" />
-                </div>
-                <span className="text-slate-700 font-medium text-sm">Scans illimités (IA)</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-orange-600" />
-                </div>
-                <span className="text-slate-700 font-medium text-sm">Export PDF / Excel / CSV</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-orange-600" />
-                </div>
-                <span className="text-slate-700 font-medium text-sm">Calcul TVA automatique</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-orange-600" />
-                </div>
-                <span className="text-slate-700 font-medium text-sm">Support 7j/7</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-orange-600" />
-                </div>
-                <span className="text-slate-700 font-medium text-sm">Sans engagement</span>
-              </li>
+              {['Scans illimités (IA)', 'Export PDF / Excel / CSV', 'Calcul TVA automatique', 'Support 7j/7', 'Sans engagement'].map((t) => (
+                <li key={t} className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-[var(--color-brand-50)] rounded-full flex items-center justify-center flex-shrink-0">
+                    <Check className="w-3.5 h-3.5 text-[var(--primary)]" />
+                  </div>
+                  <span className="text-slate-700 font-medium text-sm">{t}</span>
+                </li>
+              ))}
             </ul>
-
-            <div className="mt-auto">
-              <button
-                onClick={() => startSignup('monthly')}
-                className="as-btn as-btn-primary w-full"
-              >
-                Commencer l'essai de 14 jours
-              </button>
-            </div>
+            <button onClick={() => startSignup('monthly')} className="as-btn as-btn-primary w-full">
+              Commencer l&apos;essai de 14 jours
+            </button>
           </div>
 
-          {/* Carte Annuelle (Recommandée) */}
-          <div className="flex-1 as-card as-card-hover p-8 md:p-10 border-2 border-[var(--primary)] relative flex flex-col overflow-visible bg-gradient-to-br from-[var(--color-brand-50)] to-white">
+          {/* Annuel */}
+          <div className={[
+            'as-card as-card-hover p-8 md:p-10 border-2 flex flex-col relative overflow-visible',
+            billingCycle === 'yearly' ? 'border-[var(--primary)] bg-gradient-to-br from-[var(--color-brand-50)] to-white' : 'border-slate-200 bg-white',
+          ].join(' ')}>
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap">
-              <span className="bg-green-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 sm:px-4 sm:py-1 rounded-full shadow-lg">
-                -25% ou 2 mois gratuits
+              <span className="bg-[var(--primary)] text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-lg">
+                Meilleure offre • -{Math.round(annualSaving)}€
               </span>
             </div>
-
             <div className="text-center mb-8">
-              <h4 className="text-2xl font-black text-slate-900 mb-2">Formule Annuelle</h4>
-              <p className="text-orange-600 font-bold text-sm h-5">La plus avantageuse ⭐</p>
+              <h4 className="text-2xl font-black text-slate-900 mb-2">Annuel</h4>
+              <p className="text-[var(--primary)] font-bold text-sm">Le plus avantageux</p>
             </div>
-            
             <div className="text-center mb-8">
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-black text-orange-600">149€</span>
+                <span className="text-5xl font-black text-[var(--primary)]">{yearlyPrice}€</span>
                 <span className="text-slate-600 font-bold">/an</span>
               </div>
-              <p className="text-xs text-slate-500 font-bold mt-2 h-5">facturé 149€ / an</p>
+              <p className="text-xs text-slate-500 font-bold mt-2">facturé {yearlyPrice}€ / an</p>
             </div>
-
             <ul className="space-y-4 mb-8 flex-grow">
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="text-slate-900 font-bold text-sm">Scans illimités (IA)</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="text-slate-900 font-bold text-sm">Export PDF / Excel / CSV</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="text-slate-900 font-bold text-sm">Calcul TVA automatique</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="text-slate-900 font-bold text-sm">Support prioritaire 7j/7</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="text-slate-900 font-bold text-sm">Économie de 60€ / an</span>
-              </li>
+              {['Scans illimités (IA)', 'Export PDF / Excel / CSV', 'Calcul TVA automatique', 'Support prioritaire 7j/7', `Économie de ~${Math.round(annualSaving)}€ / an`].map((t) => (
+                <li key={t} className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-[var(--primary)] rounded-full flex items-center justify-center flex-shrink-0">
+                    <Check className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="text-slate-900 font-bold text-sm">{t}</span>
+                </li>
+              ))}
             </ul>
-
-            <div className="mt-auto">
-              <button
-                onClick={() => startSignup('yearly')}
-                className="as-btn as-btn-primary w-full"
-              >
-                Commencer l'essai de 14 jours
-              </button>
-            </div>
+            <button onClick={() => startSignup('yearly')} className="as-btn as-btn-primary w-full">
+              Commencer l&apos;essai de 14 jours
+            </button>
           </div>
         </div>
 
@@ -443,15 +414,15 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500">
             <span className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
               Résiliation à tout moment
             </span>
             <span className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
               Paiement sécurisé
             </span>
             <span className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
               Facture automatique chaque mois
             </span>
           </div>
