@@ -3224,6 +3224,20 @@ export default function Dashboard() {
                 title="Aucun résultat"
                 description="Modifiez vos filtres ou votre recherche pour trouver ce que vous cherchez."
                 icon={<X className="w-8 h-8 text-slate-300" />}
+                illustration={
+                  <svg viewBox="0 0 800 400" className="w-full h-full">
+                    <defs>
+                      <linearGradient id="asEmptyGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="640" cy="120" r="120" fill="url(#asEmptyGrad)" />
+                    <circle cx="140" cy="280" r="140" fill="url(#asEmptyGrad)" />
+                    <path d="M260 120h280a18 18 0 0 1 18 18v190a18 18 0 0 1-18 18H260a18 18 0 0 1-18-18V138a18 18 0 0 1 18-18Z" fill="rgba(15,23,42,0.06)" />
+                    <path d="M290 170h220M290 205h180M290 240h200" stroke="rgba(15,23,42,0.18)" strokeWidth="10" strokeLinecap="round" />
+                  </svg>
+                }
                 action={
                   <button
                     onClick={() => {
@@ -4028,55 +4042,54 @@ export default function Dashboard() {
             {/* Abonnement */}
             <div className="bg-white rounded-2xl border border-slate-200 p-8 mb-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <Crown className="w-5 h-5 text-orange-500" />
-                Abonnement
+                <Crown className="w-5 h-5 text-[var(--primary)]" />
+                Mon Plan
               </h3>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Plan</p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {billingLoading ? 'Chargement…' : billingPlan === 'monthly' ? 'Pro (Mensuel)' : billingPlan === 'yearly' ? 'Pro (Annuel)' : 'Free'}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Statut</p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {billingLoading ? 'Chargement…' : (billingStatus || (billingPlan ? 'active' : 'free'))}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Accès</p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {billingLoading ? 'Chargement…' : (billingPlan ? 'Pro' : 'Free')}
-                    </p>
-                  </div>
-                </div>
+              <div className="as-card p-5 bg-gradient-to-br from-white to-[var(--color-brand-50)] border-2 border-[var(--color-brand-100)]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-widest text-slate-500">Plan actuel</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {billingLoading ? (
+                        <StatusBadge tone="neutral" size="md">Chargement…</StatusBadge>
+                      ) : billingPlan ? (
+                        <StatusBadge tone="brand" size="md">{billingPlan === 'yearly' ? 'Pro Annuel' : 'Pro Mensuel'}</StatusBadge>
+                      ) : (
+                        <StatusBadge tone="neutral" size="md">Free</StatusBadge>
+                      )}
 
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button
-                    onClick={startCustomerPortal}
-                    disabled={billingLoading || !billingCustomerId}
-                    className="flex-1 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    Gérer mon abonnement
-                  </button>
-                  <button
-                    onClick={startCustomerPortal}
-                    disabled={billingLoading || !billingCustomerId}
-                    className="flex-1 px-6 py-3 bg-white border-2 border-orange-500 text-orange-600 hover:bg-orange-50 font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    Résilier mon abonnement
-                  </button>
+                      {billingLoading ? null : billingPlan ? (
+                        <StatusBadge tone="success" size="md">Actif</StatusBadge>
+                      ) : (
+                        <StatusBadge tone="neutral" size="md">Limité</StatusBadge>
+                      )}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-600">
+                      Gestion sécurisée via Stripe Customer Portal.
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={startCustomerPortal}
+                      disabled={billingLoading || !billingCustomerId}
+                      className="as-btn as-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Gérer via Stripe
+                    </button>
+                    <Link href="/pricing" className="as-btn as-btn-secondary text-center">
+                      Voir les tarifs
+                    </Link>
+                  </div>
                 </div>
 
                 {!billingCustomerId && !billingLoading && (
-                  <p className="text-xs text-slate-500">
-                    Aucun abonnement Stripe détecté. Pour activer Pro, rendez-vous sur <Link className="font-bold hover:text-orange-600" href="/pricing">/pricing</Link>.
+                  <p className="mt-3 text-xs text-slate-500">
+                    Aucun abonnement Stripe détecté sur ce compte.
                   </p>
-            )}
-          </div>
+                )}
+              </div>
             </div>
 
             {/* Exports */}
@@ -4089,12 +4102,8 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   onClick={() => exportToCSV()}
-                  disabled={invoices.length === 0}
-                  className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl transition-all font-medium ${
-                    invoices.length === 0
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                      : 'bg-white border-2 border-slate-200 hover:border-orange-500 text-slate-700'
-                  }`}
+                  disabled={invoices.length === 0 || isProUser === false}
+                  className="as-btn as-btn-secondary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <FileText className="w-5 h-5" />
                   Exporter en CSV
@@ -4102,12 +4111,8 @@ export default function Dashboard() {
                 
                 <button
                   onClick={exportToExcel}
-                  disabled={invoices.length === 0}
-                  className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl transition-all font-medium ${
-                    invoices.length === 0
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}
+                  disabled={invoices.length === 0 || isProUser === false}
+                  className="as-btn as-btn-primary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Download className="w-5 h-5" />
                   Exporter en Excel
@@ -4775,7 +4780,7 @@ export default function Dashboard() {
 
       {/* Toast de confirmation */}
       {showToast && (
-        <div className={`toast ${toastType === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      <div className={`toast ${toastType === 'error' ? 'bg-red-500' : 'bg-[var(--primary)]'}`}>
           {toastMessage}
         </div>
       )}

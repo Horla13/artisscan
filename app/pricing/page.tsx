@@ -6,6 +6,7 @@ import { Check, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { SiteFooter } from '@/app/components/SiteFooter';
 import { SiteHeader } from '@/app/components/SiteHeader';
+import { StatusBadge } from '@/app/components/ui/StatusBadge';
 
 type BillingCycle = 'monthly' | 'yearly';
 
@@ -14,6 +15,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState<null | BillingCycle>(null);
   const [error, setError] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [selectedCycle, setSelectedCycle] = useState<BillingCycle>('monthly');
 
   useEffect(() => {
     const run = async () => {
@@ -79,9 +81,54 @@ export default function PricingPage() {
               Sans engagement
             </span>
             <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2">
-              <ShieldCheck className="w-4 h-4 text-green-600" />
+              <ShieldCheck className="w-4 h-4 text-[var(--primary)]" />
               Paiement Stripe
             </span>
+          </div>
+
+          {/* Toggle Mensuel / Annuel */}
+          <div className="mt-8 flex items-center justify-center">
+            <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSelectedCycle('monthly')}
+                className={`px-4 py-2 rounded-xl text-sm font-black transition ${
+                  selectedCycle === 'monthly' ? 'bg-[var(--primary)] text-white' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+                aria-pressed={selectedCycle === 'monthly'}
+              >
+                Mensuel
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCycle('yearly')}
+                className={`px-4 py-2 rounded-xl text-sm font-black transition ${
+                  selectedCycle === 'yearly' ? 'bg-[var(--primary)] text-white' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+                aria-pressed={selectedCycle === 'yearly'}
+              >
+                Annuel
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-center">
+            <StatusBadge tone="brand" size="md">
+              Économie annuelle ~29,80€ (≈ 2 mois offerts)
+            </StatusBadge>
+          </div>
+
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              onClick={() => startCheckout(selectedCycle)}
+              disabled={loading !== null}
+              className="as-btn as-btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Redirection…' : selectedCycle === 'monthly' ? 'Commencer (Mensuel)' : 'Commencer (Annuel)'}
+            </button>
+            <a href="#details" className="as-btn as-btn-secondary text-center">
+              Détails
+            </a>
           </div>
         </div>
 
@@ -91,8 +138,8 @@ export default function PricingPage() {
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          <div className="as-card p-8 md:p-10 border-2 border-slate-200">
+        <div id="details" className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          <div className={`as-card p-8 md:p-10 border-2 transition ${selectedCycle === 'monthly' ? 'border-[var(--primary)]' : 'border-slate-200'}`}>
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 mb-2">Mensuel</h2>
               <p className="text-slate-500 font-medium text-sm">Souplesse maximale</p>
@@ -116,17 +163,13 @@ export default function PricingPage() {
               ))}
             </ul>
 
-            <button
-              onClick={() => startCheckout('monthly')}
-              disabled={loading !== null}
-              className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-            >
+            <button onClick={() => startCheckout('monthly')} disabled={loading !== null} className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed">
               {loading === 'monthly' ? 'Redirection…' : 'Démarrer Pro (Mensuel)'}
             </button>
             <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit 14 jours inclus.</p>
           </div>
 
-          <div className="as-card p-8 md:p-10 border-2 border-[var(--primary)] bg-gradient-to-br from-[var(--color-brand-50)] to-white">
+          <div className={`as-card p-8 md:p-10 border-2 bg-gradient-to-br from-[var(--color-brand-50)] to-white transition ${selectedCycle === 'yearly' ? 'border-[var(--primary)]' : 'border-slate-200'}`}>
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 mb-2">Annuel</h2>
               <p className="text-orange-600 font-bold text-sm">Meilleure offre</p>
@@ -150,11 +193,7 @@ export default function PricingPage() {
               ))}
             </ul>
 
-            <button
-              onClick={() => startCheckout('yearly')}
-              disabled={loading !== null}
-              className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-            >
+            <button onClick={() => startCheckout('yearly')} disabled={loading !== null} className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed">
               {loading === 'yearly' ? 'Redirection…' : 'Démarrer Pro (Annuel)'}
             </button>
             <p className="text-xs text-center text-slate-500 mt-3 font-medium">Essai gratuit 14 jours inclus.</p>
