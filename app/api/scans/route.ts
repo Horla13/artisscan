@@ -91,7 +91,6 @@ export async function POST(req: NextRequest) {
         categorie: (invoiceData.categorie || 'Autre').toString(),
         date_facture: invoiceData.date_facture || invoiceData.date || new Date().toISOString().slice(0, 10),
         folder_id: invoiceData.folder_id ?? null,
-        modified_manually: invoiceData.modified_manually === true,
         created_at: new Date().toISOString(),
       }])
       .select()

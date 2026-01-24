@@ -90,7 +90,7 @@ function generatePivotCSV(invoices: any[]): string {
     // Numéro facture: non stocké en V1 (si dispo)
     const numeroFacture = inv?.numero_facture || inv?.invoice_number || '';
 
-    const modifie = inv?.modified_manually === true ? 'oui' : 'non';
+    const modifie = '—'; // V1: colonne DB absente, ne pas dépendre de modified_manually
 
     return [
       dateFacture,

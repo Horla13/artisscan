@@ -24,7 +24,6 @@ interface Invoice {
   created_at: string;
   folder_id?: string;
   archived?: boolean;
-  modified_manually?: boolean;
   updated_at?: string;
 }
 
@@ -665,7 +664,6 @@ export default function Dashboard() {
             amount_tva: tva,
             date_facture: dateFacture,
             categorie: normalizeCategory(inv.categorie || ''),
-            modified_manually: inv.modified_manually === true,
           } as Invoice;
         });
 
@@ -1093,7 +1091,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(categorie),
         dateAjout,
-          inv.modified_manually ? 'oui' : 'non',
+        '—',
       ];
     });
     const csvContent = "\uFEFF" + [
@@ -1567,7 +1565,7 @@ export default function Dashboard() {
       formatDecimalFR(ttc),
       escapeCSV(invoice.categorie || 'Non classé'),
       formatDateFR(invoice.created_at),
-      invoice.modified_manually ? 'oui' : 'non',
+      '—',
     ];
 
     const csvContent = "\uFEFF" + [headers.join(';'), row.join(';')].join('\n');
@@ -1820,7 +1818,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(inv.categorie || 'Non classé'),
         formatDateFR(inv.created_at),
-        inv.modified_manually ? 'oui' : 'non',
+        '—',
       ];
     });
 
@@ -2562,7 +2560,6 @@ export default function Dashboard() {
           categorie: finalCategory || 'Non classé',
           date_facture: dateFacture,
           folder_id: pendingInvoiceData.folder_id || null,
-          modified_manually: pendingManuallyEdited,
         },
       };
 
