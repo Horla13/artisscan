@@ -142,24 +142,53 @@ export async function POST(req: NextRequest) {
       amount_tva,
       total_amount,
       modified_manually,
-      created_at: new Date().toISOString(),
     };
+    const insertRow: any = { ...baseRow, created_at: new Date().toISOString() };
 
-    // Bonus: source="scan" si la colonne existe (sinon retry sans casser)
-    const rowWithSource = { ...baseRow, source: 'scan' };
+    // Upsert best-effort:
+    // - si `invoiceData.id` est fourni => UPDATE (brouillon -> final)
+    // - sinon => INSERT
+    const scanId = typeof (invoiceData as any)?.id === 'string' ? ((invoiceData as any).id as string) : null;
+
+    // Bonus: source="scan" si la colonne existe (sinon fallback)
+    const rowWithSource = { ...baseRow, source: (invoiceData as any)?.source || 'scan' };
+    const insertRowWithSource = { ...insertRow, source: (invoiceData as any)?.source || 'scan' };
 
     let invoice: any = null;
     let insertError: any = null;
+
     const tryInsert = async (row: any) => {
       const { data, error } = await supabaseAdmin.from('scans').insert([row]).select().single();
       return { data, error };
     };
+    const tryUpdate = async (row: any) => {
+      const { data, error } = await supabaseAdmin
+        .from('scans')
+        .update(row)
+        .eq('id', scanId as string)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      return { data, error };
+    };
 
-    let attempt = await tryInsert(rowWithSource);
-    const msg = String(attempt.error?.message || '');
-    if (attempt.error && (msg.includes("Could not find the 'source' column") || msg.includes('schema cache'))) {
-      attempt = await tryInsert(baseRow);
+    let attempt: { data: any; error: any };
+    if (scanId) {
+      // UPDATE (brouillon existant)
+      attempt = await tryUpdate(rowWithSource);
+      const msg = String(attempt.error?.message || '');
+      if (attempt.error && (msg.includes("Could not find the 'source' column") || msg.includes('schema cache'))) {
+        attempt = await tryUpdate(baseRow);
+      }
+    } else {
+      // INSERT
+      attempt = await tryInsert(insertRowWithSource);
+      const msg = String(attempt.error?.message || '');
+      if (attempt.error && (msg.includes("Could not find the 'source' column") || msg.includes('schema cache'))) {
+        attempt = await tryInsert(insertRow);
+      }
     }
+
     invoice = attempt.data;
     insertError = attempt.error;
 
@@ -171,7 +200,7 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    console.log('✅ Facture enregistrée avec succès:', invoice.id);
+    console.log('✅ Facture enregistrée avec succès:', invoice.id, { mode: scanId ? 'update' : 'insert' });
 
     return NextResponse.json({ 
       success: true,

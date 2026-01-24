@@ -2322,11 +2322,45 @@ export default function Dashboard() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
+          if (!ctx) {
+            resolve((event.target?.result as string) || '');
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
 
-          // Compression optimisée (0.7 pour équilibre qualité/taille)
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(compressedDataUrl);
+          // ✅ Prétraitement best-effort: niveaux de gris + contraste
+          // Objectif: améliorer les photos sombres / compressées sans jamais bloquer.
+          try {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const d = imageData.data;
+            const contrast = 1.15;
+            const brightness = 10;
+            for (let i = 0; i < d.length; i += 4) {
+              const r = d[i];
+              const g = d[i + 1];
+              const b = d[i + 2];
+              let v = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              v = (v - 128) * contrast + 128 + brightness;
+              v = Math.max(0, Math.min(255, v));
+              d[i] = v;
+              d[i + 1] = v;
+              d[i + 2] = v;
+            }
+            ctx.putImageData(imageData, 0, 0);
+          } catch {
+            // ignore
+          }
+
+          // ✅ Compression adaptative: jamais bloquante
+          const qualities = [0.8, 0.65, 0.5, 0.4];
+          let best = canvas.toDataURL('image/jpeg', 0.7);
+          for (const q of qualities) {
+            const candidate = canvas.toDataURL('image/jpeg', q);
+            const mb = (candidate.length * 3) / 4 / (1024 * 1024);
+            best = candidate;
+            if (mb <= 4) break;
+          }
+          resolve(best);
         };
         img.onerror = reject;
       };
@@ -2358,12 +2392,10 @@ export default function Dashboard() {
     // Vérification taille fichier original
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > 10) {
-      showToastMessage('Fichier trop lourd (>10MB). Essayez un fichier plus léger.', 'error');
-      return;
+      showToastMessage('Analyse partielle possible : fichier volumineux — tentative en cours…', 'success');
     }
     if (file.size < 25 * 1024) {
-      showToastMessage('Photo trop compressée. Reprenez la photo en meilleure qualité.', 'error');
-      return;
+      showToastMessage('Analyse partielle possible : photo très compressée — tentative en cours…', 'success');
     }
 
     setAnalyzing(true);
@@ -2384,13 +2416,6 @@ export default function Dashboard() {
       } else {
         // Image: compresser (perf) puis envoyer en blob
         const imageDataUrl = await compressImage(file);
-        const compressedSize = (imageDataUrl.length * 3) / 4 / (1024 * 1024);
-        if (compressedSize > 4) {
-          showToastMessage('Image trop lourde après compression. Essayez de reculer.', 'error');
-          setAnalyzing(false);
-          setAnalysisStep(null);
-          return;
-        }
         const blob = await (await fetch(imageDataUrl)).blob();
         form.append('file', blob, 'facture.jpg');
       }
@@ -2434,11 +2459,51 @@ export default function Dashboard() {
       }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de l\'analyse');
+        // Best effort: on ne bloque pas, on continue avec une analyse partielle
+        showToastMessage('Analyse partielle — certaines données peuvent nécessiter une vérification.', 'success');
       }
 
       setAnalysisStep('extract');
       setResult(data);
+
+      // ✅ Sauvegarde automatique (brouillon) : aucune facture ne doit être perdue.
+      let draftId: string | null = null;
+      try {
+        const draftPayload = {
+          invoiceData: {
+            source: 'scan',
+            entreprise: data?.entreprise || 'Non spécifié',
+            description: data?.description || '',
+            categorie: data?.categorie || 'Autre',
+            date_facture: null, // période optionnelle
+            folder_id: preselectFolderId ?? null,
+            amount_ht: data?.amount_ht ?? null,
+            amount_tva: data?.amount_tva ?? null,
+            total_amount: data?.total_amount ?? null,
+            modified_manually: false,
+          },
+        };
+
+        const draftRes = await fetch('/api/scans', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(draftPayload),
+        });
+        const draftJson = await draftRes.json().catch(() => ({}));
+        if (draftRes.ok && draftJson?.invoice?.id) {
+          draftId = String(draftJson.invoice.id);
+          // Rafraîchir pour rendre la facture visible immédiatement
+          await loadInvoices();
+          setSelectedMonths([]); // jamais de facture "invisible"
+          setCurrentView('historique');
+        }
+      } catch (eDraft) {
+        // On ne bloque jamais
+        devWarn('⚠️ Brouillon: impossible d’enregistrer automatiquement', eDraft);
+      }
 
       // NE PAS sauvegarder automatiquement - Ouvrir la modale de validation
       // ✅ Standardiser les champs pour la modale (legacy: montant_ht / tva / montant_ttc)
@@ -2458,6 +2523,7 @@ export default function Dashboard() {
 
       const enrichedData = {
         ...data,
+        id: draftId || data?.id || null,
         // Champs legacy (strings) attendus par la modale
         montant_ht: Number.isFinite(htNum) ? String(htNum) : '',
         tva: Number.isFinite(tvaNum) ? String(tvaNum) : (Number.isFinite(computedTva) ? String(computedTva) : ''),
@@ -2478,8 +2544,36 @@ export default function Dashboard() {
 
     } catch (err: any) {
       console.error('Erreur:', err);
-      showToastMessage(err.message || 'Erreur lors de l\'analyse', 'error');
-      setError(err.message || 'Erreur lors de l\'analyse de la facture');
+      // ✅ Best effort: pas d'échec brutal. On crée un brouillon minimal.
+      showToastMessage('Analyse partielle — certaines données sont manquantes, vous pourrez corriger.', 'success');
+      setError('');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          await fetch('/api/scans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              invoiceData: {
+                source: 'scan',
+                entreprise: 'Document importé',
+                description: 'Analyse partielle (OCR indisponible ou fichier difficile).',
+                categorie: 'Autre',
+                date_facture: null,
+                folder_id: preselectFolderId ?? null,
+                amount_ht: null,
+                amount_tva: null,
+                total_amount: null,
+                modified_manually: false,
+              },
+            }),
+          });
+          await loadInvoices();
+          setSelectedMonths([]);
+          setCurrentView('historique');
+        }
+      } catch {}
       setAnalysisStep(null);
     } finally {
       setAnalyzing(false);
@@ -2511,13 +2605,14 @@ export default function Dashboard() {
       console.log('✅ User ID récupéré:', user.id);
 
       // Validation des données
-      const montantHT = parseFloat(pendingInvoiceData.montant_ht);
+      // ✅ Best effort: ne jamais bloquer l'utilisateur (on sauve même partiellement).
+      let montantHT = parseFloat(pendingInvoiceData.montant_ht);
       let tva = parseFloat(pendingInvoiceData.tva);
       let montantTTC = parseFloat(pendingInvoiceData.total_amount || pendingInvoiceData.montant_ttc);
 
-      if (isNaN(montantHT) || montantHT < 0) {
-        showToastMessage('❌ Montant HT invalide', 'error');
-        return;
+      if (!Number.isFinite(montantHT) || montantHT < 0) {
+        montantHT = 0;
+        showToastMessage('Analyse partielle : HT manquant → enregistré à 0 (à vérifier).', 'success');
       }
 
       // Calcul intelligent : si TVA manque mais TTC existe, calculer TVA
@@ -2538,29 +2633,25 @@ export default function Dashboard() {
       const difference = Math.abs(calculatedTTC - montantTTC);
       
       if (difference > 0.05) {
-        console.error('❌ ERREUR CALCUL:', {
+        console.warn('⚠️ Montants incohérents (best effort) — on enregistre quand même', {
           montantHT,
           tva,
           montantTTC,
           calculated: calculatedTTC,
           difference
         });
-        showToastMessage(
-          `❌ Erreur de calcul détectée : HT (${montantHT.toFixed(2)}€) + TVA (${tva.toFixed(2)}€) = ${calculatedTTC.toFixed(2)}€ ≠ TTC (${montantTTC.toFixed(2)}€). Veuillez vérifier les montants.`,
-          'error'
-        );
-        return;
+        showToastMessage('Analyse partielle : incohérence HT/TVA/TTC — à vérifier.', 'success');
       }
 
       // Validation finale des valeurs
-      if (isNaN(tva) || tva < 0) {
-        showToastMessage('❌ Montant TVA invalide ou manquant', 'error');
-        return;
+      if (!Number.isFinite(tva) || tva < 0) {
+        tva = 0;
+        showToastMessage('Analyse partielle : TVA manquante → enregistré à 0 (à vérifier).', 'success');
       }
 
-      if (isNaN(montantTTC) || montantTTC < 0) {
-        showToastMessage('❌ Montant TTC invalide ou manquant', 'error');
-        return;
+      if (!Number.isFinite(montantTTC) || montantTTC < 0) {
+        montantTTC = montantHT + tva;
+        showToastMessage('Analyse partielle : TTC manquant → calculé (HT+TVA).', 'success');
       }
 
       // Validation taux de TVA (doit être entre 0% et 25%)
@@ -2594,6 +2685,8 @@ export default function Dashboard() {
 
       const payload = {
         invoiceData: {
+          id: pendingInvoiceData?.id || null,
+          source: 'scan',
           entreprise: pendingInvoiceData.entreprise || 'Non spécifié',
           description: pendingInvoiceData.description || '',
           categorie: finalCategory || 'Non classé',

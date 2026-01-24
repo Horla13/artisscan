@@ -121,6 +121,20 @@ function deriveAmounts(input: {
     };
   }
 
+  // 3bis) TTC + HT -> TVA
+  if (ttc !== null && ht !== null && tva === null) {
+    const computedTva = round2(ttc - ht);
+    const ok = computedTva >= 0 ? checkCoherence(ht, computedTva, ttc) : false;
+    return {
+      amount_ht: ht,
+      amount_tva: computedTva,
+      total_amount: ttc,
+      vat_rate_percent: vatRatePercent,
+      amounts_verification: ok ? 'verified' : 'to_verify',
+      amounts_reason: computedTva >= 0 ? 'TVA calculée automatiquement (TTC - HT).' : 'TVA calculée négative (TTC - HT). À vérifier.',
+    };
+  }
+
   // 4) HT seul -> TVA + TTC (taux explicite sinon 20% par défaut, mais à vérifier)
   if (ht !== null && tva === null && ttc === null) {
     const usedRate = rate ?? 0.2;
@@ -143,25 +157,21 @@ function deriveAmounts(input: {
 
   // 5) TTC seul -> si taux trouvé: HT/TVA calculés, sinon incomplet avec justification
   if (ttc !== null && ht === null && tva === null) {
-    if (rate) {
-      const computedHt = round2(ttc / (1 + rate));
-      const computedTva = round2(ttc - computedHt);
-      return {
-        amount_ht: computedHt,
-        amount_tva: computedTva,
-        total_amount: ttc,
-        vat_rate_percent: vatRatePercent,
-        amounts_verification: 'to_verify',
-        amounts_reason: `HT/TVA calculés depuis le TTC avec le taux détecté (${vatRatePercent}%). À vérifier.`,
-      };
-    }
+    // Nouveau produit: toujours tenter une inférence.
+    // Si aucun taux détecté, utiliser 20% par défaut (France) et marquer "estimé".
+    const usedRate = rate ?? 0.2;
+    const usedRatePercent = round2(usedRate * 100);
+    const computedHt = round2(ttc / (1 + usedRate));
+    const computedTva = round2(ttc - computedHt);
     return {
-      amount_ht: null,
-      amount_tva: null,
+      amount_ht: computedHt,
+      amount_tva: computedTva,
       total_amount: ttc,
-      vat_rate_percent: vatRatePercent,
-      amounts_verification: 'incomplete',
-      amounts_reason: 'Seul le TTC a été détecté. Taux TVA introuvable → HT/TVA non calculés.',
+      vat_rate_percent: vatRatePercent ?? usedRatePercent,
+      amounts_verification: rate ? 'to_verify' : 'to_verify',
+      amounts_reason: rate
+        ? `HT/TVA calculés depuis le TTC avec le taux détecté (${vatRatePercent}%). À vérifier.`
+        : `HT/TVA estimés depuis le TTC avec un taux par défaut (${usedRatePercent}%). À vérifier.`,
     };
   }
 
@@ -279,26 +289,17 @@ export async function POST(request: NextRequest) {
           out += pageText + '\n';
         }
         pdfText = out.trim();
-        if (!pdfText) {
-          return NextResponse.json(
-            { error: 'Impossible de lire le texte du PDF. Essayez une photo (JPG/PNG) plus nette.' },
-            { status: 400 }
-          );
-        }
+        // Best effort: si le PDF est “image-only”, on continue avec une réponse partielle.
+        if (!pdfText) pdfText = null;
         // Limiter la taille envoyée au modèle
-        if (pdfText.length > 12000) pdfText = pdfText.slice(0, 12000);
+        if (pdfText && pdfText.length > 12000) pdfText = pdfText.slice(0, 12000);
       } else {
         // Image: convertir en data URL pour Vision
         const buf = Buffer.from(fileBytes);
         const mime = fileMime || 'image/jpeg';
         const b64 = buf.toString('base64');
         imageUrl = `data:${mime};base64,${b64}`;
-        if (buf.byteLength < 18 * 1024) {
-          return NextResponse.json(
-            { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
-            { status: 400 }
-          );
-        }
+        // Best effort: pas de rejet taille/qualité
       }
     } else if (imageDataLegacy) {
       // Legacy JSON: image base64 -> data URL
@@ -307,12 +308,7 @@ export async function POST(request: NextRequest) {
         : `data:image/jpeg;base64,${imageDataLegacy}`;
       const rawBase64 = imageUrl.includes('base64,') ? imageUrl.split('base64,')[1] : imageDataLegacy;
       const approxBytes = Math.floor((rawBase64.length * 3) / 4);
-      if (approxBytes < 18 * 1024) {
-        return NextResponse.json(
-          { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
-          { status: 400 }
-        );
-      }
+      // Best effort: pas de rejet taille/qualité
     }
 
     // Appeler OpenAI:
@@ -341,22 +337,61 @@ Format attendu:
   }
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        pdfText
-          ? { role: 'user', content: `${prompt}\n\nTEXTE PDF (extrait):\n${pdfText}` }
-          : {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: imageUrl! } },
-              ],
-            },
-      ] as any,
-      response_format: { type: 'json_object' },
-      max_tokens: 600,
-    });
+    let response;
+    try {
+      if (!pdfText && !imageUrl) {
+        // Aucun signal exploitable -> réponse partielle
+        return NextResponse.json(
+          {
+            entreprise: null,
+            date: null,
+            description: null,
+            categorie: 'Autre',
+            amount_ht: null,
+            amount_tva: null,
+            total_amount: null,
+            vat_rate_percent: null,
+            amounts_verification: 'incomplete',
+            amounts_reason: 'Analyse partielle: document illisible (texte PDF vide et image indisponible).',
+          },
+          { status: 200 }
+        );
+      }
+
+      response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          pdfText
+            ? { role: 'user', content: `${prompt}\n\nTEXTE PDF (extrait):\n${pdfText}` }
+            : {
+                role: 'user',
+                content: [
+                  { type: 'text', text: prompt },
+                  { type: 'image_url', image_url: { url: imageUrl! } },
+                ],
+              },
+        ] as any,
+        response_format: { type: 'json_object' },
+        max_tokens: 600,
+      });
+    } catch (e: any) {
+      console.error('❌ /api/analyze: erreur OpenAI (best effort)', e?.message || e);
+      return NextResponse.json(
+        {
+          entreprise: null,
+          date: null,
+          description: null,
+          categorie: 'Autre',
+          amount_ht: null,
+          amount_tva: null,
+          total_amount: null,
+          vat_rate_percent: null,
+          amounts_verification: 'incomplete',
+          amounts_reason: 'Analyse partielle: OCR indisponible temporairement. Le document peut être enregistré puis corrigé.',
+        },
+        { status: 200 }
+      );
+    }
 
     // Extraire la réponse JSON
     const content = response.choices[0]?.message?.content;
@@ -366,8 +401,19 @@ Format attendu:
 
     if (!content) {
       return NextResponse.json(
-        { error: 'Désolé, l\'IA n\'a pas pu analyser cette photo. Veuillez réessayer avec une photo plus nette.' },
-        { status: 500 }
+        {
+          entreprise: null,
+          date: null,
+          description: null,
+          categorie: 'Autre',
+          amount_ht: null,
+          amount_tva: null,
+          total_amount: null,
+          vat_rate_percent: null,
+          amounts_verification: 'incomplete',
+          amounts_reason: 'Analyse partielle: réponse OCR vide. Le document peut être enregistré puis corrigé.',
+        },
+        { status: 200 }
       );
     }
 
@@ -393,8 +439,19 @@ Format attendu:
         console.error('❌ Erreur de parsing JSON:', secondParseError);
         console.error('📄 Contenu reçu:', content);
         return NextResponse.json(
-          { error: 'Désolé, l\'IA n\'a pas réussi à lire cette photo. Recommencez en étant plus proche de la facture.' },
-          { status: 500 }
+          {
+            entreprise: null,
+            date: null,
+            description: null,
+            categorie: 'Autre',
+            amount_ht: null,
+            amount_tva: null,
+            total_amount: null,
+            vat_rate_percent: null,
+            amounts_verification: 'incomplete',
+            amounts_reason: 'Analyse partielle: parsing OCR impossible. Le document peut être enregistré puis corrigé.',
+          },
+          { status: 200 }
         );
       }
     }
