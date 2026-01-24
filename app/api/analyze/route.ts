@@ -109,7 +109,8 @@ export async function POST(request: NextRequest) {
               text: `Analyse cette image de facture et extrais les informations suivantes au format JSON strict :
 - entreprise : le nom de l'entreprise/fournisseur
 - date : la date de la facture (format YYYY-MM-DD si possible)
-- montant_ht : le montant hors taxes (nombre uniquement, sans symbole)
+- amount_ht : le montant hors taxes (nombre uniquement, sans symbole)
+- amount_tva : le montant TVA (nombre uniquement, sans symbole). Si absent, mets 0.
 - total_amount : le montant toutes taxes comprises (nombre uniquement, sans symbole)
 - description : une brève description des services/produits
 - categorie : classe la facture dans une de ces catégories : "Matériaux", "Carburant", "Restaurant", "Outillage", "Sous-traitance", "Fournitures", "Location", "Autre"
@@ -118,7 +119,8 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
 {
   "entreprise": "string",
   "date": "YYYY-MM-DD",
-  "montant_ht": number,
+  "amount_ht": number,
+  "amount_tva": number,
   "total_amount": number,
   "description": "string",
   "categorie": "string"
@@ -191,8 +193,20 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
     };
 
     // Appliquer le nettoyage aux montants
-    extractedData.montant_ht = cleanAmount(extractedData.montant_ht || extractedData.montantHT);
-    extractedData.total_amount = cleanAmount(extractedData.total_amount || extractedData.totalAmount || extractedData.montant_ttc || extractedData.montantTTC);
+    const ht = cleanAmount(extractedData.amount_ht ?? extractedData.montant_ht ?? extractedData.montantHT);
+    const tva = cleanAmount(extractedData.amount_tva ?? extractedData.tva);
+    const ttc = cleanAmount(extractedData.total_amount ?? extractedData.totalAmount ?? extractedData.montant_ttc ?? extractedData.montantTTC);
+
+    extractedData.amount_ht = ht;
+    extractedData.amount_tva = tva;
+    extractedData.total_amount = ttc || (ht + tva);
+
+    // Ne pas retourner de champs legacy côté frontend
+    delete extractedData.montant_ht;
+    delete extractedData.montantHT;
+    delete extractedData.montant_ttc;
+    delete extractedData.montantTTC;
+    delete extractedData.totalAmount;
 
     // Assurer que la catégorie est présente
     if (!extractedData.categorie) {

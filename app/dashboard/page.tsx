@@ -24,6 +24,7 @@ interface Invoice {
   created_at: string;
   folder_id?: string;
   archived?: boolean;
+  modified_manually?: boolean;
   updated_at?: string;
 }
 
@@ -637,23 +638,14 @@ export default function Dashboard() {
           throw error;
         }
         
-        console.log('Toutes les factures:', data);
         console.log('✅ Factures reçues de Supabase:', data?.length || 0);
-        console.log('📋 Détail des factures:', data?.map(inv => ({
-          id: inv.id,
-          entreprise: inv.entreprise,
-          date_facture: inv.date_facture,
-          created_at: inv.created_at,
-          amount_ht: inv.amount_ht,
-          amount_tva: inv.amount_tva,
-          total_amount: inv.total_amount
-        })));
         
         // Normaliser les champs (évite bugs historiques/excel/csv sur anciennes lignes)
         const normalized = (data || []).map((inv: any) => {
-          const ht = parseAmount(inv.amount_ht);
-          const ttc = parseAmount(inv.total_amount);
-          const tva = parseAmount(inv.amount_tva);
+          // Migration V1: fallback legacy -> champs standard (sans casser les anciennes lignes)
+          const ht = parseAmount(inv.amount_ht ?? inv.montant_ht);
+          const tva = parseAmount(inv.amount_tva ?? inv.tva);
+          const ttc = parseAmount(inv.total_amount ?? inv.montant_ttc) || (ht + tva);
 
           const dateFacture = (inv.date_facture || inv.date || '').toString().trim() || (inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '');
 
@@ -664,6 +656,7 @@ export default function Dashboard() {
             amount_tva: tva,
             date_facture: dateFacture,
             categorie: normalizeCategory(inv.categorie || ''),
+            modified_manually: inv.modified_manually === true,
           } as Invoice;
         });
 
@@ -1091,7 +1084,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(categorie),
         dateAjout,
-        '—',
+        inv.modified_manually ? 'oui' : 'non',
       ];
     });
     const csvContent = "\uFEFF" + [
@@ -1565,7 +1558,7 @@ export default function Dashboard() {
       formatDecimalFR(ttc),
       escapeCSV(invoice.categorie || 'Non classé'),
       formatDateFR(invoice.created_at),
-      '—',
+      invoice.modified_manually ? 'oui' : 'non',
     ];
 
     const csvContent = "\uFEFF" + [headers.join(';'), row.join(';')].join('\n');
@@ -1818,7 +1811,7 @@ export default function Dashboard() {
         formatDecimalFR(ttc),
         escapeCSV(inv.categorie || 'Non classé'),
         formatDateFR(inv.created_at),
-        '—',
+        inv.modified_manually ? 'oui' : 'non',
       ];
     });
 
@@ -2560,6 +2553,10 @@ export default function Dashboard() {
           categorie: finalCategory || 'Non classé',
           date_facture: dateFacture,
           folder_id: pendingInvoiceData.folder_id || null,
+          amount_ht: Number(montantHT),
+          amount_tva: Number(tva),
+          total_amount: Number(montantTTC),
+          modified_manually: pendingManuallyEdited,
         },
       };
 

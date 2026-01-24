@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+function toNumber(v: any): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const cleaned = v.replace(/[^\d.,\-]/g, '').replace(',', '.');
+    const n = Number.parseFloat(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   console.log('📤 API /api/scans: Requête d\'upload de facture reçue');
 
@@ -81,6 +92,32 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ Upload autorisé pour utilisateur PRO:', profile?.email || user.email);
 
+    // 3bis. Montants V1 (optionnels mais on évite les NULLs)
+    // Supporte les clés "nouvelles" et legacy (migration)
+    let ht =
+      toNumber(invoiceData.amount_ht) ??
+      toNumber(invoiceData.montant_ht) ??
+      null;
+    let tva =
+      toNumber(invoiceData.amount_tva) ??
+      toNumber(invoiceData.tva) ??
+      null;
+    let ttc =
+      toNumber(invoiceData.total_amount) ??
+      toNumber(invoiceData.montant_ttc) ??
+      null;
+
+    // Compléter si possible
+    if (ttc === null && ht !== null && tva !== null) ttc = ht + tva;
+    if (tva === null && ttc !== null && ht !== null) tva = Math.max(ttc - ht, 0);
+    if (ht === null && ttc !== null && tva !== null) ht = Math.max(ttc - tva, 0);
+
+    // V1: jamais NULL en DB (dash/graph)
+    const amount_ht = Number.isFinite(ht ?? NaN) ? Number(ht) : 0;
+    const amount_tva = Number.isFinite(tva ?? NaN) ? Number(tva) : 0;
+    const total_amount = Number.isFinite(ttc ?? NaN) ? Number(ttc) : (amount_ht + amount_tva);
+    const modified_manually = invoiceData.modified_manually === true;
+
     // 4. Insérer la facture dans la base de données
     const { data: invoice, error: insertError } = await supabaseAdmin
       .from('scans')
@@ -91,6 +128,10 @@ export async function POST(req: NextRequest) {
         categorie: (invoiceData.categorie || 'Autre').toString(),
         date_facture: invoiceData.date_facture || invoiceData.date || new Date().toISOString().slice(0, 10),
         folder_id: invoiceData.folder_id ?? null,
+        amount_ht,
+        amount_tva,
+        total_amount,
+        modified_manually,
         created_at: new Date().toISOString(),
       }])
       .select()

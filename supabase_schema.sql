@@ -44,6 +44,8 @@ ALTER TABLE scans ADD COLUMN IF NOT EXISTS nom_chantier TEXT;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_ht NUMERIC;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_tva NUMERIC;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_amount NUMERIC;
+-- ✅ V1: indicateur (UI/cache) — doit exister pour éviter erreurs "schema cache"
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS modified_manually BOOLEAN DEFAULT FALSE;
 
 -- Backfill SAFE depuis les anciennes colonnes si elles existent (idempotent)
 DO $$
@@ -71,6 +73,15 @@ BEGIN
 
   -- Si total_amount encore NULL mais HT+TVA présents, recalculer TTC
   EXECUTE 'UPDATE scans SET total_amount = (amount_ht + amount_tva) WHERE total_amount IS NULL AND amount_ht IS NOT NULL AND amount_tva IS NOT NULL';
+
+  -- V1: éviter les NULLs (dash/graph)
+  EXECUTE 'UPDATE scans SET amount_ht = 0 WHERE amount_ht IS NULL';
+  EXECUTE 'UPDATE scans SET amount_tva = 0 WHERE amount_tva IS NULL';
+  EXECUTE 'UPDATE scans SET total_amount = (amount_ht + amount_tva) WHERE total_amount IS NULL';
+  EXECUTE 'UPDATE scans SET total_amount = 0 WHERE total_amount IS NULL';
+
+  -- V1: booléen stable
+  EXECUTE 'UPDATE scans SET modified_manually = FALSE WHERE modified_manually IS NULL';
 END $$;
 
 -- 3. Créer une vue pour compter les factures par utilisateur
