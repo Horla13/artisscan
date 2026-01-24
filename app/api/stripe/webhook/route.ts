@@ -68,17 +68,19 @@ async function updateProfileWithSubscription(
       ? ((subscription as any).customer as string)
       : ((subscription as any)?.customer?.id as string | undefined) || null;
 
-  // Idempotence email: send ONLY when status becomes ACTIVE (prev not active)
-  let prevStatus = '';
+  // Garde-fou email minimal (V1):
+  // - envoyer uniquement si profile.is_pro passe de false -> true
+  // - ET la mise à jour Supabase a réussi
+  let prevIsPro = false;
   try {
     const { data: prevProfile } = await supabaseAdmin
       .from('profiles')
-      .select('subscription_status')
+      .select('is_pro')
       .eq('id', supabaseUserId)
       .maybeSingle();
-    prevStatus = ((prevProfile as any)?.subscription_status || '').toString();
+    prevIsPro = (prevProfile as any)?.is_pro === true;
   } catch (e) {
-    console.warn('⚠️ Webhook: impossible de lire prev subscription_status', { supabaseUserId, e });
+    console.warn('⚠️ Webhook: impossible de lire prev is_pro', { supabaseUserId, e });
   }
 
   try {
@@ -105,14 +107,15 @@ async function updateProfileWithSubscription(
         stripe_subscription_id: subscription?.id,
         stripe_customer_id: stripeCustomerId,
       });
+
+      // Email UNIQUEMENT si ACTIVE + transition is_pro false -> true
+      const shouldSendEmail = status === 'active' && prevIsPro === false && entitled === true;
+      if (shouldSendEmail) {
+        await sendSubscriptionActivatedEmail(supabaseAdmin, supabaseUserId);
+      }
     }
   } catch (e: any) {
     console.error('❌ Supabase update threw', { supabaseUserId, message: e?.message || e });
-  }
-
-  const shouldSendEmail = status === 'active' && prevStatus !== 'active';
-  if (shouldSendEmail) {
-    await sendSubscriptionActivatedEmail(supabaseAdmin, supabaseUserId);
   }
 }
 

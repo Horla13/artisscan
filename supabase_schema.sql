@@ -127,10 +127,31 @@ CREATE POLICY "Users can view own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
--- Politique : Les utilisateurs peuvent mettre à jour leur propre profil
-CREATE POLICY "Users can update own profile"
+-- ❗ V1 SÉCURITÉ: ne JAMAIS permettre au client de modifier des champs d’abonnement (is_pro, plan, stripe_*).
+-- On supprime toute policy UPDATE trop large.
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+
+-- Option minimale SAFE:
+-- - On autorise uniquement la mise à jour de champs neutres (ex: comptable_email) via privilèges de colonnes.
+-- - Le reste (is_pro, plan, subscription_status, stripe_*) est modifié uniquement via service_role (webhook).
+--
+-- RLS: limiter aux lignes de l’utilisateur
+CREATE POLICY "Users can update own profile (safe fields only)"
   ON profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+-- Privilèges: empêcher UPDATE global, puis n’autoriser que certaines colonnes (si elles existent).
+REVOKE UPDATE ON TABLE profiles FROM anon, authenticated;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'comptable_email'
+  ) THEN
+    GRANT UPDATE (comptable_email) ON TABLE profiles TO authenticated;
+  END IF;
+END $$;
 
 -- Politique : Les utilisateurs peuvent insérer leur propre profil
 CREATE POLICY "Users can insert own profile"

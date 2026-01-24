@@ -153,7 +153,7 @@ export default function Dashboard() {
       // ⚠️ V1 stable: on ne lit AUCUN champ de date d’abonnement
       const { data: profile, error: pErr } = await supabase
         .from('profiles')
-        .select('plan, subscription_status, stripe_customer_id')
+        .select('is_pro, plan, stripe_customer_id')
         .eq('id', user.id)
         .single();
 
@@ -163,7 +163,8 @@ export default function Dashboard() {
       }
 
       setBillingPlan(profile?.plan ?? null);
-      setBillingStatus(profile?.subscription_status ?? null);
+      // V1 stabilité: le dashboard n’utilise pas subscription_status (anti-régression)
+      setBillingStatus(profile?.is_pro === true ? 'active' : null);
       setBillingCustomerId(profile?.stripe_customer_id ?? null);
     } catch (e) {
       console.warn('⚠️ loadBillingInfo error', e);
@@ -2546,12 +2547,6 @@ export default function Dashboard() {
         new Date().toISOString().slice(0, 10);
 
       // ✅ IMPORTANT: insertion côté serveur (cohérence DB → UI → CSV)
-      // Protection demandée: TTC obligatoire
-      if (!Number.isFinite(montantTTC)) {
-        showToastMessage('❌ Montant TTC manquant. Veuillez renseigner le TTC avant de valider.', 'error');
-        return;
-      }
-
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) {
@@ -2568,9 +2563,6 @@ export default function Dashboard() {
           date_facture: dateFacture,
           folder_id: pendingInvoiceData.folder_id || null,
           modified_manually: pendingManuallyEdited,
-          amount_ht: Number(montantHT),
-          amount_tva: Number(tva),
-          total_amount: Number(montantTTC),
         },
       };
 

@@ -381,6 +381,28 @@ export async function POST(req: NextRequest) {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    // 1) Auth obligatoire (anti-spam)
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    const token = authHeader.slice('Bearer '.length);
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: 'Session invalide' }, { status: 401 });
+    }
+
+    // 2) Autoriser uniquement les comptes PRO (source de vérité = profiles.is_pro)
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('is_pro')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if ((profile as any)?.is_pro !== true) {
+      return NextResponse.json({ error: 'Abonnement requis' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { 
       comptableEmail, 
