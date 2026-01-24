@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, ShieldCheck, Sparkles } from 'lucide-react';
+import { Check, ScanLine, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { SiteFooter } from '@/app/components/SiteFooter';
-import { SiteHeader } from '@/app/components/SiteHeader';
 
 type BillingCycle = 'monthly' | 'yearly';
 
@@ -57,42 +56,43 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-surface-2)] text-slate-900">
-      <SiteHeader userEmail={userEmail} primaryCta={{ href: '/', label: 'Accueil' }} />
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans py-20 px-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col items-center mb-14">
+          <Link href="/" className="flex items-center gap-3 mb-8">
+            <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative">
+              <ScanLine className="w-8 h-8 text-white" />
+              <Zap className="w-4 h-4 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="text-3xl font-normal text-slate-900 tracking-tight"><span className="font-black">Artis</span>Scan</span>
+              <span className="text-[10px] font-light text-orange-500 uppercase tracking-[0.42em] mt-1 leading-none text-center">Gestion Intelligente</span>
+            </div>
+          </Link>
 
-      <main className="as-container as-section">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-600">
-            <Sparkles className="w-4 h-4 text-[var(--primary)]" />
-            Essai gratuit 14 jours inclus
-          </div>
-          <h1 className="mt-5 text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
-            Passez en <span className="text-[var(--primary)]">Pro</span>
+          {userEmail && (
+            <div className="mb-6 px-6 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-black uppercase tracking-widest animate-fade-in flex items-center gap-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+              Connecté : {userEmail}
+            </div>
+          )}
+
+          <h1 className="text-4xl md:text-5xl font-black text-slate-900 text-center mb-4 tracking-tight">
+            Passez en <span className="text-orange-600">Pro</span>
           </h1>
-          <p className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto">
-            Choisissez mensuel ou annuel. Résiliable à tout moment. Paiement sécurisé.
+          <p className="text-lg text-slate-500 text-center max-w-2xl font-medium">
+            Essai gratuit 14 jours, puis abonnement mensuel ou annuel.
           </p>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm font-bold text-slate-600">
-            <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2">
-              <ShieldCheck className="w-4 h-4 text-[var(--primary)]" />
-              Sans engagement
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2">
-              <ShieldCheck className="w-4 h-4 text-green-600" />
-              Paiement Stripe
-            </span>
-          </div>
         </div>
 
         {error && (
-          <div className="max-w-2xl mx-auto mb-8 bg-red-50 border border-red-200 text-red-800 rounded-2xl p-4 font-bold">
+          <div className="max-w-2xl mx-auto mb-8 bg-red-50 border border-red-200 text-red-800 rounded-2xl p-4 font-semibold">
             {error}
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          <div className="as-card p-8 md:p-10 border-2 border-slate-200">
+        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="bg-white rounded-3xl p-8 md:p-10 border-2 border-slate-200 shadow-lg">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 mb-2">Mensuel</h2>
               <p className="text-slate-500 font-medium text-sm">Souplesse maximale</p>
@@ -119,14 +119,14 @@ export default function PricingPage() {
             <button
               onClick={() => startCheckout('monthly')}
               disabled={loading !== null}
-              className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 text-sm"
             >
               {loading === 'monthly' ? 'Redirection…' : 'Démarrer Pro (Mensuel)'}
             </button>
             <p className="text-xs text-center text-slate-400 mt-3 font-medium">Essai gratuit 14 jours inclus.</p>
           </div>
 
-          <div className="as-card p-8 md:p-10 border-2 border-[var(--primary)] bg-gradient-to-br from-[var(--color-brand-50)] to-white">
+          <div className="bg-gradient-to-br from-orange-50 to-white rounded-3xl p-8 md:p-10 border-2 border-orange-500 shadow-xl">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 mb-2">Annuel</h2>
               <p className="text-orange-600 font-bold text-sm">Meilleure offre</p>
@@ -153,7 +153,7 @@ export default function PricingPage() {
             <button
               onClick={() => startCheckout('yearly')}
               disabled={loading !== null}
-              className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+              className="block w-full text-center bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black uppercase tracking-wider py-4 rounded-xl transition-all duration-200 text-sm"
             >
               {loading === 'yearly' ? 'Redirection…' : 'Démarrer Pro (Annuel)'}
             </button>
@@ -164,10 +164,7 @@ export default function PricingPage() {
         <div className="mt-14 text-center text-sm text-slate-500">
           En cliquant, vous serez redirigé vers Stripe Checkout.
         </div>
-
-      </main>
-
-      <SiteFooter />
+      </div>
     </div>
   );
 }

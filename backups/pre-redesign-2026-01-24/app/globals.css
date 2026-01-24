@@ -43,15 +43,11 @@ body {
   min-height: 100vh;
 }
 
-/* ===========================
-   Base accessibility / focus
-   =========================== */
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* Style Apple minimaliste - Cartes propres */
 .card-clean {
   background: white;
   border: 1px solid #f1f5f9;
@@ -63,7 +59,6 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-/* Bottom Navigation */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -75,7 +70,6 @@ body {
   z-index: 50;
 }
 
-/* Scrollbar minimaliste */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -94,7 +88,6 @@ body {
   background: #94a3b8;
 }
 
-/* Animations subtiles */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -125,7 +118,6 @@ body {
   animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Animation de pulse pour les skeleton loaders */
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -139,7 +131,6 @@ body {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Animation shimmer pour skeleton screens premium */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -153,7 +144,6 @@ body {
   animation: shimmer 2s ease-in-out infinite;
 }
 
-/* Transition fluide entre les vues */
 @keyframes viewTransition {
   from {
     opacity: 0;
@@ -169,7 +159,6 @@ body {
   animation: viewTransition 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Boutons style iOS */
 .btn-primary {
   background: var(--primary);
   color: white;
@@ -185,7 +174,6 @@ body {
   background: var(--primary-dark);
 }
 
-/* Toast notification */
 .toast {
   position: fixed;
   bottom: 100px;
@@ -211,7 +199,6 @@ body {
   }
 }
 
-/* Spinner orange */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -232,16 +219,11 @@ body {
   animation: spin-slow 3s linear infinite;
 }
 
-/* Suppression de tous les effets glassmorphism */
 .no-blur {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* ===========================
-   Shared UI primitives
-   (use in pages + dashboard)
-   =========================== */
 @layer components {
   .as-container {
     @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
@@ -299,3 +281,5 @@ body {
     background: #fff;
   }
 }
+
+

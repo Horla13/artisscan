@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { ArrowRight, ScanLine, Zap } from 'lucide-react'
 
 function LoginForm() {
   const [email, setEmail] = useState('')
@@ -115,12 +114,13 @@ function LoginForm() {
   }
 
   return (
-    <div className="as-card p-8 w-full max-w-md border border-slate-200/70">
+    <div className="card-clean rounded-3xl p-8 w-full max-w-md bg-white shadow-xl border border-slate-100">
       <div className="text-center mb-8">
         <Link href="/" className="inline-block">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[var(--primary)] flex items-center justify-center shadow-lg shadow-orange-200 relative">
-            <ScanLine className="w-8 h-8 text-white" />
-            <Zap className="w-4 h-4 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </div>
           <h1 className="text-3xl font-black text-slate-900 mb-2">ArtisScan</h1>
         </Link>
@@ -146,7 +146,7 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="as-input"
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-slate-50 text-slate-900"
             placeholder="votre@email.com"
           />
         </div>
@@ -161,7 +161,7 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="as-input"
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-slate-50 text-slate-900"
             placeholder="••••••••"
           />
         </div>
@@ -169,10 +169,9 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="as-btn as-btn-primary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-wider py-4 rounded-xl shadow-lg shadow-orange-200 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Chargement...' : isSignUp ? 'Créer mon compte' : 'Se connecter'}
-          {!loading && <ArrowRight className="w-4 h-4" />}
         </button>
       </form>
 
@@ -190,19 +189,20 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[var(--color-surface-2)] flex flex-col items-center justify-center px-4 py-12">
-      <Suspense fallback={<div className="text-[var(--primary)] font-black animate-pulse">Chargement...</div>}>
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <Suspense fallback={<div className="text-orange-500 font-black animate-pulse">Chargement...</div>}>
         <LoginForm />
       </Suspense>
       <footer className="mt-8 text-xs text-slate-500 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-        <Link href="/legal/mentions-legales" className="hover:text-[var(--primary)] transition-colors">Mentions légales</Link>
-        <Link href="/legal/confidentialite" className="hover:text-[var(--primary)] transition-colors">Confidentialité</Link>
-        <Link href="/legal/cgu" className="hover:text-[var(--primary)] transition-colors">CGU</Link>
-        <Link href="/legal/cookies" className="hover:text-[var(--primary)] transition-colors">Cookies</Link>
-        <Link href="/legal/remboursement" className="hover:text-[var(--primary)] transition-colors">Remboursement</Link>
-        <Link href="/legal/facturation" className="hover:text-[var(--primary)] transition-colors">Facturation</Link>
+        <Link href="/legal/mentions-legales" className="hover:text-orange-500 transition-colors">Mentions légales</Link>
+        <Link href="/legal/confidentialite" className="hover:text-orange-500 transition-colors">Confidentialité</Link>
+        <Link href="/legal/cgu" className="hover:text-orange-500 transition-colors">CGU</Link>
+        <Link href="/legal/cookies" className="hover:text-orange-500 transition-colors">Cookies</Link>
+        <Link href="/legal/remboursement" className="hover:text-orange-500 transition-colors">Remboursement</Link>
+        <Link href="/legal/facturation" className="hover:text-orange-500 transition-colors">Facturation</Link>
       </footer>
     </div>
   )
 }
+
 
