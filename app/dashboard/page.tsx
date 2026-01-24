@@ -2641,7 +2641,7 @@ export default function Dashboard() {
     setShowUploadMenu(true);
   };
 
-  return (
+    return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
@@ -2652,7 +2652,7 @@ export default function Dashboard() {
               <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 relative group transition-transform active:scale-95">
                 <ScanLine className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
                 <Zap className="w-3.5 h-3.5 text-white absolute -bottom-0.5 -right-0.5 fill-white stroke-[2px]" />
-              </div>
+      </div>
               
               <div className="flex flex-col justify-center">
                 <div className="flex items-center gap-1.5">
@@ -2764,15 +2764,15 @@ export default function Dashboard() {
                 )}
               </div>
 
-                <button
+          <button
                 onClick={refreshAllData}
                 disabled={loadingInvoices}
                 className="p-2 bg-white border border-slate-200 text-slate-400 rounded-lg hover:bg-slate-50 hover:text-orange-600 transition-all disabled:opacity-50 shadow-sm active:scale-95"
                 title="Forcer le rafraîchissement Supabase"
               >
                 <Clock className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
+          </button>
+        </div>
             {selectedMonths.length > 0 && (
               <button
                 onClick={() => setSelectedMonths([])}
@@ -2835,7 +2835,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+        </div>
 
             {/* Stats principales - 3 cartes avec animations */}
             {loadingInvoices ? (
@@ -2843,7 +2843,7 @@ export default function Dashboard() {
                 <StatsCardSkeleton />
                 <StatsCardSkeleton />
                 <StatsCardSkeleton />
-              </div>
+            </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Carte 1 : Total HT avec animation fade-in up */}
@@ -2922,8 +2922,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </motion.div>
-            </div>
-            )}
+          </div>
+        )}
 
             {/* Graphique 7 derniers jours (TTC) */}
             <div className="card-clean rounded-3xl p-6 relative bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
@@ -3081,7 +3081,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historique</h2>
               <div className="flex flex-wrap items-center gap-2">
-                <button
+          <button
                   onClick={() => exportToCSV()}
                   disabled={invoices.length === 0}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
@@ -3093,7 +3093,7 @@ export default function Dashboard() {
                 >
                   <Download className="w-3.5 h-3.5" />
                   CSV
-                </button>
+          </button>
                 <button
                   onClick={exportToExcel}
                   disabled={invoices.length === 0}
@@ -3140,15 +3140,15 @@ export default function Dashboard() {
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-base sm:text-sm"
                 />
                 {searchQuery && (
-                  <button 
+                <button
                     onClick={() => setSearchQuery('')}
                     className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  >
+                >
                     <X className="h-5 w-5 text-slate-400 hover:text-slate-600" />
-                  </button>
+                </button>
                 )}
               </div>
-
+              
               {/* Filtres Dropdowns */}
               <div className="grid grid-cols-1 gap-3">
                 <div className="flex items-center gap-2">
@@ -3204,7 +3204,7 @@ export default function Dashboard() {
                 </select>
               </div>
 
-              <button
+                <button
                 onClick={() => setSortBy('categorie')}
                 className={`hidden md:block px-4 py-1.5 rounded-lg text-sm font-bold transition-all border ${
                   sortBy === 'categorie' 
@@ -3213,8 +3213,8 @@ export default function Dashboard() {
                 }`}
               >
                 📂 Par Catégorie
-              </button>
-            </div>
+                </button>
+              </div>
 
             {loadingInvoices ? (
               <div className="space-y-3">
@@ -3242,17 +3242,17 @@ export default function Dashboard() {
                 >
                   Réinitialiser tous les filtres
                 </button>
-              </div>
+                </div>
             ) : (
-              <div className="space-y-3">
+                  <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-widest px-1">
                   <span>{filteredInvoices.length} facture(s) trouvée(s)</span>
                   {selectedMonths.length > 0 && (
                     <span className="text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">
                       {selectedMonths.length} mois
-                    </span>
+                      </span>
                   )}
-                </div>
+                    </div>
                 {(() => {
                   const sorted = getSortedInvoices();
                   const groups: { monthKey: string; invoices: Invoice[] }[] = [];
@@ -3279,9 +3279,9 @@ export default function Dashboard() {
                                 {invoice.categorie && (
                                   <span className="inline-block px-2.5 py-1 text-[10px] font-black bg-orange-50 text-orange-600 rounded-lg border border-orange-100 uppercase tracking-wider">
                                     {invoice.categorie}
-                                  </span>
+                      </span>
                                 )}
-                              </div>
+                    </div>
                               <div className="flex flex-col gap-1">
                                 <p className="text-xs font-bold text-slate-500">
                                   Facture du : {formatDateLabel(invoice.date_facture || invoice.created_at)}
@@ -3418,8 +3418,8 @@ export default function Dashboard() {
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">Montant HT</span>
                               <span className="font-black text-slate-900 text-base">
                                 {(invoice.amount_ht || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                              </span>
-                            </div>
+                      </span>
+                    </div>
 
                             <div className="w-px h-8 bg-slate-200"></div>
 
@@ -3427,31 +3427,31 @@ export default function Dashboard() {
                               <span className="text-[10px] text-orange-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
                               <span className="font-black text-orange-500 text-lg">
                                 {(invoice.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                              </span>
-                            </div>
+                      </span>
+                    </div>
 
                             <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">TVA Récupérée</span>
                               <span className="font-black text-orange-500 italic text-base">
                                 {(invoice.amount_tva || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                              </span>
-                            </div>
-                          </div>
+                      </span>
+                    </div>
+                  </div>
 
                           {invoice.description && (
                             <div className="mt-3 p-3 bg-orange-50 border-l-4 border-orange-400 rounded hidden md:block">
                               <p className="text-xs text-orange-700 font-medium mb-1">DESCRIPTION</p>
                               <p className="text-sm text-slate-700">{invoice.description}</p>
-                            </div>
-                          )}
+                </div>
+              )}
                         </div>
                       ))}
                     </div>
                   ));
                 })()}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
           </motion.div>
         )}
 
@@ -3685,8 +3685,8 @@ export default function Dashboard() {
                           <p className="text-slate-500 font-medium">Aucune facture dans ce dossier</p>
                           <p className="text-sm text-slate-400 mt-2">
                             Les factures que vous assignerez à ce dossier apparaîtront ici
-              </p>
-            </div>
+                </p>
+              </div>
                       );
                     }
 
@@ -3717,7 +3717,7 @@ export default function Dashboard() {
                               {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
                             </p>
                           </div>
-                        </div>
+              </div>
 
                         {/* Liste des factures */}
                         <div className="space-y-3">
@@ -3740,7 +3740,7 @@ export default function Dashboard() {
                                         {invoice.categorie}
                           </span>
                         )}
-                      </div>
+              </div>
                                   {invoice.description && (
                                     <p className="text-sm text-slate-600 mb-2">{invoice.description}</p>
                                   )}
@@ -3750,7 +3750,7 @@ export default function Dashboard() {
                                     <span className="font-bold text-orange-600">
                                       TTC: {(invoice.total_amount || 0).toFixed(2)} €
                                     </span>
-                    </div>
+            </div>
                       </div>
 
                                 {/* Menu actions */}
@@ -3803,7 +3803,7 @@ export default function Dashboard() {
                                         <Trash2 className="w-4 h-4 text-red-500" />
                                         <span className="font-medium text-red-600">Supprimer</span>
                       </button>
-                                    </div>
+          </div>
                                   )}
                     </div>
                   </div>
@@ -3896,7 +3896,7 @@ export default function Dashboard() {
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <LayoutDashboard className="w-5 h-5 text-orange-500" />
                 Informations Personnelles
-              </h3>
+            </h3>
               
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -3966,7 +3966,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="pt-4 border-t border-slate-100">
-                  <button
+              <button
                     onClick={() => {
                       showToastMessage('✅ Informations sauvegardées', 'success');
                     }}
@@ -4012,7 +4012,7 @@ export default function Dashboard() {
                     className="px-6 py-2.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-medium rounded-xl transition-all active:scale-95"
                   >
                     Réinitialiser mon mot de passe
-                  </button>
+              </button>
                   <p className="text-xs text-slate-500 mt-2">
                     Vous recevrez un lien de réinitialisation par e-mail
                   </p>
@@ -4084,8 +4084,8 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-500">
                     Aucun abonnement Stripe détecté. Pour activer Pro, rendez-vous sur <Link className="font-bold hover:text-orange-600" href="/pricing">/pricing</Link>.
                   </p>
-                )}
-              </div>
+            )}
+          </div>
             </div>
 
             {/* Exports */}
@@ -4121,7 +4121,7 @@ export default function Dashboard() {
                   <Download className="w-5 h-5" />
                   Exporter en Excel
                 </button>
-              </div>
+            </div>
             </div>
           </motion.div>
         )}
@@ -4492,8 +4492,8 @@ export default function Dashboard() {
                       autoFocus
                     />
                   </div>
-                )}
-              </div>
+                        )}
+                      </div>
 
               {/* Description */}
               <div>
@@ -4510,7 +4510,7 @@ export default function Dashboard() {
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none transition-all text-sm resize-none"
                   placeholder="Détails de la facture..."
                 />
-              </div>
+                    </div>
 
               {/* Dossier de destination */}
               <div>
@@ -4538,12 +4538,12 @@ export default function Dashboard() {
                     Aucun dossier créé. Créez-en un depuis l'onglet "Dossiers".
                   </p>
                 )}
-              </div>
+                      </div>
                     </div>
 
             {/* Bouton de validation */}
             <div className="mt-6 pt-6 border-t border-slate-200">
-              <button
+                      <button
                 onClick={validateAndSaveInvoice}
                 className="w-full px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold"
               >
@@ -4581,12 +4581,12 @@ export default function Dashboard() {
               <button
                 onClick={deleteInvoice}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </div>
       )}
 
       {/* Modale création de dossier */}
@@ -4661,8 +4661,8 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+            </div>
+          )}
 
       {/* Modale déplacement vers dossier */}
       {showMoveToFolderModal && invoiceToMove && (
@@ -4672,7 +4672,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
                   <Folder className="w-6 h-6 text-white" />
-                </div>
+        </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 tracking-tight">Déplacer la facture</h3>
                   <p className="text-xs text-slate-500 font-medium">Choisissez un dossier de destination</p>
@@ -4708,7 +4708,7 @@ export default function Dashboard() {
                 <div className="text-center py-8">
                   <Folder className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-500 text-sm font-medium mb-4">Aucun dossier créé</p>
-                  <button
+        <button
                     onClick={() => {
                       setShowMoveToFolderModal(false);
                       setInvoiceToMove(null);
@@ -4718,8 +4718,8 @@ export default function Dashboard() {
                   >
                     <Plus className="w-4 h-4" />
                     Créer un dossier
-                  </button>
-                </div>
+        </button>
+      </div>
               ) : (
                 <>
                   <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
@@ -4733,7 +4733,7 @@ export default function Dashboard() {
                     >
                       <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
                         <Folder className="w-5 h-5 text-white" />
-                      </div>
+    </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-black text-slate-900 text-sm truncate group-hover:text-orange-600 transition-colors">
                           {folder.name}

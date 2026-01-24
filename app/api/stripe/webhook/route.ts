@@ -50,7 +50,10 @@ async function updateProfileWithSubscription(
 ) {
   const priceId = subscription.items.data[0]?.price?.id || null;
   const plan = planFromPriceId(priceId) || ((subscription.metadata?.billingCycle as Plan | undefined) ?? null);
-  const active = subscription.status === 'active' || subscription.status === 'trialing';
+  // ✅ Accès PRO: on accepte active OU trialing (trial = accès autorisé)
+  const entitled = subscription.status === 'active' || subscription.status === 'trialing';
+  // 📧 Email: UNIQUEMENT si actif (jamais sur trialing)
+  const emailAllowed = subscription.status === 'active';
   const currentPeriodEnd = (subscription as any)?.current_period_end as number | undefined;
   const endDate = currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null;
   const stripeCustomerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
@@ -63,14 +66,14 @@ async function updateProfileWithSubscription(
     .maybeSingle();
 
   const prevStatus = ((prevProfile as any)?.subscription_status || '').toString();
-  const prevActive = !!(prevProfile as any)?.stripe_subscription_id && (prevStatus === 'active' || prevStatus === 'trialing');
+  const prevWasActive = prevStatus === 'active';
   const prevSubId = (prevProfile as any)?.stripe_subscription_id || null;
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .update({
-      is_pro: active,
-      plan: active ? plan : null,
+      is_pro: entitled,
+      plan: entitled ? plan : null,
       subscription_status: subscription.status,
       subscription_end_date: endDate,
       stripe_subscription_id: subscription.id,
@@ -81,18 +84,18 @@ async function updateProfileWithSubscription(
 
   console.log('✅ Supabase update result', {
     supabaseUserId,
-    active,
+    entitled,
     plan,
     endDate,
     stripeCustomerId,
     subscription_id: subscription.id,
-    prevActive,
+    prevWasActive,
     prevSubId,
     data,
     error,
   });
 
-  const shouldSendActivationEmail = active && !!endDate && (!prevActive || (prevSubId && prevSubId !== subscription.id));
+  const shouldSendActivationEmail = emailAllowed && !!endDate && (!prevWasActive || (prevSubId && prevSubId !== subscription.id));
   if (shouldSendActivationEmail) {
     try {
       await sendSubscriptionActivatedEmail(supabaseUserId);
