@@ -10,6 +10,8 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
+import { EmptyState } from '@/app/components/ui/EmptyState';
 
 interface Invoice {
   id: string;
@@ -100,6 +102,7 @@ export default function Dashboard() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isProUser, setIsProUser] = useState<boolean | null>(null);
   // Abonnement (affiché dans Paramètres)
   const [billingPlan, setBillingPlan] = useState<string | null>(null);
   const [billingStatus, setBillingStatus] = useState<string | null>(null);
@@ -405,15 +408,14 @@ export default function Dashboard() {
 
       if (profileError) {
         console.error('❌ Dashboard: erreur récupération profil', profileError);
+        setUserEmail(user.email || null);
+        setIsProUser(false);
         return;
       }
 
       const isPro = (profile as any)?.is_pro === true;
-      if (!isPro) {
-        window.location.href = '/pricing';
-        return;
-      }
       setUserEmail(user.email || null);
+      setIsProUser(isPro);
     };
     checkAuth();
   }, []);
@@ -2620,7 +2622,7 @@ export default function Dashboard() {
   };
 
     return (
-    <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
+    <div className="min-h-screen bg-[var(--color-surface-2)] pb-24 font-sans text-slate-900">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -2766,6 +2768,15 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 pb-28">
         <div className="space-y-6">
+          {/* Upsell non-intrusif pour comptes Free */}
+          {isProUser === false && (
+            <UpsellBanner
+              title="Compte Free"
+              description="Passez à Pro pour débloquer le scan IA, les exports et les fonctionnalités premium."
+              ctaLabel="Passer à Pro"
+              ctaHref="/pricing"
+            />
+          )}
         {/* DASHBOARD avec transition AnimatePresence */}
         <AnimatePresence mode="wait">
         {currentView === 'dashboard' && (
@@ -2922,6 +2933,12 @@ export default function Dashboard() {
                 )}
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={chartData}>
+                    <defs>
+                      <linearGradient id="asOrangeBar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.55} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
                     <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
@@ -2937,7 +2954,7 @@ export default function Dashboard() {
                         return [`${value.toFixed(2)} €`, 'Montant TTC'];
                       }}
                     />
-                    <Bar dataKey="montant" fill="#f97316" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="montant" fill="url(#asOrangeBar)" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -2955,9 +2972,16 @@ export default function Dashboard() {
               
               {/* (Suppression des dossiers : classement automatique par mois) */}
 
-          <motion.button
-                onClick={triggerFileInput}
-                disabled={analyzing}
+              <motion.button
+                onClick={() => {
+                  if (isProUser === false) {
+                    showToastMessage('🔒 Fonctionnalité Pro — Passez à Pro pour numériser', 'error');
+                    window.location.href = '/pricing';
+                    return;
+                  }
+                  triggerFileInput();
+                }}
+                disabled={analyzing || isProUser === false}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all"
@@ -3061,9 +3085,9 @@ export default function Dashboard() {
               <div className="flex flex-wrap items-center gap-2">
           <button
                   onClick={() => exportToCSV()}
-                  disabled={invoices.length === 0}
+                  disabled={invoices.length === 0 || isProUser === false}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0
+                    invoices.length === 0 || isProUser === false
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
                   }`}
@@ -3074,9 +3098,9 @@ export default function Dashboard() {
           </button>
                 <button
                   onClick={exportToExcel}
-                  disabled={invoices.length === 0}
+                  disabled={invoices.length === 0 || isProUser === false}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0
+                    invoices.length === 0 || isProUser === false
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
                   }`}
@@ -3087,9 +3111,9 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={generateGlobalPDF}
-                  disabled={invoices.length === 0}
+                  disabled={invoices.length === 0 || isProUser === false}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0
+                    invoices.length === 0 || isProUser === false
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       : 'bg-orange-600 text-white hover:bg-orange-700 shadow-sm'
                   }`}
@@ -3202,25 +3226,23 @@ export default function Dashboard() {
                 <InvoiceCardSkeleton />
               </div>
             ) : filteredInvoices.length === 0 ? (
-              <div className="card-clean rounded-2xl p-8 text-center bg-white border-dashed border-2 border-slate-200">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <X className="w-8 h-8 text-slate-300" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Aucun résultat trouvé</h3>
-                <p className="text-sm text-slate-500 mb-6">
-                  Modifiez vos filtres ou votre recherche pour trouver ce que vous cherchez.
-                </p>
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setCategoryFilter('');
-                    setSelectedMonths([]);
-                  }}
-                  className="px-6 py-2 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-all shadow-md shadow-orange-100"
-                >
-                  Réinitialiser tous les filtres
-                </button>
-                </div>
+              <EmptyState
+                title="Aucun résultat"
+                description="Modifiez vos filtres ou votre recherche pour trouver ce que vous cherchez."
+                icon={<X className="w-8 h-8 text-slate-300" />}
+                action={
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCategoryFilter('');
+                      setSelectedMonths([]);
+                    }}
+                    className="as-btn as-btn-primary"
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                }
+              />
             ) : (
                   <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-widest px-1">
