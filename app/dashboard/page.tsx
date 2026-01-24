@@ -103,7 +103,6 @@ export default function Dashboard() {
   // Abonnement (affiché dans Paramètres)
   const [billingPlan, setBillingPlan] = useState<string | null>(null);
   const [billingStatus, setBillingStatus] = useState<string | null>(null);
-  const [billingEndDate, setBillingEndDate] = useState<string | null>(null);
   const [billingCustomerId, setBillingCustomerId] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date_facture' | 'date_scan' | 'amount_ht' | 'total_amount' | 'categorie'>('date_facture');
@@ -147,15 +146,14 @@ export default function Dashboard() {
       if (!user) {
         setBillingPlan(null);
         setBillingStatus(null);
-        setBillingEndDate(null);
         setBillingCustomerId(null);
         return;
       }
 
-      // select('*') pour rester compatible si des colonnes évoluent côté DB
+      // ⚠️ V1 stable: on ne lit AUCUN champ de date d’abonnement
       const { data: profile, error: pErr } = await supabase
         .from('profiles')
-        .select('*')
+        .select('plan, subscription_status, stripe_customer_id')
         .eq('id', user.id)
         .single();
 
@@ -166,7 +164,6 @@ export default function Dashboard() {
 
       setBillingPlan(profile?.plan ?? null);
       setBillingStatus(profile?.subscription_status ?? null);
-      setBillingEndDate(profile?.subscription_end_date ?? null);
       setBillingCustomerId(profile?.stripe_customer_id ?? null);
     } catch (e) {
       console.warn('⚠️ loadBillingInfo error', e);
@@ -401,7 +398,7 @@ export default function Dashboard() {
       // Vérification PRO : Stripe est la source de vérité (subscription réelle)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('stripe_subscription_id, subscription_status, subscription_end_date')
+        .select('is_pro')
         .eq('id', user.id)
         .single();
 
@@ -410,13 +407,8 @@ export default function Dashboard() {
         return;
       }
 
-      const status = (profile?.subscription_status || '').toString();
-      const hasSub = !!profile?.stripe_subscription_id;
-      const isActive = status === 'active' || status === 'trialing';
-      const endDate = (profile as any)?.subscription_end_date;
-      const endOk = !!endDate && new Date(endDate).getTime() > Date.now() - 60 * 1000; // tolérance 1min
-
-      if (!(hasSub && isActive && endOk)) {
+      const isPro = (profile as any)?.is_pro === true;
+      if (!isPro) {
         window.location.href = '/pricing';
         return;
       }
@@ -4052,13 +4044,9 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Fin de période</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Accès</p>
                     <p className="text-sm font-bold text-slate-900">
-                      {billingLoading
-                        ? 'Chargement…'
-                        : billingEndDate
-                          ? new Date(billingEndDate).toLocaleDateString('fr-FR')
-                          : '—'}
+                      {billingLoading ? 'Chargement…' : (billingPlan ? 'Pro' : 'Free')}
                     </p>
                   </div>
                 </div>

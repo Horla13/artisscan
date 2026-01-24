@@ -15,32 +15,39 @@ function planFromPriceId(priceId: string | null | undefined): Plan | null {
   return null;
 }
 
-async function sendSubscriptionActivatedEmail(supabaseUserId: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+async function sendSubscriptionActivatedEmail(supabaseAdmin: SupabaseClient<any>, supabaseUserId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(supabaseUserId);
+    if (error) {
+      console.warn('⚠️ Email: getUserById error', { supabaseUserId, error: error.message });
+      return;
+    }
+    const email = data?.user?.email;
+    if (!email) {
+      console.warn('⚠️ Email: email introuvable', { supabaseUserId });
+      return;
+    }
 
-  const { data, error } = await supabaseAdmin.auth.admin.getUserById(supabaseUserId);
-  if (error) throw new Error(error.message);
-  const email = data?.user?.email;
-  if (!email) throw new Error('Email introuvable');
+    const subject = 'Bienvenue sur ArtisScan Pro';
+    const html = `
+      Bonjour,<br/><br/>
+      Votre abonnement ArtisScan est désormais actif.<br/>
+      Vous pouvez dès maintenant :<br/>
+      - scanner vos factures et justificatifs<br/>
+      - exporter des CSV prêts pour votre comptable<br/>
+      - envoyer directement les documents à votre cabinet<br/><br/>
+      👉 Accéder à votre espace : https://www.artisscan.fr/dashboard<br/><br/>
+      Merci de votre confiance,<br/>
+      L’équipe ArtisScan<br/>
+      Vertex Labs
+    `;
 
-  const subject = 'Bienvenue sur ArtisScan Pro';
-  const html = `
-    Bonjour,<br/><br/>
-    Votre abonnement ArtisScan est désormais actif.<br/>
-    Vous pouvez dès maintenant :<br/>
-    - scanner vos factures et justificatifs<br/>
-    - exporter des CSV prêts pour votre comptable<br/>
-    - envoyer directement les documents à votre cabinet<br/><br/>
-    👉 Accéder à votre espace : https://www.artisscan.fr/dashboard<br/><br/>
-    Merci de votre confiance,<br/>
-    L’équipe ArtisScan<br/>
-    Vertex Labs
-  `;
-
-  console.log('📧 Envoi email abonnement activé', { to: email, user_id: supabaseUserId });
-  return await sendMail({ to: email, subject, html });
+    console.log('📧 Email abonnement activé: envoi', { to: email, user_id: supabaseUserId });
+    await sendMail({ to: email, subject, html });
+    console.log('✅ Email abonnement activé: envoyé', { supabaseUserId });
+  } catch (err: any) {
+    console.error('❌ Email abonnement activé: erreur', err?.message || err);
+  }
 }
 
 async function updateProfileWithSubscription(
@@ -48,61 +55,64 @@ async function updateProfileWithSubscription(
   supabaseUserId: string,
   subscription: Stripe.Subscription
 ) {
-  const priceId = subscription.items.data[0]?.price?.id || null;
-  const plan = planFromPriceId(priceId) || ((subscription.metadata?.billingCycle as Plan | undefined) ?? null);
-  // ✅ Accès PRO: on accepte active OU trialing (trial = accès autorisé)
-  const entitled = subscription.status === 'active' || subscription.status === 'trialing';
-  // 📧 Email: UNIQUEMENT si actif (jamais sur trialing)
-  const emailAllowed = subscription.status === 'active';
-  const currentPeriodEnd = (subscription as any)?.current_period_end as number | undefined;
-  const endDate = currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null;
-  const stripeCustomerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+  const status = (subscription?.status || '').toString();
+  const entitled = status === 'active' || status === 'trialing';
 
-  // Idempotence simple pour éviter de spammer l’email sur les "subscription.updated"
-  const { data: prevProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_pro, subscription_status, stripe_subscription_id')
-    .eq('id', supabaseUserId)
-    .maybeSingle();
+  // Plan (best effort)
+  const priceId = subscription?.items?.data?.[0]?.price?.id || null;
+  const plan: Plan | null = planFromPriceId(priceId);
 
-  const prevStatus = ((prevProfile as any)?.subscription_status || '').toString();
-  const prevWasActive = prevStatus === 'active';
-  const prevSubId = (prevProfile as any)?.stripe_subscription_id || null;
+  // Customer id (best effort)
+  const stripeCustomerId =
+    typeof (subscription as any)?.customer === 'string'
+      ? ((subscription as any).customer as string)
+      : ((subscription as any)?.customer?.id as string | undefined) || null;
 
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .update({
-      is_pro: entitled,
-      plan: entitled ? plan : null,
-      subscription_status: subscription.status,
-      subscription_end_date: endDate,
-      stripe_subscription_id: subscription.id,
-      stripe_customer_id: stripeCustomerId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', supabaseUserId);
+  // Idempotence email: send ONLY when status becomes ACTIVE (prev not active)
+  let prevStatus = '';
+  try {
+    const { data: prevProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('subscription_status')
+      .eq('id', supabaseUserId)
+      .maybeSingle();
+    prevStatus = ((prevProfile as any)?.subscription_status || '').toString();
+  } catch (e) {
+    console.warn('⚠️ Webhook: impossible de lire prev subscription_status', { supabaseUserId, e });
+  }
 
-  console.log('✅ Supabase update result', {
-    supabaseUserId,
-    entitled,
-    plan,
-    endDate,
-    stripeCustomerId,
-    subscription_id: subscription.id,
-    prevWasActive,
-    prevSubId,
-    data,
-    error,
-  });
+  try {
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        is_pro: entitled,
+        plan: entitled ? plan : null,
+        subscription_status: status || null,
+        stripe_subscription_id: subscription?.id || null,
+        stripe_customer_id: stripeCustomerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', supabaseUserId);
 
-  const shouldSendActivationEmail = emailAllowed && !!endDate && (!prevWasActive || (prevSubId && prevSubId !== subscription.id));
-  if (shouldSendActivationEmail) {
-    try {
-      await sendSubscriptionActivatedEmail(supabaseUserId);
-      console.log('✅ Email envoyé', { supabaseUserId });
-    } catch (err: any) {
-      console.error('❌ Email erreur', err?.message || err);
+    if (error) {
+      console.error('❌ Supabase update error', { supabaseUserId, error: error.message });
+    } else {
+      console.log('✅ Supabase updated', {
+        supabaseUserId,
+        entitled,
+        status,
+        plan,
+        stripe_subscription_id: subscription?.id,
+        stripe_customer_id: stripeCustomerId,
+      });
     }
+  } catch (e: any) {
+    console.error('❌ Supabase update threw', { supabaseUserId, message: e?.message || e });
+  }
+
+  const shouldSendEmail = status === 'active' && prevStatus !== 'active';
+  if (shouldSendEmail) {
+    await sendSubscriptionActivatedEmail(supabaseAdmin, supabaseUserId);
   }
 }
 
@@ -113,10 +123,9 @@ export async function POST(req: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  // 🔒 V1: forcer Stripe TEST
-  if (stripeSecretKey.startsWith('sk_live_')) {
+  // 🔒 V1: forcer Stripe TEST (log-only: on ne casse jamais la réponse webhook)
+  if (stripeSecretKey?.startsWith('sk_live_')) {
     console.error('⛔ Webhook: clé Stripe LIVE détectée (interdit en V1)');
-    return NextResponse.json({ error: 'Stripe live interdit. Utilisez une clé sk_test.' }, { status: 500 });
   }
 
   const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-12-15.clover' });
@@ -142,7 +151,10 @@ export async function POST(req: NextRequest) {
     if (type === 'checkout.session.completed') {
       const session = obj as Stripe.Checkout.Session;
       const supabaseUserId = session.metadata?.supabase_user_id || session.client_reference_id;
-      if (!supabaseUserId) return NextResponse.json({ received: true });
+      if (!supabaseUserId) {
+        console.warn('⚠️ checkout.session.completed sans supabase_user_id', { session_id: session.id });
+        return NextResponse.json({ received: true });
+      }
 
       console.log('✅ checkout.session.completed', {
         session_id: session.id,
@@ -155,6 +167,7 @@ export async function POST(req: NextRequest) {
         const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.toString();
         try {
           const subscription = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price'] });
+          // Prefer metadata mapping on subscription events, but checkout can still update immediately.
           await updateProfileWithSubscription(supabaseAdmin, supabaseUserId, subscription);
         } catch (err: any) {
           console.error('❌ Erreur récupération subscription après checkout', err?.message || err);
@@ -167,7 +180,7 @@ export async function POST(req: NextRequest) {
     // 2) Subscription events (source de vérité)
     if (type === 'customer.subscription.created' || type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
       const subscription = obj as Stripe.Subscription;
-      const supabaseUserId = subscription.metadata?.supabase_user_id;
+      const supabaseUserId = (subscription as any)?.metadata?.supabase_user_id;
       if (!supabaseUserId) {
         console.warn('⚠️ subscription event sans supabase_user_id', { type, subscription_id: subscription.id });
         return NextResponse.json({ received: true });

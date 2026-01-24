@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('is_pro, plan, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end_date')
+      .select('is_pro, plan')
       .eq('id', user.id)
       .single();
 
@@ -43,22 +43,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erreur de vérification' }, { status: 500 });
     }
 
-    const statusStr = ((profile as any)?.subscription_status || '').toString();
-    const endDate = (profile as any)?.subscription_end_date;
-    const isStripePro =
-      !!profile?.stripe_subscription_id &&
-      (statusStr === 'active' || statusStr === 'trialing') &&
-      !!endDate &&
-      new Date(endDate).getTime() > Date.now() - 60 * 1000; // tolérance 1min pour sync
+    const isStripePro = (profile as any)?.is_pro === true;
 
     if (!isStripePro) {
       console.warn('⛔ /api/analyze: accès refusé (non-PRO)', {
         user_id: user.id,
-        plan: profile?.plan,
-        stripe_customer_id: profile?.stripe_customer_id,
-        stripe_subscription_id: profile?.stripe_subscription_id,
-        subscription_status: (profile as any)?.subscription_status,
-        subscription_end_date: endDate,
+        plan: (profile as any)?.plan,
+        is_pro: (profile as any)?.is_pro,
       });
       return NextResponse.json(
         { error: 'Abonnement requis', redirectTo: '/pricing' },
