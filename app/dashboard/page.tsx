@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { StatusBadge } from '@/app/components/ui/StatusBadge';
+import { PreviewModal } from '@/app/components/ui/PreviewModal';
 
 interface Invoice {
   id: string;
@@ -121,6 +122,24 @@ export default function Dashboard() {
   };
   const devWarn = (...args: any[]) => {
     if (isDev) console.warn(...args);
+  };
+
+  // Preview upload (image/PDF)
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string>('Aperçu');
+  const [previewKind, setPreviewKind] = useState<'image' | 'pdf'>('image');
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewRotation, setPreviewRotation] = useState(0);
+
+  const closePreview = () => {
+    setPreviewOpen(false);
+    setPreviewZoom(1);
+    setPreviewRotation(0);
+    if (previewSrc && previewSrc.startsWith('blob:')) {
+      try { URL.revokeObjectURL(previewSrc); } catch {}
+    }
+    setPreviewSrc(null);
   };
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
@@ -2340,6 +2359,22 @@ export default function Dashboard() {
     setLoadingMessage(LOADING_MESSAGES[0]);
 
     try {
+      // Preview (non bloquant): montrer le fichier brut (image/pdf) pendant l’analyse
+      try {
+        if (previewSrc && previewSrc.startsWith('blob:')) URL.revokeObjectURL(previewSrc);
+      } catch {}
+      try {
+        const blobUrl = URL.createObjectURL(file);
+        setPreviewTitle(file.name || 'Aperçu');
+        setPreviewKind(isPdf ? 'pdf' : 'image');
+        setPreviewSrc(blobUrl);
+        setPreviewZoom(1);
+        setPreviewRotation(0);
+        setPreviewOpen(true);
+      } catch {
+        // ignore preview failure
+      }
+
       // Convertir en image base64 (PDF -> rendu page 1 en JPEG; PNG/JPEG -> compression JPEG)
       let imageDataUrl: string;
       if (isPdf) {
@@ -2422,7 +2457,7 @@ export default function Dashboard() {
         montant_ttc: data.total_amount || data.montant_ttc
       };
       
-      console.log('📊 Données enrichies pour le formulaire:', enrichedData);
+      devLog('📊 Données enrichies pour le formulaire:', enrichedData);
       
       setPendingInvoiceData(enrichedData);
       setPendingInvoiceOriginal(enrichedData);
@@ -2435,6 +2470,8 @@ export default function Dashboard() {
       setError(err.message || 'Erreur lors de l\'analyse de la facture');
     } finally {
       setAnalyzing(false);
+      // Permet de re-sélectionner le même fichier
+      try { e.target.value = ''; } catch {}
     }
   };
 
@@ -3078,44 +3115,32 @@ export default function Dashboard() {
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historique</h2>
               <div className="flex flex-wrap items-center gap-2">
           <button
-                  onClick={() => exportToCSV()}
-                  disabled={invoices.length === 0 || isProUser === false}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0 || isProUser === false
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
-                  }`}
-                  title="Exporter en CSV"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  CSV
+            onClick={() => exportToCSV()}
+            disabled={invoices.length === 0 || isProUser === false}
+            className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Exporter en CSV"
+          >
+            <Download className="w-4 h-4" />
+            CSV
           </button>
-                <button
-                  onClick={exportToExcel}
-                  disabled={invoices.length === 0 || isProUser === false}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0 || isProUser === false
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
-                  }`}
-                  title="Exporter en Excel"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Excel Pro
-                </button>
-                <button
-                  onClick={generateGlobalPDF}
-                  disabled={invoices.length === 0 || isProUser === false}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs ${
-                    invoices.length === 0 || isProUser === false
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-orange-600 text-white hover:bg-orange-700 shadow-sm'
-                  }`}
-                  title="Générer PDF Global"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  PDF Global
-                </button>
+          <button
+            onClick={exportToExcel}
+            disabled={invoices.length === 0 || isProUser === false}
+            className="as-btn as-btn-primary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Exporter en Excel"
+          >
+            <Download className="w-4 h-4" />
+            Excel
+          </button>
+          <button
+            onClick={generateGlobalPDF}
+            disabled={invoices.length === 0 || isProUser === false}
+            className="as-btn as-btn-secondary px-3 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Générer PDF Global"
+          >
+            <FileDown className="w-4 h-4" />
+            PDF
+          </button>
               </div>
             </div>
 
@@ -4785,6 +4810,23 @@ export default function Dashboard() {
         </div>
       )}
 
+      <PreviewModal
+        open={previewOpen}
+        title={previewTitle}
+        src={previewSrc}
+        kind={previewKind}
+        zoom={previewZoom}
+        rotation={previewRotation}
+        onZoomIn={() => setPreviewZoom((z) => Math.min(2.25, Math.round((z + 0.15) * 100) / 100))}
+        onZoomOut={() => setPreviewZoom((z) => Math.max(0.6, Math.round((z - 0.15) * 100) / 100))}
+        onRotate={() => setPreviewRotation((r) => (r + 90) % 360)}
+        onReset={() => {
+          setPreviewZoom(1);
+          setPreviewRotation(0);
+        }}
+        onClose={closePreview}
+      />
+
             {/* Bottom Navigation */}
       <nav className="bottom-nav bg-white/95 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto px-2">
@@ -4805,8 +4847,15 @@ export default function Dashboard() {
 
             {/* Scanner central plus gros avec animations */}
             <motion.button
-              onClick={triggerFileInput}
-              disabled={analyzing}
+              onClick={() => {
+                if (isProUser === false) {
+                  showToastMessage('🔒 Fonctionnalité Pro — Passez à Pro pour numériser', 'error');
+                  window.location.href = '/pricing';
+                  return;
+                }
+                triggerFileInput();
+              }}
+              disabled={analyzing || isProUser === false}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
               className="flex flex-col items-center justify-center -mt-10 bg-orange-500 text-white rounded-3xl p-5 shadow-2xl shadow-orange-300 hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white relative"
