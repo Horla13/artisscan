@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { getPdfjs } from '@/lib/pdfjsClient';
 import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder, Percent, Archive, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -2411,9 +2412,9 @@ export default function Dashboard() {
       if (isPdf) {
         showToastMessage('📄 Conversion du PDF en image…', 'success');
         const arrayBuffer = await file.arrayBuffer();
-        const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
-        // Turbopack: éviter la résolution du worker via bundler -> on désactive le worker
-        const pdf = await pdfjs.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
+        const pdfjs: any = await getPdfjs();
+        // V1: worker initialisé côté client via `lib/pdfjsClient.ts`
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement('canvas');
