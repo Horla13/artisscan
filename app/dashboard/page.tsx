@@ -2480,13 +2480,27 @@ export default function Dashboard() {
       setResult(data);
 
       // NE PAS sauvegarder automatiquement - Ouvrir la modale de validation
-      // ✅ Calculer la TVA automatiquement si elle n'est pas fournie
+      // ✅ Standardiser les champs pour la modale (legacy: montant_ht / tva / montant_ttc)
+      // /api/analyze renvoie désormais les champs canoniques: amount_ht / amount_tva / total_amount
+      const htNum =
+        (typeof data?.amount_ht === 'number' ? data.amount_ht : parseAmount(data?.amount_ht)) ||
+        (typeof data?.montant_ht === 'number' ? data.montant_ht : parseAmount(data?.montant_ht));
+      const tvaNum =
+        (typeof data?.amount_tva === 'number' ? data.amount_tva : parseAmount(data?.amount_tva)) ||
+        (typeof data?.tva === 'number' ? data.tva : parseAmount(data?.tva));
+      const ttcNum =
+        (typeof data?.total_amount === 'number' ? data.total_amount : parseAmount(data?.total_amount)) ||
+        (typeof data?.montant_ttc === 'number' ? data.montant_ttc : parseAmount(data?.montant_ttc));
+
+      // TVA fallback si l'API n'a pas pu la sortir mais qu'on a HT+TTC (dernier recours, sans inventer)
+      const computedTva = (Number.isFinite(htNum) && Number.isFinite(ttcNum)) ? (ttcNum - htNum) : NaN;
+
       const enrichedData = {
         ...data,
-        tva: data.tva || (data.total_amount && data.montant_ht 
-          ? (parseFloat(data.total_amount) - parseFloat(data.montant_ht)).toFixed(2)
-          : '0'),
-        montant_ttc: data.total_amount || data.montant_ttc,
+        // Champs legacy (strings) attendus par la modale
+        montant_ht: Number.isFinite(htNum) ? String(htNum) : '',
+        tva: Number.isFinite(tvaNum) ? String(tvaNum) : (Number.isFinite(computedTva) ? String(computedTva) : ''),
+        montant_ttc: Number.isFinite(ttcNum) ? String(ttcNum) : '',
         // Dossier pré-sélectionné (ex: scan lancé depuis la page Dossiers)
         folder_id: data.folder_id ?? preselectFolderId ?? null,
       };
@@ -3127,7 +3141,21 @@ export default function Dashboard() {
             {/* Résultat */}
             {result && (
               <div className="card-clean rounded-2xl p-6 slide-up">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">✅ Facture analysée</h3>
+                 <div className="flex items-start justify-between gap-3 mb-4">
+                   <h3 className="text-lg font-semibold text-slate-900">✅ Facture analysée</h3>
+                   {result?.amounts_verification === 'verified' ? (
+                     <StatusBadge tone="success" size="md">Montants vérifiés</StatusBadge>
+                   ) : result?.amounts_verification === 'to_verify' ? (
+                     <StatusBadge tone="warning" size="md">À vérifier</StatusBadge>
+                   ) : (
+                     <StatusBadge tone="neutral" size="md">Incomplet</StatusBadge>
+                   )}
+                 </div>
+                 {result?.amounts_reason ? (
+                   <div className="mb-4 text-sm text-slate-600">
+                     <span className="font-bold text-slate-700">Montants:</span> {result.amounts_reason}
+                   </div>
+                 ) : null}
                   <div className="space-y-3">
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-medium text-slate-600">Entreprise</span>
@@ -3144,21 +3172,21 @@ export default function Dashboard() {
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-bold text-slate-600">Montant HT</span>
                     <span className="text-sm font-black text-slate-900">
-                      {result.montant_ht ? `${result.montant_ht.toFixed(2)} €` : 'N/A'}
+                      {typeof result.amount_ht === 'number' ? `${result.amount_ht.toFixed(2)} €` : '—'}
                       </span>
                     </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-bold text-slate-600">Montant TTC</span>
                     <span className="text-sm font-black text-slate-900">
-                      {result.total_amount ? `${result.total_amount.toFixed(2)} €` : 'N/A'}
+                      {typeof result.total_amount === 'number' ? `${result.total_amount.toFixed(2)} €` : '—'}
                       </span>
                     </div>
                   <div className="flex justify-between py-2 border-b border-slate-100">
                     <span className="text-sm font-bold text-slate-600">TVA</span>
                     <span className="text-sm font-black text-orange-500">
-                      {result.total_amount && result.montant_ht 
-                        ? `${(result.total_amount - result.montant_ht).toFixed(2)} €` 
-                        : 'N/A'}
+                      {typeof result.amount_tva === 'number'
+                        ? `${result.amount_tva.toFixed(2)} €`
+                        : '—'}
                       </span>
                     </div>
                   {result.date && (

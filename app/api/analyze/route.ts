@@ -6,11 +6,173 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Client Supabase pour vérifier les limites
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+type AmountsVerification = 'verified' | 'to_verify' | 'incomplete';
+
+function cleanAmount(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[^\d.,\-]/g, '').replace(',', '.').trim();
+  if (!cleaned) return null;
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function cleanVatRatePercent(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    // Accepter 0.2 ou 20
+    if (value > 0 && value <= 1) return round2(value * 100);
+    if (value >= 0 && value <= 100) return round2(value);
+    return null;
+  }
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.').trim();
+    const num = parseFloat(cleaned);
+    if (!Number.isFinite(num)) return null;
+    if (num > 0 && num <= 1) return round2(num * 100);
+    if (num >= 0 && num <= 100) return round2(num);
+  }
+  return null;
+}
+
+function checkCoherence(ht: number, tva: number, ttc: number): boolean {
+  const delta = Math.abs((ht + tva) - ttc);
+  // Tolérance comptable: 2 centimes ou 0.5% du TTC (au choix du plus grand)
+  const tol = Math.max(0.02, Math.abs(ttc) * 0.005);
+  return delta <= tol;
+}
+
+function deriveAmounts(input: {
+  ht: number | null;
+  tva: number | null;
+  ttc: number | null;
+  net: number | null;
+  vatRatePercent: number | null;
+}): {
+  amount_ht: number | null;
+  amount_tva: number | null;
+  total_amount: number | null;
+  vat_rate_percent: number | null;
+  amounts_verification: AmountsVerification;
+  amounts_reason: string;
+} {
+  let { ht, tva, ttc, net, vatRatePercent } = input;
+  // “Net à payer” est un alias de TTC quand TTC n'est pas explicitement présent
+  if (ttc === null && net !== null) ttc = net;
+
+  // Normaliser / arrondir si déjà présents
+  ht = ht !== null ? round2(ht) : null;
+  tva = tva !== null ? round2(tva) : null;
+  ttc = ttc !== null ? round2(ttc) : null;
+  const rate = vatRatePercent !== null ? vatRatePercent / 100 : null;
+
+  // 1) HT + TVA + TTC
+  if (ht !== null && tva !== null && ttc !== null) {
+    const ok = checkCoherence(ht, tva, ttc);
+    return {
+      amount_ht: ht,
+      amount_tva: tva,
+      total_amount: ttc,
+      vat_rate_percent: vatRatePercent,
+      amounts_verification: ok ? 'verified' : 'to_verify',
+      amounts_reason: ok ? 'Montants cohérents (HT + TVA ≈ TTC).' : 'Incohérence détectée (HT + TVA ≠ TTC). À vérifier.',
+    };
+  }
+
+  // 2) HT + TVA -> TTC
+  if (ht !== null && tva !== null && ttc === null) {
+    const computedTtc = round2(ht + tva);
+    return {
+      amount_ht: ht,
+      amount_tva: tva,
+      total_amount: computedTtc,
+      vat_rate_percent: vatRatePercent,
+      amounts_verification: 'verified',
+      amounts_reason: 'TTC calculé automatiquement (HT + TVA).',
+    };
+  }
+
+  // 3) TTC + TVA -> HT
+  if (ttc !== null && tva !== null && ht === null) {
+    const computedHt = round2(ttc - tva);
+    return {
+      amount_ht: computedHt,
+      amount_tva: tva,
+      total_amount: ttc,
+      vat_rate_percent: vatRatePercent,
+      amounts_verification: computedHt >= 0 ? 'verified' : 'to_verify',
+      amounts_reason: computedHt >= 0 ? 'HT calculé automatiquement (TTC - TVA).' : 'HT calculé négatif (TTC - TVA). À vérifier.',
+    };
+  }
+
+  // 4) HT seul -> TVA + TTC (taux explicite sinon 20% par défaut, mais à vérifier)
+  if (ht !== null && tva === null && ttc === null) {
+    const usedRate = rate ?? 0.2;
+    const computedTva = round2(ht * usedRate);
+    const computedTtc = round2(ht + computedTva);
+    const usedRatePercent = round2(usedRate * 100);
+    const verification: AmountsVerification = rate ? 'verified' : 'to_verify';
+    const reason = rate
+      ? `TVA et TTC calculés avec le taux détecté (${usedRatePercent}%).`
+      : `TVA et TTC calculés avec un taux par défaut (${usedRatePercent}%). À vérifier.`;
+    return {
+      amount_ht: ht,
+      amount_tva: computedTva,
+      total_amount: computedTtc,
+      vat_rate_percent: vatRatePercent ?? usedRatePercent,
+      amounts_verification: verification,
+      amounts_reason: reason,
+    };
+  }
+
+  // 5) TTC seul -> si taux trouvé: HT/TVA calculés, sinon incomplet avec justification
+  if (ttc !== null && ht === null && tva === null) {
+    if (rate) {
+      const computedHt = round2(ttc / (1 + rate));
+      const computedTva = round2(ttc - computedHt);
+      return {
+        amount_ht: computedHt,
+        amount_tva: computedTva,
+        total_amount: ttc,
+        vat_rate_percent: vatRatePercent,
+        amounts_verification: 'to_verify',
+        amounts_reason: `HT/TVA calculés depuis le TTC avec le taux détecté (${vatRatePercent}%). À vérifier.`,
+      };
+    }
+    return {
+      amount_ht: null,
+      amount_tva: null,
+      total_amount: ttc,
+      vat_rate_percent: vatRatePercent,
+      amounts_verification: 'incomplete',
+      amounts_reason: 'Seul le TTC a été détecté. Taux TVA introuvable → HT/TVA non calculés.',
+    };
+  }
+
+  // Cas fallback: incomplet
+  return {
+    amount_ht: ht,
+    amount_tva: tva,
+    total_amount: ttc,
+    vat_rate_percent: vatRatePercent,
+    amounts_verification: 'incomplete',
+    amounts_reason: 'Montants incomplets. Certains champs sont introuvables sur le document.',
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,24 +268,27 @@ export async function POST(request: NextRequest) {
           content: [
             {
               type: 'text',
-              text: `Analyse cette image de facture et extrais les informations suivantes au format JSON strict :
-- entreprise : le nom de l'entreprise/fournisseur
-- date : la date de la facture (format YYYY-MM-DD si possible)
-- amount_ht : le montant hors taxes (nombre uniquement, sans symbole)
-- amount_tva : le montant TVA (nombre uniquement, sans symbole). Si absent, mets 0.
-- total_amount : le montant toutes taxes comprises (nombre uniquement, sans symbole)
-- description : une brève description des services/produits
-- categorie : classe la facture dans une de ces catégories : "Matériaux", "Carburant", "Restaurant", "Outillage", "Sous-traitance", "Fournitures", "Location", "Autre"
+              text: `Tu es un expert comptable. Analyse cette facture et extrais explicitement les montants comptables.
 
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans markdown, sans code blocks. Format de réponse attendu :
+RÈGLES:
+- Cherche d'abord les libellés: "Total HT", "Montant HT", "TVA", "Total TVA", "Total TTC", "Net à payer".
+- Ne te base jamais sur "le plus gros chiffre".
+- Si un champ n’est pas visible, mets null (pas 0).
+
+Réponds UNIQUEMENT avec un JSON strict (sans markdown).
+Format attendu:
 {
-  "entreprise": "string",
-  "date": "YYYY-MM-DD",
-  "amount_ht": number,
-  "amount_tva": number,
-  "total_amount": number,
-  "description": "string",
-  "categorie": "string"
+  "entreprise": "string|null",
+  "date": "YYYY-MM-DD|null",
+  "description": "string|null",
+  "categorie": "Matériaux"|"Carburant"|"Restaurant"|"Outillage"|"Sous-traitance"|"Fournitures"|"Location"|"Autre",
+  "totaux": {
+    "ht": number|null,
+    "tva": number|null,
+    "ttc": number|null,
+    "net_a_payer": number|null,
+    "taux_tva_percent": number|null
+  }
 }`,
             },
             {
@@ -142,8 +307,8 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
     // Extraire la réponse JSON
     const content = response.choices[0]?.message?.content;
 
-    // Log pour débogage
-    console.log('🤖 Réponse brute de l\'IA:', content);
+    // Log pour débogage (dev uniquement)
+    if (isDev) console.log('🤖 Réponse brute de l\'IA:', content);
 
     if (!content) {
       return NextResponse.json(
@@ -180,40 +345,43 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte supplémentaire, sans 
       }
     }
 
-    // Nettoyer et valider les montants
-    const cleanAmount = (value: any): number => {
-      if (typeof value === 'number') return value;
-      if (typeof value === 'string') {
-        // Retirer €, espaces, et autres caractères non numériques sauf . et ,
-        const cleaned = value.replace(/[^\d.,\-]/g, '').replace(',', '.');
-        const num = parseFloat(cleaned);
-        return isNaN(num) ? 0 : num;
-      }
-      return 0;
-    };
+    // Construire les candidats "comptables" + appliquer la logique déterministe (priorités + calculs + cohérence)
+    const totaux = extractedData?.totaux || {};
+    const ht = cleanAmount(totaux.ht ?? extractedData.amount_ht ?? extractedData.montant_ht);
+    const tva = cleanAmount(totaux.tva ?? extractedData.amount_tva ?? extractedData.tva);
+    const ttc = cleanAmount(totaux.ttc ?? extractedData.total_amount ?? extractedData.montant_ttc);
+    const net = cleanAmount(totaux.net_a_payer);
+    const vatRatePercent = cleanVatRatePercent(totaux.taux_tva_percent ?? extractedData.vat_rate_percent ?? extractedData.taux_tva);
 
-    // Appliquer le nettoyage aux montants
-    const ht = cleanAmount(extractedData.amount_ht ?? extractedData.montant_ht ?? extractedData.montantHT);
-    const tva = cleanAmount(extractedData.amount_tva ?? extractedData.tva);
-    const ttc = cleanAmount(extractedData.total_amount ?? extractedData.totalAmount ?? extractedData.montant_ttc ?? extractedData.montantTTC);
+    const derived = deriveAmounts({ ht, tva, ttc, net, vatRatePercent });
 
-    extractedData.amount_ht = ht;
-    extractedData.amount_tva = tva;
-    extractedData.total_amount = ttc || (ht + tva);
+    extractedData.amount_ht = derived.amount_ht;
+    extractedData.amount_tva = derived.amount_tva;
+    extractedData.total_amount = derived.total_amount;
+    extractedData.vat_rate_percent = derived.vat_rate_percent;
+    extractedData.amounts_verification = derived.amounts_verification;
+    extractedData.amounts_reason = derived.amounts_reason;
 
-    // Ne pas retourner de champs legacy côté frontend
+    // Ne pas retourner des champs legacy / ambiguës côté client
     delete extractedData.montant_ht;
     delete extractedData.montantHT;
     delete extractedData.montant_ttc;
     delete extractedData.montantTTC;
     delete extractedData.totalAmount;
+    delete extractedData.tva;
+    delete extractedData.amount_ht_raw;
+    delete extractedData.amount_tva_raw;
+    delete extractedData.total_amount_raw;
+
+    // Ne pas renvoyer les champs "totaux" (debug) côté client
+    delete extractedData.totaux;
 
     // Assurer que la catégorie est présente
     if (!extractedData.categorie) {
       extractedData.categorie = 'Autre';
     }
 
-    console.log('✅ Données extraites et nettoyées:', extractedData);
+    if (isDev) console.log('✅ Données extraites et nettoyées:', extractedData);
 
     // Retourner les données extraites
     return NextResponse.json(extractedData, { status: 200 });
