@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
+export const runtime = 'nodejs';
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -219,17 +221,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Récupérer le body de la requête
-    const body = await request.json();
-    const { image, imageBase64 } = body;
-    const imageData = image || imageBase64;
+    // Récupérer le body de la requête (multipart file recommandé; JSON legacy accepté)
+    let kind: 'pdf' | 'image' = 'image';
+    let fileBytes: ArrayBuffer | null = null;
+    let fileMime: string | null = null;
+    let imageDataLegacy: string | null = null;
 
-    // Vérifier que l'image est fournie
-    if (!imageData) {
-      return NextResponse.json(
-        { error: 'Aucune image fournie. Veuillez prendre une photo de votre facture.' },
-        { status: 400 }
-      );
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const form = await request.formData();
+      const k = String(form.get('kind') || 'image');
+      kind = k === 'pdf' ? 'pdf' : 'image';
+      const file = form.get('file');
+      if (!file || typeof (file as any).arrayBuffer !== 'function') {
+        return NextResponse.json({ error: 'Fichier manquant' }, { status: 400 });
+      }
+      fileMime = (file as any).type || null;
+      fileBytes = await (file as any).arrayBuffer();
+    } else {
+      const body = await request.json().catch(() => ({}));
+      const { image, imageBase64 } = body || {};
+      imageDataLegacy = image || imageBase64 || null;
+      if (!imageDataLegacy) {
+        return NextResponse.json(
+          { error: 'Aucun fichier fourni. Veuillez sélectionner un PDF ou une image.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Vérifier que la clé API est configurée
@@ -241,34 +259,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Préparer l'image pour l'API OpenAI
-    // Si l'image est déjà en format data URL, on l'utilise directement
-    // Sinon, on ajoute le préfixe data:image
-    const imageUrl = imageData.startsWith('data:')
-      ? imageData
-      : `data:image/jpeg;base64,${imageData}`;
+    let imageUrl: string | null = null;
+    let pdfText: string | null = null;
 
-    // Heuristique anti “photo trop petite/floue” : base64 trop court => on stoppe vite (message humain)
-    // (évite de payer un appel OpenAI pour une image inutilisable)
-    const rawBase64 = imageUrl.includes('base64,') ? imageUrl.split('base64,')[1] : imageData;
-    const approxBytes = Math.floor((rawBase64.length * 3) / 4);
-    if (approxBytes < 18 * 1024) {
-      return NextResponse.json(
-        { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
-        { status: 400 }
-      );
+    if (fileBytes) {
+      if (kind === 'pdf') {
+        // PDF: extraction texte multi-pages côté serveur (pas de PDF.js côté client)
+        const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+        const doc = await pdfjs.getDocument({ data: fileBytes, disableWorker: true }).promise;
+        const pageCount = doc.numPages || 0;
+        let out = '';
+        for (let i = 1; i <= pageCount; i++) {
+          const page = await doc.getPage(i);
+          const tc = await page.getTextContent();
+          const pageText = (tc?.items || [])
+            .map((it: any) => (it?.str || '').toString())
+            .filter(Boolean)
+            .join(' ');
+          out += pageText + '\n';
+        }
+        pdfText = out.trim();
+        if (!pdfText) {
+          return NextResponse.json(
+            { error: 'Impossible de lire le texte du PDF. Essayez une photo (JPG/PNG) plus nette.' },
+            { status: 400 }
+          );
+        }
+        // Limiter la taille envoyée au modèle
+        if (pdfText.length > 12000) pdfText = pdfText.slice(0, 12000);
+      } else {
+        // Image: convertir en data URL pour Vision
+        const buf = Buffer.from(fileBytes);
+        const mime = fileMime || 'image/jpeg';
+        const b64 = buf.toString('base64');
+        imageUrl = `data:${mime};base64,${b64}`;
+        if (buf.byteLength < 18 * 1024) {
+          return NextResponse.json(
+            { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
+            { status: 400 }
+          );
+        }
+      }
+    } else if (imageDataLegacy) {
+      // Legacy JSON: image base64 -> data URL
+      imageUrl = imageDataLegacy.startsWith('data:')
+        ? imageDataLegacy
+        : `data:image/jpeg;base64,${imageDataLegacy}`;
+      const rawBase64 = imageUrl.includes('base64,') ? imageUrl.split('base64,')[1] : imageDataLegacy;
+      const approxBytes = Math.floor((rawBase64.length * 3) / 4);
+      if (approxBytes < 18 * 1024) {
+        return NextResponse.json(
+          { error: 'Photo trop petite ou trop floue. Reprenez la photo plus près, bien nette et bien éclairée.' },
+          { status: 400 }
+        );
+      }
     }
 
-    // Appeler l'API OpenAI avec GPT-4o pour analyser l'image
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Tu es un expert comptable. Analyse cette facture et extrais explicitement les montants comptables.
+    // Appeler OpenAI:
+    // - image -> vision
+    // - pdf -> texte extrait
+    const prompt = `Tu es un expert comptable. Extrais explicitement les montants comptables.
 
 RÈGLES:
 - Cherche d'abord les libellés: "Total HT", "Montant HT", "TVA", "Total TVA", "Total TTC", "Net à payer".
@@ -289,19 +339,23 @@ Format attendu:
     "net_a_payer": number|null,
     "taux_tva_percent": number|null
   }
-}`,
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        pdfText
+          ? { role: 'user', content: `${prompt}\n\nTEXTE PDF (extrait):\n${pdfText}` }
+          : {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imageUrl! } },
+              ],
             },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageUrl,
-              },
-            },
-          ],
-        },
-      ],
+      ] as any,
       response_format: { type: 'json_object' },
-      max_tokens: 500,
+      max_tokens: 600,
     });
 
     // Extraire la réponse JSON

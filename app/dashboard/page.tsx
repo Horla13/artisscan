@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { getPdfjs } from '@/lib/pdfjsClient';
 import { Camera, LayoutDashboard, Clock, ScanLine, Trash2, Settings, Download, X, TrendingUp, Crown, AlertCircle, Receipt, FolderKanban, Plus, FileDown, LogOut, Zap, Calendar, ChevronDown, Mail, Package, FileText, Folder, Percent, Archive, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -14,7 +13,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { StatusBadge } from '@/app/components/ui/StatusBadge';
-import { PreviewModal } from '@/app/components/ui/PreviewModal';
 import { BentoCard } from '@/app/components/ui/BentoCard';
 
 interface Invoice {
@@ -128,23 +126,9 @@ export default function Dashboard() {
     if (isDev) console.warn(...args);
   };
 
-  // Preview upload (image/PDF)
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState<string>('Aperçu');
-  const [previewKind, setPreviewKind] = useState<'image' | 'pdf'>('image');
-  const [previewZoom, setPreviewZoom] = useState(1);
-  const [previewRotation, setPreviewRotation] = useState(0);
-
-  const closePreview = () => {
-    setPreviewOpen(false);
-    setPreviewZoom(1);
-    setPreviewRotation(0);
-    if (previewSrc && previewSrc.startsWith('blob:')) {
-      try { URL.revokeObjectURL(previewSrc); } catch {}
-    }
-    setPreviewSrc(null);
-  };
+  // ✅ Décision produit: AUCUNE prévisualisation document.
+  // On montre uniquement un loader élégant en étapes.
+  const [analysisStep, setAnalysisStep] = useState<'upload' | 'ocr' | 'extract' | null>(null);
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -2389,53 +2373,33 @@ export default function Dashboard() {
     setError('');
     setResult(null);
     setLoadingMessage(LOADING_MESSAGES[0]);
+    setAnalysisStep('upload');
 
     try {
-      // Preview (non bloquant): montrer le fichier brut (image/pdf) pendant l’analyse
-      try {
-        if (previewSrc && previewSrc.startsWith('blob:')) URL.revokeObjectURL(previewSrc);
-      } catch {}
-      try {
-        const blobUrl = URL.createObjectURL(file);
-        setPreviewTitle(file.name || 'Aperçu');
-        setPreviewKind(isPdf ? 'pdf' : 'image');
-        setPreviewSrc(blobUrl);
-        setPreviewZoom(1);
-        setPreviewRotation(0);
-        setPreviewOpen(true);
-      } catch {
-        // ignore preview failure
+      // ✅ Pipeline simplifié: on envoie le fichier au serveur (multipart),
+      // sans preview et sans PDF.js côté client.
+      const form = new FormData();
+      form.append('kind', isPdf ? 'pdf' : 'image');
+
+      if (isPdf) {
+        // PDF: envoyer brut (multi-pages support côté serveur)
+        form.append('file', file, file.name || 'facture.pdf');
+      } else {
+        // Image: compresser (perf) puis envoyer en blob
+        const imageDataUrl = await compressImage(file);
+        const compressedSize = (imageDataUrl.length * 3) / 4 / (1024 * 1024);
+        if (compressedSize > 4) {
+          showToastMessage('Image trop lourde après compression. Essayez de reculer.', 'error');
+          setAnalyzing(false);
+          setAnalysisStep(null);
+          return;
+        }
+        const blob = await (await fetch(imageDataUrl)).blob();
+        form.append('file', blob, 'facture.jpg');
       }
 
-      // Convertir en image base64 (PDF -> rendu page 1 en JPEG; PNG/JPEG -> compression JPEG)
-      let imageDataUrl: string;
-      if (isPdf) {
-        showToastMessage('📄 Conversion du PDF en image…', 'success');
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfjs: any = await getPdfjs();
-        // V1: worker initialisé côté client via `lib/pdfjsClient.ts`
-        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Impossible de lire le PDF (canvas indisponible).');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      } else {
-        // Compresser l'image
-        imageDataUrl = await compressImage(file);
-      }
-      
-      // Vérifier la taille après compression
-      const compressedSize = (imageDataUrl.length * 3) / 4 / (1024 * 1024);
-      if (compressedSize > 4) {
-        showToastMessage('Image toujours trop lourde. Essayez de reculer.', 'error');
-        setAnalyzing(false);
-        return;
-      }
+      // Étapes UX
+      setAnalysisStep('ocr');
 
       // Récupérer le token Supabase pour auth serveur (bug "non authentifié")
       const { data: { session } } = await supabase.auth.getSession();
@@ -2449,10 +2413,9 @@ export default function Dashboard() {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ image: imageDataUrl }),
+        body: form,
       });
 
       const text = await response.text();
@@ -2477,6 +2440,7 @@ export default function Dashboard() {
         throw new Error(data.error || 'Erreur lors de l\'analyse');
       }
 
+      setAnalysisStep('extract');
       setResult(data);
 
       // NE PAS sauvegarder automatiquement - Ouvrir la modale de validation
@@ -2512,11 +2476,14 @@ export default function Dashboard() {
       setPendingManuallyEdited(false);
       setShowValidationModal(true);
       setPreselectFolderId(null);
+      // étape finale: on revient à l'état neutre
+      setTimeout(() => setAnalysisStep(null), 250);
 
     } catch (err: any) {
       console.error('Erreur:', err);
       showToastMessage(err.message || 'Erreur lors de l\'analyse', 'error');
       setError(err.message || 'Erreur lors de l\'analyse de la facture');
+      setAnalysisStep(null);
     } finally {
       setAnalyzing(false);
       // Permet de re-sélectionner le même fichier
@@ -5084,22 +5051,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <PreviewModal
-        open={previewOpen}
-        title={previewTitle}
-        src={previewSrc}
-        kind={previewKind}
-        zoom={previewZoom}
-        rotation={previewRotation}
-        onZoomIn={() => setPreviewZoom((z) => Math.min(2.25, Math.round((z + 0.15) * 100) / 100))}
-        onZoomOut={() => setPreviewZoom((z) => Math.max(0.6, Math.round((z - 0.15) * 100) / 100))}
-        onRotate={() => setPreviewRotation((r) => (r + 90) % 360)}
-        onReset={() => {
-          setPreviewZoom(1);
-          setPreviewRotation(0);
-        }}
-        onClose={closePreview}
-      />
+      {/* ✅ Décision produit: pas de prévisualisation document */}
 
             {/* Bottom Navigation */}
       <nav className="bottom-nav bg-white/95 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0">
