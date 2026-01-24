@@ -44,10 +44,24 @@ ALTER TABLE scans ADD COLUMN IF NOT EXISTS nom_chantier TEXT;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_ht NUMERIC;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_tva NUMERIC;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_amount NUMERIC;
+-- ✅ Source de création (scan / import / manuel) — optionnel mais utile produit
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS source TEXT;
 -- ✅ V1: indicateur (UI/cache) — doit exister pour éviter erreurs "schema cache"
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS modified_manually BOOLEAN DEFAULT FALSE;
 -- ✅ V1: updated_at pour stabilité + triggers
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- ✅ Période optionnelle: autoriser date_facture NULL (affichage "Sans période")
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'scans' AND column_name = 'date_facture'
+  ) THEN
+    -- Idempotent: si déjà nullable, cette commande ne casse pas.
+    EXECUTE 'ALTER TABLE scans ALTER COLUMN date_facture DROP NOT NULL';
+  END IF;
+END $$;
 
 -- Backfill SAFE depuis les anciennes colonnes si elles existent (idempotent)
 DO $$

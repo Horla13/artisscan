@@ -22,6 +22,7 @@ interface Invoice {
   amount_ht: number;
   amount_tva: number;
   total_amount: number; // TTC (champ standard)
+  // Période optionnelle: si vide => "Sans période" (en DB peut être NULL)
   date_facture: string;
   description: string;
   categorie?: string;
@@ -354,6 +355,7 @@ export default function Dashboard() {
   };
 
   const getMonthLabel = (monthKey: string) => {
+    if (monthKey === '__none__') return 'Sans période';
     // monthKey = YYYY-MM
     if (!/^\d{4}-\d{2}$/.test(monthKey)) return monthKey || 'Mois inconnu';
     const d = new Date(`${monthKey}-01T00:00:00`);
@@ -363,20 +365,13 @@ export default function Dashboard() {
 
   const availableMonths = useMemo(() => {
     const keys = invoices
-      .map((inv) => getMonthKey(inv.date_facture || inv.created_at))
+      .map((inv) => getMonthKey((inv as any)?.date_facture || undefined) || '__none__')
       .filter(Boolean);
     return Array.from(new Set(keys)).sort((a, b) => b.localeCompare(a));
   }, [invoices]);
 
-  // Par défaut: sélectionner le mois courant ou le plus récent
-  useEffect(() => {
-    if (selectedMonths.length > 0) return;
-    if (availableMonths.length === 0) return;
-    const now = new Date();
-    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const defaultMonth = availableMonths.includes(currentKey) ? currentKey : availableMonths[0];
-    setSelectedMonths([defaultMonth]);
-  }, [availableMonths, selectedMonths.length]);
+  // ✅ Décision produit: la période est OPTIONNELLE.
+  // Par défaut on affiche TOUTES les factures (selectedMonths = []).
 
   // ========== CHARGEMENT DE L'EMAIL DU COMPTABLE DEPUIS LE PROFIL ==========
   useEffect(() => {
@@ -469,7 +464,7 @@ export default function Dashboard() {
   // Filtrer les factures (Chronologie + Recherche + Catégorie)
   const filteredInvoices = invoices.filter((inv) => {
     // 1. Filtre temporel multi-mois
-    const invMonthKey = getMonthKey(inv.date_facture || inv.created_at);
+    const invMonthKey = getMonthKey(inv.date_facture || undefined) || '__none__';
     const matchMonth = selectedMonths.length === 0 || selectedMonths.includes(invMonthKey);
     
     // 2. Filtre par catégorie (Dropdown) - Version Robuste & Insensible à la casse
@@ -680,14 +675,16 @@ export default function Dashboard() {
           const tva = parseAmount(inv.amount_tva);
           const ttc = parseAmount(inv.total_amount) || (ht + tva);
 
-          const dateFacture = (inv.date_facture || inv.date || '').toString().trim() || (inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '');
+          // ✅ Période optionnelle: date_facture peut être NULL (=> "Sans période")
+          const rawDate = inv?.date_facture ?? inv?.date ?? null;
+          const dateFacture = typeof rawDate === 'string' ? rawDate.trim() : '';
 
           return {
             ...inv,
             total_amount: ttc,
             amount_ht: ht,
             amount_tva: tva,
-            date_facture: dateFacture,
+            date_facture: dateFacture || '',
             categorie: normalizeCategory(inv.categorie || ''),
             modified_manually: inv.modified_manually === true,
           } as Invoice;
@@ -2582,9 +2579,9 @@ export default function Dashboard() {
       const finalCategory = normalizeCategory(finalCategoryRaw) || 'Autre';
 
       // Structure exacte conforme à la table SQL
-      const dateFacture =
-        (pendingInvoiceData.date && String(pendingInvoiceData.date).trim()) ||
-        new Date().toISOString().slice(0, 10);
+      // ✅ Période optionnelle: l'utilisateur peut laisser la date vide
+      const dateFactureRaw = (pendingInvoiceData.date && String(pendingInvoiceData.date).trim()) || '';
+      const dateFacture = dateFactureRaw ? dateFactureRaw : null;
 
       // ✅ IMPORTANT: insertion côté serveur (cohérence DB → UI → CSV)
       const { data: { session } } = await supabase.auth.getSession();
@@ -2649,6 +2646,8 @@ export default function Dashboard() {
       console.log('✅ Données rafraîchies');
       
       // ✅ REDIRECTION VERS L'HISTORIQUE (BLOC 4 FINITIONS)
+      // On enlève toute sélection de période pour éviter une "facture invisible" après scan
+      setSelectedMonths([]);
       setCurrentView('historique');
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -3290,7 +3289,7 @@ export default function Dashboard() {
                   const groups: { monthKey: string; invoices: Invoice[] }[] = [];
 
                   for (const inv of sorted) {
-                    const mk = getMonthKey(inv.date_facture || inv.created_at) || 'unknown';
+                    const mk = getMonthKey(inv.date_facture || undefined) || '__none__';
                     const last = groups[groups.length - 1];
                     if (!last || last.monthKey !== mk) groups.push({ monthKey: mk, invoices: [] });
                     groups[groups.length - 1].invoices.push(inv);
@@ -3314,6 +3313,9 @@ export default function Dashboard() {
                                 {invoice.modified_manually === true && (
                                   <StatusBadge tone="warning">Modifiée</StatusBadge>
                                 )}
+                                {(!invoice.date_facture || getMonthKey(invoice.date_facture || undefined) === '') ? (
+                                  <StatusBadge tone="neutral">Sans période</StatusBadge>
+                                ) : null}
                                 {invoice.archived === true ? (
                                   <StatusBadge tone="neutral">Archivé</StatusBadge>
                                 ) : (

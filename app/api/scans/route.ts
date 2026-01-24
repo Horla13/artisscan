@@ -119,23 +119,49 @@ export async function POST(req: NextRequest) {
     const modified_manually = invoiceData.modified_manually === true;
 
     // 4. Insérer la facture dans la base de données
-    const { data: invoice, error: insertError } = await supabaseAdmin
-      .from('scans')
-      .insert([{
-        user_id: user.id,
-        entreprise: (invoiceData.entreprise || '').toString().trim() || 'Non spécifié',
-        description: (invoiceData.description || '').toString(),
-        categorie: (invoiceData.categorie || 'Autre').toString(),
-        date_facture: invoiceData.date_facture || invoiceData.date || new Date().toISOString().slice(0, 10),
-        folder_id: invoiceData.folder_id ?? null,
-        amount_ht,
-        amount_tva,
-        total_amount,
-        modified_manually,
-        created_at: new Date().toISOString(),
-      }])
-      .select()
-      .single();
+    // ✅ Période optionnelle: date_facture peut être NULL
+    let dateFacture: string | null = null;
+    const rawDate = (invoiceData as any)?.date_facture ?? (invoiceData as any)?.date ?? null;
+    if (rawDate === null) {
+      dateFacture = null;
+    } else if (typeof rawDate === 'string') {
+      const trimmed = rawDate.trim();
+      dateFacture = trimmed ? trimmed : null;
+    } else {
+      dateFacture = null;
+    }
+
+    const baseRow: any = {
+      user_id: user.id,
+      entreprise: (invoiceData.entreprise || '').toString().trim() || 'Non spécifié',
+      description: (invoiceData.description || '').toString(),
+      categorie: (invoiceData.categorie || 'Autre').toString(),
+      date_facture: dateFacture,
+      folder_id: invoiceData.folder_id ?? null,
+      amount_ht,
+      amount_tva,
+      total_amount,
+      modified_manually,
+      created_at: new Date().toISOString(),
+    };
+
+    // Bonus: source="scan" si la colonne existe (sinon retry sans casser)
+    const rowWithSource = { ...baseRow, source: 'scan' };
+
+    let invoice: any = null;
+    let insertError: any = null;
+    const tryInsert = async (row: any) => {
+      const { data, error } = await supabaseAdmin.from('scans').insert([row]).select().single();
+      return { data, error };
+    };
+
+    let attempt = await tryInsert(rowWithSource);
+    const msg = String(attempt.error?.message || '');
+    if (attempt.error && (msg.includes("Could not find the 'source' column") || msg.includes('schema cache'))) {
+      attempt = await tryInsert(baseRow);
+    }
+    invoice = attempt.data;
+    insertError = attempt.error;
 
     if (insertError) {
       console.error('❌ Erreur insertion facture:', insertError);
