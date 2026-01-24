@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
+import { StatusBadge } from '@/app/components/ui/StatusBadge';
 
 interface Invoice {
   id: string;
@@ -114,6 +115,13 @@ export default function Dashboard() {
   const [companyAddress, setCompanyAddress] = useState('');
   const [companySiret, setCompanySiret] = useState('');
   const [companyProfession, setCompanyProfession] = useState('');
+  const isDev = process.env.NODE_ENV !== 'production';
+  const devLog = (...args: any[]) => {
+    if (isDev) console.log(...args);
+  };
+  const devWarn = (...args: any[]) => {
+    if (isDev) console.warn(...args);
+  };
 
   // Charger les infos de l'entreprise depuis le localStorage au démarrage
   useEffect(() => {
@@ -529,20 +537,11 @@ export default function Dashboard() {
     nombreFactures: filteredInvoices.length
   };
 
-  // Log des stats pour diagnostic
-  useEffect(() => {
-    console.log('📊 === STATS CALCULÉES ===');
-    console.log('Mois sélectionnés:', selectedMonths.length === 0 ? 'Tous' : selectedMonths.join(', '));
-    console.log('Nombre de factures filtrées:', filteredInvoices.length);
-    console.log('Total HT:', stats.totalHT, '€');
-    console.log('Total TTC:', stats.totalTTC, '€');
-    console.log('TVA récupérable:', stats.tvaRecuperable, '€');
-  }, [filteredInvoices, selectedMonths]);
+  // (Vercel) Logging minimal: pas de logs de stats en production
 
   // Données pour le graphique des 7 derniers jours (TTC) - VERSION DYNAMIQUE
   const getLast7DaysData = () => {
-    console.log('🔍 === GRAPHIQUE 7 JOURS (created_at >= now-7j) ===');
-    console.log('📦 Nombre total de factures disponibles:', invoices.length);
+    devLog('🔍 Graph 7j: invoices=', invoices.length);
     
     // Helper pour extraire YYYY-MM-DD sans décalage de fuseau horaire
     const getPureISODate = (raw: string | Date) => {
@@ -569,7 +568,7 @@ export default function Dashboard() {
       if (!d || isNaN(d.getTime())) return false;
       return d >= cutoff;
     });
-    console.log('📦 Factures sur 7 jours (created_at):', last7.length);
+    devLog('📦 Graph 7j: last7=', last7.length);
     
     // Générer les 7 derniers jours au format YYYY-MM-DD
     for (let i = 6; i >= 0; i--) {
@@ -592,7 +591,7 @@ export default function Dashboard() {
         }
       });
 
-      console.log(`📊 ${label} (${targetDateStr}): ${dayTotal}€`);
+      // devLog(`📊 ${label} (${targetDateStr}): ${dayTotal}€`);
 
       processedData.push({
         date: label,
@@ -601,7 +600,7 @@ export default function Dashboard() {
       });
     }
 
-    console.log("📊 Données du graphique:", processedData);
+    // devLog("📊 Données du graphique:", processedData);
     return processedData;
   };
 
@@ -620,14 +619,11 @@ export default function Dashboard() {
 
   // Charger les factures depuis Supabase - SOURCE UNIQUE DE DONNÉES
   const loadInvoices = async () => {
-    console.log('📥 === DÉBUT CHARGEMENT FACTURES SUPABASE ===');
     setLoadingInvoices(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('👤 User ID:', user?.id);
       
       if (user) {
-        console.log('🔍 Requête Supabase: scans WHERE user_id =', user.id, 'AND archived != true');
       const { data, error } = await supabase
           .from('scans')
         .select('*')
@@ -640,7 +636,7 @@ export default function Dashboard() {
           throw error;
         }
         
-        console.log('✅ Factures reçues de Supabase:', data?.length || 0);
+        devLog('✅ Factures Supabase:', data?.length || 0);
         
         // Normaliser les champs (évite bugs historiques/excel/csv sur anciennes lignes)
         const normalized = (data || []).map((inv: any) => {
@@ -663,16 +659,14 @@ export default function Dashboard() {
         });
 
         setInvoices(normalized);
-        console.log('💾 État invoices mis à jour avec', data?.length || 0, 'factures');
       } else {
-        console.warn('⚠️ Aucun utilisateur connecté');
+        devWarn('⚠️ Aucun utilisateur connecté');
       }
     } catch (err) {
       console.error('❌ Erreur chargement factures:', err);
       showToastMessage('Impossible de charger vos factures. Vérifiez votre connexion et réessayez.', 'error');
     } finally {
       setLoadingInvoices(false);
-      console.log('✅ === FIN CHARGEMENT FACTURES ===');
     }
   };
 
@@ -3277,9 +3271,10 @@ export default function Dashboard() {
                               <div className="flex items-center gap-2 mb-2">
                                 <h4 className="font-black text-slate-900 text-lg tracking-tight">{invoice.entreprise}</h4>
                                 {invoice.categorie && (
-                                  <span className="inline-block px-2.5 py-1 text-[10px] font-black bg-orange-50 text-orange-600 rounded-lg border border-orange-100 uppercase tracking-wider">
-                                    {invoice.categorie}
-                      </span>
+                                  <StatusBadge tone="brand">{invoice.categorie}</StatusBadge>
+                                )}
+                                {invoice.modified_manually === true && (
+                                  <StatusBadge tone="warning">Modifiée</StatusBadge>
                                 )}
                     </div>
                               <div className="flex flex-col gap-1">
@@ -3414,25 +3409,25 @@ export default function Dashboard() {
                           </div>
 
                           <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-3">
-                            <div className="flex-1">
+                            <div className="flex-1 text-right">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">Montant HT</span>
-                              <span className="font-black text-slate-900 text-base">
+                              <span className="font-black text-slate-900 text-base tabular-nums">
                                 {(invoice.amount_ht || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                       </span>
                     </div>
 
                             <div className="w-px h-8 bg-slate-200"></div>
 
-                            <div className="flex-1">
-                              <span className="text-[10px] text-orange-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
-                              <span className="font-black text-orange-500 text-lg">
+                            <div className="flex-1 text-right">
+                              <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">Montant TTC</span>
+                              <span className="font-black text-[var(--primary)] text-lg tabular-nums">
                                 {(invoice.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                       </span>
                     </div>
 
-                            <div className="hidden md:block flex-1 border-l border-slate-200 pl-4">
+                            <div className="hidden md:block flex-1 border-l border-slate-200 pl-4 text-right">
                               <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block mb-0.5">TVA Récupérée</span>
-                              <span className="font-black text-orange-500 italic text-base">
+                              <span className="font-black text-[var(--primary)] italic text-base tabular-nums">
                                 {(invoice.amount_tva || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                       </span>
                     </div>
