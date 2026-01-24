@@ -14,6 +14,7 @@ import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { StatusBadge } from '@/app/components/ui/StatusBadge';
 import { PreviewModal } from '@/app/components/ui/PreviewModal';
+import { BentoCard } from '@/app/components/ui/BentoCard';
 
 interface Invoice {
   id: string;
@@ -2799,15 +2800,6 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 pb-28">
         <div className="space-y-6">
-          {/* Upsell non-intrusif pour comptes Free */}
-          {isProUser === false && (
-            <UpsellBanner
-              title="Compte Free"
-              description="Passez à Pro pour débloquer le scan IA, les exports et les fonctionnalités premium."
-              ctaLabel="Passer à Pro"
-              ctaHref="/pricing"
-            />
-          )}
         {/* DASHBOARD avec transition AnimatePresence */}
         <AnimatePresence mode="wait">
         {currentView === 'dashboard' && (
@@ -2819,223 +2811,272 @@ export default function Dashboard() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="space-y-6"
           >
-            {/* Résumé Chronologie (mois sélectionné) - DESIGN CLAIR MODERNE */}
-            <div className="bg-white rounded-3xl p-6 text-slate-900 overflow-hidden relative border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
-                <TrendingUp className="w-32 h-32 rotate-12 text-slate-900" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-4">Vue d'ensemble de l'activité</h3>
-                <div className="grid grid-cols-2 gap-8">
-                  <div>
-                    <p className="text-3xl font-black mb-1 text-slate-900">
-                      {monthSummary.totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
-                    </p>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Total HT (mois)</p>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-black mb-1 text-orange-500">
-                      {monthSummary.totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
-                    </p>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">Total TTC (mois)</p>
-                  </div>
-                </div>
-                <div className="mt-6">
-                  <div className="flex justify-between text-[10px] font-bold uppercase mb-2">
-                    <span className="text-slate-500">TVA récupérable (mois)</span>
-                    <span className="text-orange-500 font-black">
-                      {monthSummary.tva.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} €
-                    </span>
-                  </div>
-                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 shadow-inner">
-                    <div
-                      className="h-full bg-orange-500 transition-all duration-700"
-                      style={{ width: `${Math.min((monthSummary.totalTTC > 0 ? (monthSummary.tva / monthSummary.totalTTC) : 0) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-        </div>
-
-            {/* Stats principales - 3 cartes avec animations */}
+            {/* ✅ BREAKING VISUEL: Bento Grid Premium */}
             {loadingInvoices ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatsCardSkeleton />
-                <StatsCardSkeleton />
-                <StatsCardSkeleton />
-            </div>
+              <div className="grid grid-cols-12 gap-6">
+                <div className="col-span-12 lg:col-span-7 as-card p-8 animate-pulse">
+                  <div className="h-4 w-32 bg-slate-200 rounded mb-6" />
+                  <div className="h-12 w-60 bg-slate-200 rounded mb-6" />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="h-20 bg-slate-100 rounded-2xl" />
+                    <div className="h-20 bg-slate-100 rounded-2xl" />
+                    <div className="h-20 bg-slate-100 rounded-2xl" />
+                  </div>
+                </div>
+                <div className="col-span-12 lg:col-span-5 as-card p-8 animate-pulse">
+                  <div className="h-4 w-40 bg-slate-200 rounded mb-6" />
+                  <div className="h-24 bg-slate-100 rounded-2xl" />
+                </div>
+                <div className="col-span-12 lg:col-span-7 as-card p-8 animate-pulse">
+                  <div className="h-4 w-44 bg-slate-200 rounded mb-6" />
+                  <div className="h-56 bg-slate-100 rounded-2xl" />
+                </div>
+                <div className="col-span-12 lg:col-span-5 as-card p-8 animate-pulse">
+                  <div className="h-4 w-32 bg-slate-200 rounded mb-6" />
+                  <div className="space-y-3">
+                    <div className="h-12 bg-slate-100 rounded-2xl" />
+                    <div className="h-12 bg-slate-100 rounded-2xl" />
+                    <div className="h-12 bg-slate-100 rounded-2xl" />
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Carte 1 : Total HT avec animation fade-in up */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.1 }}
-                whileHover={{ scale: 1.02, y: -4 }}
-                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Total HT</p>
-                    <p className="text-3xl font-black text-slate-900">
-                      {stats.totalHT.toLocaleString('fr-FR', { 
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })} €
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">{stats.nombreFactures} docs</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#ff6600">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </div>
-              </motion.div>
+              <div className="grid grid-cols-12 gap-6">
+                {/* KPI HERO */}
+                <div className="col-span-12 lg:col-span-7">
+                  <BentoCard
+                    title="Aperçu"
+                    subtitle="Votre activité sur la période sélectionnée."
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    right={
+                      <StatusBadge tone="brand" size="md">
+                        {selectedMonths.length === 0 ? 'Tous les mois' : `${selectedMonths.length} mois`}
+                      </StatusBadge>
+                    }
+                    className="relative overflow-hidden"
+                  >
+                    <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[var(--primary)] opacity-15 blur-3xl" />
+                    <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-[var(--primary)] opacity-10 blur-3xl" />
 
-              {/* Carte 2 : TVA récupérable avec animation fade-in up */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.2 }}
-                whileHover={{ scale: 1.02, y: -4 }}
-                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">TVA récupérable</p>
-                    <p className="text-3xl font-black text-slate-900">
-                      {stats.tvaRecuperable.toLocaleString('fr-FR', { 
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })} €
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">TVA cumulée</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
-                    <TrendingUp className="w-6 h-6 text-orange-500" />
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Carte 3 : Total TTC avec animation fade-in up */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.3 }}
-                whileHover={{ scale: 1.02, y: -4 }}
-                className="card-clean rounded-3xl p-6 bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-black text-orange-500 mb-1 uppercase tracking-widest">Total TTC</p>
-                    <p className="text-3xl font-black text-slate-900">
-                      {stats.totalTTC.toLocaleString('fr-FR', { 
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })} €
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">Total à payer</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
-                    <Receipt className="w-6 h-6 text-orange-500" />
-                  </div>
-                </div>
-              </motion.div>
-          </div>
-        )}
-
-            {/* Graphique 7 derniers jours (TTC) */}
-            <div className="card-clean rounded-3xl p-6 relative bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dépenses des 7 derniers jours</h3>
-                {chartData.every(d => d.montant === 0) && (
-                  <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Aucune dépense cette semaine
-                  </span>
-                )}
-              </div>
-              
-              <div className="relative">
-                {chartData.every(d => d.montant === 0) && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/50 backdrop-blur-[1px]">
-                    <p className="text-sm text-slate-400 italic">Aucune facture sur les 7 derniers jours</p>
-                  </div>
-                )}
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={chartData}>
-                    <defs>
-                      <linearGradient id="asOrangeBar" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.95} />
-                        <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.55} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#fff', 
-                        border: '1px solid #f1f5f9',
-                        borderRadius: '8px',
-                        fontSize: '14px'
-                      }}
-                      formatter={(value: number | undefined) => {
-                        if (value === undefined) return ['0.00 €', 'Montant TTC'];
-                        return [`${value.toFixed(2)} €`, 'Montant TTC'];
-                      }}
-                    />
-                    <Bar dataKey="montant" fill="url(#asOrangeBar)" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Section Scanner */}
-            <div className="card-clean rounded-3xl p-8 text-center bg-white border border-slate-200 shadow-sm transition-all hover:shadow-md">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-orange-50 flex items-center justify-center shadow-inner">
-                <ScanLine className="w-10 h-10 text-orange-500" />
-              </div>
-              <h2 className="text-xl font-black text-slate-900 mb-2">Nouvelle Facture</h2>
-              <p className="text-sm text-slate-500 mb-6">
-                Scannez vos documents pour une analyse IA instantanée
-              </p>
-              
-              {/* (Suppression des dossiers : classement automatique par mois) */}
-
-              <motion.button
-                onClick={() => {
-                  if (isProUser === false) {
-                    showToastMessage('🔒 Fonctionnalité Pro — Passez à Pro pour numériser', 'error');
-                    window.location.href = '/pricing';
-                    return;
-                  }
-                  triggerFileInput();
-                }}
-                disabled={analyzing || isProUser === false}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="btn-primary w-full max-w-xs mx-auto py-4 px-6 rounded-2xl font-black text-base shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all"
-                title="Scanner une facture"
-                >
-                  {analyzing ? (
-                  <span className="flex items-center justify-center">
-                    <div className="spinner w-5 h-5 mr-3 border-white/30 border-t-white"></div>
-                    {loadingMessage}
-                      </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <motion.div
-                      animate={analyzing ? { scale: [1, 1.2, 1] } : {}}
-                      transition={{ repeat: Infinity, duration: 1.5 }}
-                    >
-                      <Camera className="w-6 h-6" />
-                    </motion.div>
-                    NUMÉRISER MAINTENANT
-                  </span>
-                  )}
-          </motion.button>
+                    <div className="flex items-end justify-between gap-6">
+                      <div className="min-w-0">
+                        <div className="text-xs font-black uppercase tracking-widest text-slate-500">Dépenses TTC</div>
+                        <div className="mt-2 text-5xl sm:text-6xl font-black tracking-tight text-slate-900 tabular-nums">
+                          {stats.totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </div>
+                        <div className="mt-2 text-sm text-slate-600">
+                          Total HT & TVA inclus ci-dessous.
+                        </div>
+                      </div>
                     </div>
+
+                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white/70 p-5">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">HT</div>
+                        <div className="mt-2 text-2xl font-black text-slate-900 tabular-nums">
+                          {stats.totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white/70 p-5">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">TVA récupérable</div>
+                        <div className="mt-2 text-2xl font-black text-slate-900 tabular-nums">
+                          {stats.tvaRecuperable.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white/70 p-5">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Documents</div>
+                        <div className="mt-2 text-2xl font-black text-slate-900 tabular-nums">
+                          {stats.nombreFactures}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8">
+                      <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                        <span>Ratio TVA / TTC</span>
+                        <span className="text-[var(--primary)] tabular-nums">
+                          {stats.totalTTC > 0 ? `${Math.round((stats.tvaRecuperable / stats.totalTTC) * 100)}%` : '0%'}
+                        </span>
+                      </div>
+                      <div className="h-3 w-full rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
+                        <div
+                          className="h-full bg-[var(--primary)] transition-all duration-700"
+                          style={{ width: `${Math.min(stats.totalTTC > 0 ? (stats.tvaRecuperable / stats.totalTTC) * 100 : 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </BentoCard>
+                </div>
+
+                {/* PRO / UPSELL + ACTIONS */}
+                <div className="col-span-12 lg:col-span-5 grid gap-6">
+                  <BentoCard
+                    title={isProUser ? 'Pro actif' : 'Passez Pro'}
+                    subtitle={isProUser ? 'Vous êtes débloqué.' : 'Débloquez scan IA + exports.'}
+                    icon={<Crown className="w-4 h-4" />}
+                    right={isProUser ? <StatusBadge tone="success" size="md">Actif</StatusBadge> : <StatusBadge tone="brand" size="md">Pro</StatusBadge>}
+                    className={isProUser ? '' : 'bg-gradient-to-br from-white to-[var(--color-brand-50)] border-2 border-[var(--color-brand-100)]'}
+                  >
+                    {isProUser ? (
+                      <div className="flex flex-col gap-3">
+                        <button
+                          onClick={startCustomerPortal}
+                          disabled={billingLoading || !billingCustomerId}
+                          className="as-btn as-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          Gérer via Stripe
+                        </button>
+                        <Link href="/pricing" className="as-btn as-btn-secondary w-full text-center">
+                          Changer de plan
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <ul className="space-y-2 text-sm text-slate-700">
+                          <li className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+                            Scan IA illimité
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+                            Exports comptables
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+                            Envoi comptable
+                          </li>
+                        </ul>
+                        <Link href="/pricing" className="as-btn as-btn-primary w-full text-center">
+                          Passer à Pro
+                        </Link>
+                      </div>
+                    )}
+                  </BentoCard>
+
+                  <BentoCard
+                    title="Nouvelle facture"
+                    subtitle="Importez un PDF ou une photo. Aperçu + analyse IA."
+                    icon={<ScanLine className="w-4 h-4" />}
+                    right={analyzing ? <StatusBadge tone="processing" pulse>En cours</StatusBadge> : null}
+                  >
+                    <motion.button
+                      onClick={() => {
+                        if (isProUser === false) {
+                          showToastMessage('🔒 Fonctionnalité Pro — Passez à Pro pour numériser', 'error');
+                          window.location.href = '/pricing';
+                          return;
+                        }
+                        triggerFileInput();
+                      }}
+                      disabled={analyzing || isProUser === false}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="as-btn as-btn-primary w-full py-4 text-base disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {analyzing ? loadingMessage : 'Numériser maintenant'}
+                    </motion.button>
+
+                    {/* Erreur / Résultat (compact, non dominant) */}
+                    {error ? (
+                      <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                        {error}
+                      </div>
+                    ) : null}
+                    {result ? (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-xs font-black uppercase tracking-widest text-slate-500">Dernière analyse</div>
+                        <div className="mt-2 font-black text-slate-900 truncate">{result.entreprise || '—'}</div>
+                        <div className="mt-1 text-sm text-slate-600 tabular-nums">
+                          TTC: {result.total_amount ? `${Number(result.total_amount).toFixed(2)} €` : '—'}
+                        </div>
+                      </div>
+                    ) : null}
+                  </BentoCard>
+                </div>
+
+                {/* CHART */}
+                <div className="col-span-12 lg:col-span-7">
+                  <BentoCard
+                    title="Tendance"
+                    subtitle="Dépenses TTC sur 7 jours."
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    right={chartData.every((d) => d.montant === 0) ? <StatusBadge tone="neutral">Aucune dépense</StatusBadge> : null}
+                  >
+                    <div className="relative">
+                      {chartData.every((d) => d.montant === 0) && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/60 backdrop-blur-[1px] rounded-2xl">
+                          <p className="text-sm text-slate-500">Aucune facture sur 7 jours</p>
+                        </div>
+                      )}
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={chartData}>
+                          <defs>
+                            <linearGradient id="asOrangeBarBento" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.95} />
+                              <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.45} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
+                          <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#fff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '12px',
+                              fontSize: '14px',
+                            }}
+                            formatter={(value: number | undefined) => {
+                              if (value === undefined) return ['0.00 €', 'Montant TTC'];
+                              return [`${value.toFixed(2)} €`, 'Montant TTC'];
+                            }}
+                          />
+                          <Bar dataKey="montant" fill="url(#asOrangeBarBento)" radius={[10, 10, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </BentoCard>
+                </div>
+
+                {/* RECENT */}
+                <div className="col-span-12 lg:col-span-5">
+                  <BentoCard
+                    title="Récents"
+                    subtitle="Vos dernières factures scannées."
+                    icon={<Receipt className="w-4 h-4" />}
+                    right={<Link href="#" onClick={(e) => { e.preventDefault(); setCurrentView('historique'); }} className="text-sm font-black text-[var(--primary)]">Voir</Link>}
+                  >
+                    {invoices.length === 0 ? (
+                      <EmptyState
+                        title="Aucun document"
+                        description="Glissez votre première facture pour démarrer."
+                        icon={<Receipt className="w-8 h-8 text-slate-300" />}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {invoices.slice(0, 4).map((inv) => (
+                          <div key={inv.id} className="rounded-2xl border border-slate-200 bg-white p-4 hover:bg-slate-50 transition">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-black text-slate-900 truncate">{inv.entreprise}</div>
+                                <div className="text-xs font-bold text-slate-500">{formatDateLabel(inv.date_facture || inv.created_at)}</div>
+                              </div>
+                              <div className="text-right tabular-nums font-black text-slate-900">
+                                {(inv.total_amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                              </div>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              {inv.categorie ? <StatusBadge tone="brand">{inv.categorie}</StatusBadge> : null}
+                              {inv.modified_manually ? <StatusBadge tone="warning">Modifiée</StatusBadge> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </BentoCard>
+                </div>
+              </div>
+            )}
 
             {/* Erreur */}
             {error && (
