@@ -46,6 +46,8 @@ ALTER TABLE scans ADD COLUMN IF NOT EXISTS amount_tva NUMERIC;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_amount NUMERIC;
 -- ✅ V1: indicateur (UI/cache) — doit exister pour éviter erreurs "schema cache"
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS modified_manually BOOLEAN DEFAULT FALSE;
+-- ✅ V1: updated_at pour stabilité + triggers
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
 -- Backfill SAFE depuis les anciennes colonnes si elles existent (idempotent)
 DO $$
@@ -83,6 +85,13 @@ BEGIN
   -- V1: booléen stable
   EXECUTE 'UPDATE scans SET modified_manually = FALSE WHERE modified_manually IS NULL';
 END $$;
+
+-- 2ter. Trigger updated_at sur scans (idempotent)
+DROP TRIGGER IF EXISTS update_scans_updated_at ON scans;
+CREATE TRIGGER update_scans_updated_at
+  BEFORE UPDATE ON scans
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 -- 3. Créer une vue pour compter les factures par utilisateur
 CREATE OR REPLACE VIEW user_invoice_counts AS
@@ -133,6 +142,9 @@ CREATE TRIGGER on_auth_user_created
 -- Activer RLS sur profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
+-- Activer RLS sur scans (V1 sécurité)
+ALTER TABLE scans ENABLE ROW LEVEL SECURITY;
+
 -- Politique : Les utilisateurs peuvent lire leur propre profil
 CREATE POLICY "Users can view own profile"
   ON profiles FOR SELECT
@@ -168,6 +180,31 @@ END $$;
 CREATE POLICY "Users can insert own profile"
   ON profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
+
+-- Politique : Les utilisateurs peuvent voir leurs propres scans
+DROP POLICY IF EXISTS "Users can view own scans" ON scans;
+CREATE POLICY "Users can view own scans"
+  ON scans FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Politique : Les utilisateurs peuvent créer leurs propres scans
+DROP POLICY IF EXISTS "Users can insert own scans" ON scans;
+CREATE POLICY "Users can insert own scans"
+  ON scans FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Politique : Les utilisateurs peuvent mettre à jour leurs propres scans
+DROP POLICY IF EXISTS "Users can update own scans" ON scans;
+CREATE POLICY "Users can update own scans"
+  ON scans FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Politique : Les utilisateurs peuvent supprimer leurs propres scans
+DROP POLICY IF EXISTS "Users can delete own scans" ON scans;
+CREATE POLICY "Users can delete own scans"
+  ON scans FOR DELETE
+  USING (auth.uid() = user_id);
 
 -- 8. Index pour optimiser les performances
 CREATE INDEX IF NOT EXISTS idx_scans_user_id_date ON scans(user_id, date_facture);

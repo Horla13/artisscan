@@ -642,10 +642,10 @@ export default function Dashboard() {
         
         // Normaliser les champs (évite bugs historiques/excel/csv sur anciennes lignes)
         const normalized = (data || []).map((inv: any) => {
-          // Migration V1: fallback legacy -> champs standard (sans casser les anciennes lignes)
-          const ht = parseAmount(inv.amount_ht ?? inv.montant_ht);
-          const tva = parseAmount(inv.amount_tva ?? inv.tva);
-          const ttc = parseAmount(inv.total_amount ?? inv.montant_ttc) || (ht + tva);
+          // V1: on lit uniquement les champs standard (amount_ht/amount_tva/total_amount)
+          const ht = parseAmount(inv.amount_ht);
+          const tva = parseAmount(inv.amount_tva);
+          const ttc = parseAmount(inv.total_amount) || (ht + tva);
 
           const dateFacture = (inv.date_facture || inv.date || '').toString().trim() || (inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '');
 
