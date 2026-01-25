@@ -14,7 +14,7 @@ import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { StatusBadge } from '@/app/components/ui/StatusBadge';
 import { BentoCard } from '@/app/components/ui/BentoCard';
-import { generateAccountingCSV, generateFEC, getBestEffortAmounts, formatDecimalDot, toYyyyMmDdOrToday, getAccountingPeriodLabel } from '@/lib/accountingExports';
+import { generateAccountingCSV, generateFEC, getBestEffortAmounts, formatDecimalDot, toYyyyMmDdOrToday, getAccountingPeriodLabel, getFECDateIssues } from '@/lib/accountingExports';
 
 interface Invoice {
   id: string;
@@ -326,6 +326,10 @@ export default function Dashboard() {
     data?: any;
   } | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [showFecFixModal, setShowFecFixModal] = useState(false);
+  const [fecDateIssues, setFecDateIssues] = useState<any[]>([]);
+  const [fecDateInput, setFecDateInput] = useState<Record<string, string>>({});
+  const [fecSavingId, setFecSavingId] = useState<string | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [newProject, setNewProject] = useState({
     nom: '',
@@ -1864,6 +1868,22 @@ export default function Dashboard() {
     }
 
     try {
+      // 1) Détecter précisément les dates invalides (UX actionnable)
+      const issues = getFECDateIssues(invoicesToExport as any);
+      if (issues.length > 0) {
+        setFecDateIssues(issues);
+        // Pré-remplir l’input avec une date FR si possible (sinon vide)
+        setFecDateInput((prev) => {
+          const next = { ...prev };
+          for (const it of issues) {
+            if (!next[it.id]) next[it.id] = '';
+          }
+          return next;
+        });
+        setShowFecFixModal(true);
+        return;
+      }
+
       const fec = generateFEC(invoicesToExport as any);
       const blob = new Blob([fec], { type: 'text/plain;charset=utf-8;' });
       const link = document.createElement('a');
@@ -1880,6 +1900,72 @@ export default function Dashboard() {
       showToastMessage('✅ Export FEC téléchargé', 'success');
     } catch (e: any) {
       showToastMessage(e?.message || "La date de facture est incohérente et doit être corrigée avant l’export FEC.", 'error');
+    }
+  };
+
+  const parseFRDateToISO = (input: string): string | null => {
+    const s = (input || '').trim();
+    if (!s) return null;
+    // accepte YYYY-MM-DD (copier/coller)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return null;
+      const maxYear = new Date().getFullYear() + 1;
+      if (d.getFullYear() > maxYear) return null;
+      return s;
+    }
+    // JJ/MM/AAAA
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return null;
+    const dd = Number(m[1]);
+    const mm = Number(m[2]);
+    const yyyy = Number(m[3]);
+    if (mm < 1 || mm > 12) return null;
+    if (dd < 1 || dd > 31) return null;
+    const maxYear = new Date().getFullYear() + 1;
+    if (yyyy > maxYear) return null;
+    const iso = `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    // éviter 31/02 etc
+    if (d.getFullYear() !== yyyy || d.getMonth() + 1 !== mm || d.getDate() !== dd) return null;
+    return iso;
+  };
+
+  const saveFecDateFix = async (invoiceId: string) => {
+    const input = fecDateInput[invoiceId] || '';
+    const iso = parseFRDateToISO(input);
+    if (!iso) {
+      showToastMessage('❌ Date invalide. Format attendu : JJ/MM/AAAA', 'error');
+      return;
+    }
+    setFecSavingId(invoiceId);
+    try {
+      const { error: updErr } = await supabase.from('scans').update({ date_facture: iso }).eq('id', invoiceId);
+      if (updErr) throw updErr;
+
+      // Mettre à jour l’état local (pour ne pas “forcer à quitter”)
+      setInvoices((prev: any) =>
+        (prev || []).map((inv: any) => (String(inv?.id) === String(invoiceId) ? { ...inv, date_facture: iso } : inv))
+      );
+
+      showToastMessage('✅ Date corrigée', 'success');
+
+      // Retirer la facture corrigée de la liste et auto-exporter si tout est OK
+      setFecDateIssues((prev: any) => {
+        const next = (prev || []).filter((it: any) => String(it?.id) !== String(invoiceId));
+        if (next.length === 0) {
+          setShowFecFixModal(false);
+          // lancer l’export automatiquement (sans redemander à l’utilisateur)
+          setTimeout(() => exportToFEC(), 150);
+        }
+        return next;
+      });
+    } catch (e: any) {
+      console.error('❌ Correction date FEC:', e);
+      showToastMessage('❌ Impossible d’enregistrer la date. Réessayez.', 'error');
+    } finally {
+      setFecSavingId(null);
     }
   };
 
@@ -4794,6 +4880,105 @@ export default function Dashboard() {
             <p className="text-[10px] text-slate-400 text-center mt-4 font-medium">
               💡 Le comptable reçoit les pièces jointes directement. Aucun compte n’est requis côté comptable.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modale correction dates FEC (sans quitter l’export) */}
+      {showFecFixModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[65] px-4">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full slide-up shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                  <AlertCircle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Dates à corriger (FEC)</h3>
+                  <p className="text-sm text-slate-600">
+                    ❌ Certaines factures contiennent une date invalide pour l’export FEC.
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Corrigez la date au format <strong>JJ/MM/AAAA</strong>. Aucun export FEC invalide ne sera généré.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFecFixModal(false);
+                  setFecDateIssues([]);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                Factures bloquantes ({fecDateIssues.length})
+              </div>
+              <div className="space-y-3">
+                {fecDateIssues.map((it: any) => (
+                  <div key={it.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-black text-slate-900 truncate">{it.fournisseur || '—'}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                          {it.invoiceNumber ? (
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                              N° {it.invoiceNumber}
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                              N° facture: —
+                            </span>
+                          )}
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                            Date actuelle: {it.detectedDate || '—'}
+                          </span>
+                          <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-orange-800 font-bold">
+                            Raison: {it.reason}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center">
+                      <input
+                        value={fecDateInput[it.id] || ''}
+                        onChange={(e) => setFecDateInput((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                        placeholder="JJ/MM/AAAA"
+                        className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all text-sm font-medium"
+                        inputMode="numeric"
+                      />
+                      <button
+                        onClick={() => saveFecDateFix(it.id)}
+                        disabled={fecSavingId === it.id}
+                        className="px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {fecSavingId === it.id ? 'Enregistrement…' : 'Corriger la date'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <button
+                onClick={() => {
+                  setShowFecFixModal(false);
+                  setFecDateIssues([]);
+                }}
+                className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-bold text-sm"
+              >
+                Fermer
+              </button>
+              <div className="text-xs text-slate-500">
+                Une fois toutes les dates corrigées, l’export FEC démarre automatiquement.
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -123,6 +123,53 @@ function isCoherentCentime(ht: number, tva: number, ttc: number): boolean {
   return Math.abs((ht + tva) - ttc) <= 0.01;
 }
 
+export type FECDateIssueReason = 'Date absente' | 'Date invalide' | 'Date future';
+export type FECDateIssue = {
+  id: string;
+  fournisseur: string;
+  invoiceNumber?: string;
+  detectedDate: string;
+  reason: FECDateIssueReason;
+};
+
+export function getFECDateIssues(invoices: ExportInvoice[]): FECDateIssue[] {
+  const maxYear = new Date().getFullYear() + 1;
+  const issues: FECDateIssue[] = [];
+
+  for (const inv of invoices) {
+    const id = (inv.id || '').toString();
+    if (!id) continue;
+
+    const fournisseur = (inv.entreprise || '').toString().trim() || '—';
+    const invoiceNumber = safeInvoiceNumber(inv.numero_facture ?? inv.invoice_number) || undefined;
+    const rawDate = (inv.date_facture ?? inv.created_at ?? null) as any;
+
+    if (rawDate === null || rawDate === undefined || String(rawDate).trim() === '') {
+      issues.push({ id, fournisseur, invoiceNumber, detectedDate: '—', reason: 'Date absente' });
+      continue;
+    }
+
+    const iso = toYyyyMmDd(String(rawDate));
+    if (!iso) {
+      issues.push({ id, fournisseur, invoiceNumber, detectedDate: String(rawDate).slice(0, 32), reason: 'Date invalide' });
+      continue;
+    }
+
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) {
+      issues.push({ id, fournisseur, invoiceNumber, detectedDate: iso, reason: 'Date invalide' });
+      continue;
+    }
+
+    if (d.getFullYear() > maxYear) {
+      issues.push({ id, fournisseur, invoiceNumber, detectedDate: formatDateFR(iso) || iso, reason: 'Date future' });
+      continue;
+    }
+  }
+
+  return issues;
+}
+
 export function getBestEffortAmounts(inv: ExportInvoice): Amounts {
   let ht = parseNumberLoose(inv.amount_ht);
   let tva = parseNumberLoose(inv.amount_tva);
