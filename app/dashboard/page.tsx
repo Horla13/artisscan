@@ -14,6 +14,7 @@ import { UpsellBanner } from '@/app/components/ui/UpsellBanner';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { StatusBadge } from '@/app/components/ui/StatusBadge';
 import { BentoCard } from '@/app/components/ui/BentoCard';
+import { generateAccountingCSV, generateFEC, getBestEffortAmounts, formatDecimalDot, toYyyyMmDdOrToday, getAccountingPeriodLabel } from '@/lib/accountingExports';
 
 interface Invoice {
   id: string;
@@ -1153,8 +1154,14 @@ export default function Dashboard() {
     setSendingEmail(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Non connecté');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const user = session?.user;
+      if (!token || !user) {
+        showToastMessage('❌ Session expirée. Reconnectez-vous.', 'error');
+        window.location.href = '/login?redirect=/dashboard';
+        return;
+      }
 
       // ========== SAUVEGARDER L'EMAIL DU COMPTABLE DANS LE PROFIL ==========
       // Mise à jour silencieuse (on ne bloque pas si ça échoue)
@@ -1222,14 +1229,15 @@ export default function Dashboard() {
       const companyName = localStorage.getItem('company_name') || '';
       const userName = companyName || user.email?.split('@')[0] || '';
 
-      // Appeler l'API d'envoi (PDF + CSV générés côté serveur)
+      // Appeler l'API d'envoi (PDF + CSV comptable + FEC générés côté serveur)
       const response = await fetch('/api/send-accounting', {
             method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({
           comptableEmail,
           userName,
           userEmail: user.email,
+          companyName,
           invoices: invoicesData, // Envoyer les données brutes des factures
           invoicesCount,
           totalHT: totalHT.toFixed(2),
@@ -1241,11 +1249,13 @@ export default function Dashboard() {
 
       const result = await response.json();
 
-          if (!response.ok) {
+      if (!response.ok) {
+        if (response.status === 401) throw new Error('Session expirée. Reconnectez-vous puis réessayez.');
+        if (response.status === 403) throw new Error('Fonctionnalité Pro requise pour l’envoi comptable.');
         throw new Error(result.error || 'Erreur lors de l\'envoi');
       }
 
-      showToastMessage(`✅ Email envoyé à ${comptableEmail} avec PDF et CSV`, 'success');
+      showToastMessage(`✅ Email envoyé à ${comptableEmail} (PDF + CSV comptable + FEC)`, 'success');
       setShowEmailModal(false);
       setComptableEmail('');
       setEmailContext(null);
@@ -1797,71 +1807,152 @@ export default function Dashboard() {
     }
   };
 
-  // Export CSV
-  const exportToCSV = (projectId?: string) => {
-    // Export = ce que l'utilisateur voit (filtre mois + recherche + catégorie)
+  // Export CSV comptable (cabinet)
+  const exportToCSV = () => {
     const invoicesToExport = getSortedInvoices();
-
     if (invoicesToExport.length === 0) {
       showToastMessage('❌ Aucune facture à exporter', 'error');
       return;
     }
 
-    const headers = [
-      'Date',
-      'Fournisseur',
-      'Numéro facture',
-      'Montant HT',
-      'Montant TVA',
-      'Montant TTC',
-      'Catégorie',
-      'Date d’ajout',
-      'Modifié manuellement'
-    ];
-
-    // Hard fail si incohérence sur au moins une facture
-    for (const inv of invoicesToExport) {
-      const { ht, tva, ttc } = getInvoiceAmounts(inv);
-      if (!isMathCoherent(ht, tva, ttc)) {
-        showToastMessage('❌ Export impossible : au moins une facture a des montants incohérents (HT + TVA ≠ TTC). Corrigez-la avant export.', 'error');
-        return;
-      }
-    }
-
-    const rows = invoicesToExport.map((inv: Invoice) => {
-      const { ht, tva, ttc } = getInvoiceAmounts(inv);
-      return [
-        formatDateFR(inv.date_facture || inv.created_at),
-        escapeCSV(inv.entreprise?.trim() || 'Non renseigné'),
-        escapeCSV(''),
-        formatDecimalFR(ht),
-        formatDecimalFR(tva),
-        formatDecimalFR(ttc),
-        escapeCSV(inv.categorie || 'Non classé'),
-        formatDateFR(inv.created_at),
-        inv.modified_manually ? 'oui' : 'non',
-      ];
-    });
-
-    const csvContent = "\uFEFF" + [
-      headers.join(';'),
-      ...rows.map((row: string[]) => row.join(';'))
-    ].join('\n');
-
+    const csvContent = generateAccountingCSV(invoicesToExport as any);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
     const fileName = selectedMonths.length === 1
-      ? `ArtisScan_Export_${getMonthLabel(selectedMonths[0])}.csv`
-      : `ArtisScan_Export_Global_${new Date().toISOString().split('T')[0]}.csv`;
+      ? `ArtisScan_CSV_Comptable_${getMonthLabel(selectedMonths[0])}.csv`
+      : `ArtisScan_CSV_Comptable_${new Date().toISOString().split('T')[0]}.csv`;
     link.setAttribute('download', fileName);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    showToastMessage('✅ Export CSV réussi !', 'success');
+    showToastMessage('✅ Export CSV comptable téléchargé', 'success');
+  };
+
+  // Export FEC (France, strict)
+  const exportToFEC = () => {
+    const invoicesToExport = getSortedInvoices();
+    if (invoicesToExport.length === 0) {
+      showToastMessage('❌ Aucune facture à exporter', 'error');
+      return;
+    }
+
+    const fec = generateFEC(invoicesToExport as any);
+    const blob = new Blob([fec], { type: 'text/plain;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    const fileName = selectedMonths.length === 1
+      ? `ArtisScan_FEC_${getMonthLabel(selectedMonths[0]).replace(/\s+/g, '_')}.txt`
+      : `ArtisScan_FEC_${new Date().toISOString().split('T')[0]}.txt`;
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToastMessage('✅ Export FEC téléchargé', 'success');
+  };
+
+  // Export PDF comptable (A4 lisible cabinet)
+  const exportToPDFComptable = () => {
+    const invoicesToExport = getSortedInvoices();
+    if (invoicesToExport.length === 0) {
+      showToastMessage('❌ Aucune facture à exporter', 'error');
+      return;
+    }
+
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const exportDate = new Date();
+    const headerName = (companyName || 'Entreprise').toString().trim();
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Export comptable', 14, 18);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Entreprise : ${headerName}`, 14, 26);
+    doc.text(`Date d’export : ${exportDate.toLocaleDateString('fr-FR')}`, 14, 32);
+    doc.text(`Période : ${selectedMonths.length === 0 ? 'Toutes les périodes' : (selectedMonths.length === 1 ? getMonthLabel(selectedMonths[0]) : `${selectedMonths.length} mois`)}`, 14, 38);
+
+    let sumHT = 0;
+    let sumTVA = 0;
+    let sumTTC = 0;
+    const byRate = new Map<string, number>();
+
+    const bodyRows = [...invoicesToExport]
+      .sort((a, b) => new Date(a.date_facture || a.created_at).getTime() - new Date(b.date_facture || b.created_at).getTime())
+      .map((inv) => {
+        const amounts = getBestEffortAmounts(inv as any);
+        sumHT += amounts.ht;
+        sumTVA += amounts.tva;
+        sumTTC += amounts.ttc;
+        const rateKey = amounts.vatRatePercent ? `${amounts.vatRatePercent}%` : '0%';
+        byRate.set(rateKey, (byRate.get(rateKey) || 0) + amounts.tva);
+
+        const dateIso = toYyyyMmDdOrToday(inv.date_facture || inv.created_at);
+        const frDate = new Date(dateIso).toLocaleDateString('fr-FR');
+        const fournisseur = inv.entreprise || 'Non renseigné';
+        const libelle = inv.description || `Achat - ${fournisseur}`;
+        const period = getAccountingPeriodLabel(inv as any);
+
+        return [
+          frDate,
+          fournisseur,
+          libelle,
+          formatDecimalDot(amounts.ht),
+          formatDecimalDot(amounts.tva),
+          formatDecimalDot(amounts.ttc),
+          rateKey,
+          period,
+        ];
+      });
+
+    autoTable(doc, {
+      startY: 46,
+      head: [['Date', 'Fournisseur', 'Libellé', 'HT', 'TVA', 'TTC', 'Taux TVA', 'Période']],
+      body: bodyRows,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 8 : 260;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Totaux', 14, Math.min(finalY, 270));
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total HT : ${formatDecimalDot(sumHT)} €`, 14, Math.min(finalY + 6, 276));
+    doc.text(`Total TVA : ${formatDecimalDot(sumTVA)} €`, 14, Math.min(finalY + 12, 282));
+    doc.text(`Total TTC : ${formatDecimalDot(sumTTC)} €`, 14, Math.min(finalY + 18, 288));
+
+    const rates = Array.from(byRate.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    if (rates.length > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text('TVA par taux', 120, Math.min(finalY, 270));
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      rates.slice(0, 6).forEach(([rate, tvaAmount], i) => {
+        doc.text(`${rate} : ${formatDecimalDot(tvaAmount)} €`, 120, Math.min(finalY + 6 + i * 6, 288));
+      });
+    }
+
+    const fileName = selectedMonths.length === 1
+      ? `ArtisScan_PDF_Comptable_${getMonthLabel(selectedMonths[0]).replace(/\s+/g, '_')}.pdf`
+      : `ArtisScan_PDF_Comptable_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    showToastMessage('✅ Export PDF comptable téléchargé', 'success');
   };
 
   // Export Excel (.xlsx) - Version Multi-Mois avec onglets
@@ -4455,27 +4546,42 @@ export default function Dashboard() {
             </BentoCard>
 
             {/* Exports */}
-            <BentoCard title="Exports" subtitle="Formats professionnels (Pro)." icon={<FileText className="w-4 h-4" />}>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <BentoCard title="Exports" subtitle="Formats cabinet (Pro). Période optionnelle." icon={<FileText className="w-4 h-4" />}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <button
-                  onClick={() => exportToCSV()}
+                  onClick={exportToCSV}
                   disabled={invoices.length === 0 || isProUser === false}
                   className="as-btn as-btn-secondary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="CSV comptable (séparateur ;)"
                 >
                   <FileText className="w-5 h-5" />
-                  Exporter en CSV
+                  Exporter CSV comptable
                 </button>
-                
+
                 <button
-                  onClick={exportToExcel}
+                  onClick={exportToFEC}
+                  disabled={invoices.length === 0 || isProUser === false}
+                  className="as-btn as-btn-secondary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="FEC (format officiel France)"
+                >
+                  <FileDown className="w-5 h-5" />
+                  Exporter FEC
+                </button>
+
+                <button
+                  onClick={exportToPDFComptable}
                   disabled={invoices.length === 0 || isProUser === false}
                   className="as-btn as-btn-primary w-full py-4 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="PDF A4 lisible cabinet"
                 >
                   <Download className="w-5 h-5" />
-                  Exporter en Excel
+                  Exporter PDF comptable
                 </button>
-            </div>
+              </div>
+
+              <div className="mt-3 text-xs text-slate-500">
+                Export = factures actuellement filtrées. <button onClick={() => setSelectedMonths([])} className="font-black text-[var(--primary)] hover:underline">Toutes les périodes</button>
+              </div>
             </BentoCard>
 
               </div>
@@ -4599,13 +4705,13 @@ export default function Dashboard() {
                       <>
                         <li>• <strong>Dossier :</strong> {(emailContext.data as Folder)?.name}</li>
                         <li>• <strong>{invoices.filter(inv => inv.folder_id === (emailContext.data as Folder)?.id).length} factures</strong></li>
-                        <li>• Format : Excel (.xlsx)</li>
+                        <li>• <strong>Pièces jointes :</strong> PDF + CSV comptable + FEC</li>
                       </>
                     ) : (
                       <>
                         <li>• <strong>{selectedMonths.length} mois</strong> sélectionné(s)</li>
                         <li>• <strong>{filteredInvoices.length} factures</strong> incluses</li>
-                        <li>• Format : {selectedMonths.length > 1 ? 'Excel multi-onglets' : 'Excel standard'}</li>
+                        <li>• <strong>Pièces jointes :</strong> PDF + CSV comptable + FEC</li>
                       </>
                     )}
                   </ul>
@@ -4660,7 +4766,7 @@ export default function Dashboard() {
             </div>
 
             <p className="text-[10px] text-slate-400 text-center mt-4 font-medium">
-              💡 Le fichier Excel sera téléchargé sur votre appareil et devra être transmis manuellement pour le moment.
+              💡 Le comptable reçoit les pièces jointes directement. Aucun compte n’est requis côté comptable.
             </p>
           </div>
         </div>

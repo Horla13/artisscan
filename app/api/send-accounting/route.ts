@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { sendMail } from '@/lib/sendMail';
+import {
+  generateAccountingCSV,
+  generateFEC,
+  getBestEffortAmounts,
+  toYyyyMmDdOrToday,
+  getAccountingPeriodLabel,
+  formatDecimalDot,
+} from '@/lib/accountingExports';
 
 // ========== TYPES POUR LE FORMAT FEC ==========
 interface LigneEcriture {
@@ -408,6 +417,7 @@ export async function POST(req: NextRequest) {
       comptableEmail, 
       userName,
       userEmail,
+      companyName,
       invoices, // Données des factures pour générer CSV
       invoicesCount,
       totalHT,
@@ -423,122 +433,100 @@ export async function POST(req: NextRequest) {
     console.log('📧 Envoi à:', comptableEmail);
     console.log('📊 Factures:', invoicesCount);
 
-    // ========== GÉNÉRATION DU CSV FORMAT FEC ==========
-    const csvContent = generateFECCSV(invoices);
-    const csvBase64 = Buffer.from(csvContent, 'utf-8').toString('base64');
-    const csvFileName = `export_comptable_FEC_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
+    const safePeriodSlug = (periodDescription?.replace(/\s+/g, '_') || 'toutes_periodes').toString();
 
-    // ========== GÉNÉRATION DU CSV PIVOT (SIMPLE) ==========
-    const pivotContent = generatePivotCSV(invoices);
-    const pivotBase64 = Buffer.from(pivotContent, 'utf-8').toString('base64');
-    const pivotFileName = `export_comptable_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.csv`;
+    // ========== EXPORT CSV COMPTABLE (cabinet) ==========
+    const accountingCsv = generateAccountingCSV(invoices);
+    const accountingCsvBase64 = Buffer.from(accountingCsv, 'utf-8').toString('base64');
+    const accountingCsvFileName = `ArtisScan_CSV_comptable_${safePeriodSlug}.csv`;
 
-    // ========== GÉNÉRATION DU PDF RÉCAPITULATIF ==========
-    const doc = new jsPDF();
-    
-    // Header Orange
-    doc.setFillColor(255, 140, 0); // #FF8C00
-    doc.rect(0, 0, 210, 40, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
+    // ========== EXPORT FEC (France, strict) ==========
+    const fec = generateFEC(invoices);
+    const fecBase64 = Buffer.from(fec, 'utf-8').toString('base64');
+    const fecFileName = `ArtisScan_FEC_${safePeriodSlug}.txt`;
+
+    // ========== PDF COMPTABLE (A4 lisible) ==========
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const exportDate = new Date();
+    const headerName = (companyName || userName || userEmail || 'Client').toString().trim();
+
     doc.setFont('helvetica', 'bold');
-    doc.text('ArtisScan', 105, 20, { align: 'center' });
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('GESTION INTELLIGENTE', 105, 30, { align: 'center' });
-    
-    // Titre
-    doc.setTextColor(30, 41, 59);
     doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Récapitulatif Comptable', 20, 60);
-    
-    // Informations
-    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Export comptable', 14, 18);
+
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
     doc.setTextColor(71, 85, 105);
-    doc.text(`Client : ${userName || userEmail || 'N/A'}`, 20, 75);
-    if (periodDescription) {
-      doc.text(`Période : ${periodDescription}`, 20, 82);
-    }
-    
-    // Tableau récapitulatif
-    let yPos = 100;
-    doc.setFillColor(250, 250, 250);
-    doc.rect(20, yPos, 170, 60, 'F');
-    
-    // Bordure Orange
-    doc.setDrawColor(255, 140, 0);
-    doc.setLineWidth(2);
-    doc.rect(20, yPos, 170, 60);
-    
-    doc.setFontSize(14);
+    doc.text(`Entreprise : ${headerName}`, 14, 26);
+    doc.text(`Date d’export : ${exportDate.toLocaleDateString('fr-FR')}`, 14, 32);
+    doc.text(`Période : ${periodDescription || 'Toutes les périodes'}`, 14, 38);
+
+    const sortedInvoices = [...(invoices || [])].sort((a: any, b: any) => {
+      const da = new Date(a?.date_facture || a?.created_at || 0).getTime();
+      const db = new Date(b?.date_facture || b?.created_at || 0).getTime();
+      return da - db;
+    });
+
+    let sumHT = 0;
+    let sumTVA = 0;
+    let sumTTC = 0;
+    const byRate = new Map<string, { tva: number }>();
+
+    const bodyRows = sortedInvoices.map((inv: any) => {
+      const amounts = getBestEffortAmounts(inv);
+      sumHT += amounts.ht;
+      sumTVA += amounts.tva;
+      sumTTC += amounts.ttc;
+      const rateKey = amounts.vatRatePercent ? `${amounts.vatRatePercent}%` : '0%';
+      byRate.set(rateKey, { tva: (byRate.get(rateKey)?.tva || 0) + amounts.tva });
+
+      const dateIso = toYyyyMmDdOrToday(inv?.date_facture || inv?.created_at);
+      const frDate = (() => {
+        const d = new Date(dateIso);
+        return isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR');
+      })();
+      const fournisseur = (inv?.entreprise || 'Non renseigné').toString();
+      const libelle = (inv?.description || `Achat - ${fournisseur}`).toString();
+      const period = getAccountingPeriodLabel(inv);
+
+      return [
+        frDate,
+        fournisseur,
+        libelle,
+        formatDecimalDot(amounts.ht),
+        formatDecimalDot(amounts.tva),
+        formatDecimalDot(amounts.ttc),
+        rateKey,
+        period,
+      ];
+    });
+
+    autoTable(doc as any, {
+      startY: 46,
+      head: [['Date', 'Fournisseur', 'Libellé', 'HT', 'TVA', 'TTC', 'Taux TVA', 'Période']],
+      body: bodyRows,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
+    });
+
+    const afterTableY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : 260;
+
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 140, 0);
-    doc.text('RÉCAPITULATIF FINANCIER', 105, yPos + 10, { align: 'center' });
-    
-    yPos += 25;
     doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Totaux', 14, Math.min(afterTableY, 270));
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 116, 139);
-    
-    doc.text('Nombre de factures', 30, yPos);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text(String(invoicesCount || 0), 180, yPos, { align: 'right' });
-    
-    if (totalHT) {
-      yPos += 8;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text('Total HT', 30, yPos);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(30, 41, 59);
-      doc.text(`${totalHT} €`, 180, yPos, { align: 'right' });
-    }
-    
-    if (totalTVA) {
-      yPos += 8;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text('TVA Récupérable', 30, yPos);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(16, 185, 129);
-      doc.text(`+ ${totalTVA} €`, 180, yPos, { align: 'right' });
-    }
-    
-    if (totalTTC) {
-      yPos += 12;
-      doc.setFillColor(255, 245, 230);
-      doc.rect(30, yPos - 6, 160, 12, 'F');
-      doc.setDrawColor(255, 140, 0);
-      doc.setLineWidth(1.5);
-      doc.rect(30, yPos - 6, 160, 12);
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(255, 140, 0);
-      doc.text('TOTAL TTC', 35, yPos);
-      doc.setFontSize(14);
-      doc.text(`${totalTTC} €`, 185, yPos, { align: 'right' });
-    }
-    
-    // Footer
-    yPos = 270;
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.5);
-    doc.line(20, yPos, 190, yPos);
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(148, 163, 184);
-    doc.text('ArtisScan — La gestion intelligente pour les artisans', 105, yPos + 7, { align: 'center' });
-    doc.text('contact@artisscan.fr', 105, yPos + 12, { align: 'center' });
-    
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total HT : ${formatDecimalDot(sumHT)} €`, 14, Math.min(afterTableY + 6, 276));
+    doc.text(`Total TVA : ${formatDecimalDot(sumTVA)} €`, 14, Math.min(afterTableY + 12, 282));
+    doc.text(`Total TTC : ${formatDecimalDot(sumTTC)} €`, 14, Math.min(afterTableY + 18, 288));
+
     const pdfBase64 = doc.output('dataurlstring').split(',')[1];
-    const pdfFileName = `recapitulatif_${periodDescription?.replace(/\s+/g, '_') || 'factures'}.pdf`;
+    const pdfFileName = `ArtisScan_Export_${safePeriodSlug}.pdf`;
 
     // ========== CORPS DE L'EMAIL ==========
     const emailBody = `<!DOCTYPE html>
@@ -576,19 +564,19 @@ export async function POST(req: NextRequest) {
         </p>
         
         <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 12px 0;">
-          Vous trouverez ci-joint <strong style="color: #1e293b;">le récapitulatif PDF et l'export CSV</strong> pour traitement comptable de <strong style="color: #1e293b; font-weight: 600;">${userName || userEmail || 'votre client'}</strong>${periodDescription ? ` pour la période <strong style="color: #FF8C00; font-weight: 600;">${periodDescription}</strong>` : ''}.
+          Vous trouverez ci-joint <strong style="color: #1e293b;">le PDF comptable, le CSV comptable et le FEC</strong> pour traitement comptable de <strong style="color: #1e293b; font-weight: 600;">${userName || userEmail || 'votre client'}</strong>${periodDescription ? ` pour la période <strong style="color: #FF8C00; font-weight: 600;">${periodDescription}</strong>` : ''}.
         </p>
         
         <div style="background-color: #fff7ed; border-left: 4px solid #FF8C00; padding: 16px; margin: 20px 0; border-radius: 8px;">
           <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6;">
             <strong>📎 Pièces jointes :</strong><br>
-            • Récapitulatif PDF (lecture rapide)<br>
-            • Export CSV (simple, colonnes lisibles)<br>
-            • Export CSV format FEC (Sage, Cegid, EBP)
+            • PDF comptable (récapitulatif A4)<br>
+            • CSV comptable (séparateur ;) — prêt import cabinet<br>
+            • FEC (format officiel) — prêt validation
           </p>
           <p style="color: #92400e; font-size: 12px; margin: 8px 0 0 0; line-height: 1.4;">
-            ✓ Format : Point-virgule (;) • Décimale virgule (,)<br>
-            ✓ Équilibre Débit/Crédit validé automatiquement
+            ✓ CSV : UTF-8 • séparateur ; • montants numériques<br>
+            ✓ FEC : séparateur | • dates YYYYMMDD • débit/crédit exclusifs
           </p>
         </div>
       </div>
@@ -724,8 +712,8 @@ export async function POST(req: NextRequest) {
     // Préparer les pièces jointes (PDF + CSV) - base64 inchangé
     const attachments = [
       { filename: pdfFileName, contentBase64: pdfBase64 },
-      { filename: pivotFileName, contentBase64: pivotBase64 },
-      { filename: csvFileName, contentBase64: csvBase64 },
+      { filename: accountingCsvFileName, contentBase64: accountingCsvBase64 },
+      { filename: fecFileName, contentBase64: fecBase64 },
     ];
 
     // Envoyer l'email via Brevo (Sendinblue)
@@ -743,7 +731,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       messageId: (brevoRes as any)?.messageId || (brevoRes as any)?.id,
-      message: `Email envoyé à ${comptableEmail} avec PDF et CSV`
+      message: `Email envoyé à ${comptableEmail} avec PDF, CSV comptable et FEC`
     });
 
   } catch (err: any) {
