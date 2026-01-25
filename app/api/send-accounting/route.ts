@@ -528,185 +528,156 @@ export async function POST(req: NextRequest) {
     const pdfBase64 = doc.output('dataurlstring').split(',')[1];
     const pdfFileName = `ArtisScan_Export_${safePeriodSlug}.pdf`;
 
-    // ========== CORPS DE L'EMAIL ==========
+    // ========== CORPS DE L'EMAIL (transactionnel premium, compatible Gmail/Outlook/Apple Mail) ==========
+    const siteUrl =
+      (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.artisscan.fr').toString().replace(/\/$/, '');
+    // Le comptable reçoit déjà les pièces jointes. Le CTA sert de point d’entrée “propre”.
+    const downloadUrl = siteUrl;
+
+    const brand = '#FF6600';
+    const bg = '#F8FAFC';
+    const cardBorder = '#E2E8F0';
+    const text = '#0F172A';
+    const muted = '#64748B';
+
+    const clientLabel = (companyName || userName || userEmail || 'Client ArtisScan').toString().trim();
+    const periodLabel = (periodDescription || 'Toutes les périodes').toString();
+    const exportDateLabel = exportDate.toLocaleDateString('fr-FR');
+
     const emailBody = `<!DOCTYPE html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pièces comptables ArtisScan</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif; background-color: #f8fafc;">
-  
-  <div style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
-    
-    <!-- Header Texte Stylisé (sans image) -->
-    <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 50px 40px; text-align: center;">
-      <h1 style="color: #FF8C00; font-size: 36px; font-weight: 900; margin: 0 0 12px 0; letter-spacing: 2px; text-transform: uppercase;">
-        ARTISSCAN
-      </h1>
-      <p style="color: #94a3b8; font-size: 14px; font-weight: 400; margin: 0; letter-spacing: 0.5px;">
-        Gestion intelligente pour artisans
-      </p>
-    </div>
-
-    <!-- Contenu Principal -->
-    <div style="padding: 50px 40px;">
-      
-      <!-- Titre et Message -->
-      <div style="margin-bottom: 40px;">
-        <h2 style="color: #1e293b; font-size: 28px; font-weight: 700; margin: 0 0 24px 0;">
-          📊 Pièces comptables
-        </h2>
-        
-        <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 16px 0;">
-          Bonjour,
-        </p>
-        
-        <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 12px 0;">
-          Vous trouverez ci-joint <strong style="color: #1e293b;">le PDF comptable, le CSV comptable et le FEC</strong> pour traitement comptable de <strong style="color: #1e293b; font-weight: 600;">${userName || userEmail || 'votre client'}</strong>${periodDescription ? ` pour la période <strong style="color: #FF8C00; font-weight: 600;">${periodDescription}</strong>` : ''}.
-        </p>
-        
-        <div style="background-color: #fff7ed; border-left: 4px solid #FF8C00; padding: 16px; margin: 20px 0; border-radius: 8px;">
-          <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6;">
-            <strong>📎 Pièces jointes :</strong><br>
-            • PDF comptable (récapitulatif A4)<br>
-            • CSV comptable (séparateur ;) — prêt import cabinet<br>
-            • FEC (format officiel) — prêt validation
-          </p>
-          <p style="color: #92400e; font-size: 12px; margin: 8px 0 0 0; line-height: 1.4;">
-            ✓ CSV : UTF-8 • séparateur ; • montants numériques<br>
-            ✓ FEC : séparateur | • dates YYYYMMDD • débit/crédit exclusifs
-          </p>
-        </div>
-      </div>
-
-      <!-- Tableau Récapitulatif Financier -->
-      <div style="background-color: #fafafa; border: 2px solid #FF8C00; border-radius: 16px; padding: 25px; margin-bottom: 40px;">
-        
-        <h3 style="color: #FF8C00; font-size: 22px; font-weight: 700; margin: 0 0 30px 0; text-align: center; text-transform: uppercase; letter-spacing: 1px;">
-          Récapitulatif Financier
-        </h3>
-        
-        <table cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse;">
-          
-          <!-- En-tête Orange -->
-          <thead>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Documents comptables disponibles</title>
+  </head>
+  <body style="margin:0;padding:0;background:${bg};font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${bg};">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;">
+            <!-- Header -->
             <tr>
-              <th style="padding: 25px 30px 25px 0; text-align: left; color: #FF8C00; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #FF8C00;">
-                Libellé
-              </th>
-              <th style="padding: 25px 0 25px 30px; text-align: right; color: #FF8C00; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 3px solid #FF8C00;">
-                Montant
-              </th>
-            </tr>
-          </thead>
-          
-          <!-- Corps du tableau -->
-          <tbody>
-            
-            <!-- Nombre de factures -->
-            <tr>
-              <td style="padding: 25px 30px 25px 0; color: #64748b; font-size: 16px; border-bottom: 1px solid #e2e8f0;">
-                Nombre de factures
-              </td>
-              <td style="padding: 25px 0 25px 30px; color: #1e293b; font-size: 16px; font-weight: 600; text-align: right; border-bottom: 1px solid #e2e8f0;">
-                ${invoicesCount || 0}
+              <td style="padding:8px 6px 18px 6px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td align="left" style="vertical-align:middle;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="vertical-align:middle;padding-right:10px;">
+                            <img src="${siteUrl}/icon-rounded.svg" width="36" height="36" alt="ArtisScan" style="display:block;border:0;outline:none;text-decoration:none;border-radius:10px;" />
+                          </td>
+                          <td style="vertical-align:middle;">
+                            <div style="font-size:14px;font-weight:800;color:${text};line-height:18px;">ArtisScan</div>
+                            <div style="font-size:12px;color:${muted};line-height:16px;">Documents comptables</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td align="right" style="vertical-align:middle;">
+                      <div style="font-size:12px;color:${muted};line-height:16px;">${exportDateLabel}</div>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
-            
-            ${totalHT ? `
-            <!-- Total HT -->
+
+            <!-- Carte -->
             <tr>
-              <td style="padding: 25px 30px 25px 0; color: #64748b; font-size: 16px; border-bottom: 1px solid #e2e8f0;">
-                Total Hors Taxes (HT)
-              </td>
-              <td style="padding: 25px 0 25px 30px; color: #1e293b; font-size: 19px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
-                ${totalHT} €
+              <td style="background:#FFFFFF;border:1px solid ${cardBorder};border-radius:18px;box-shadow:0 10px 30px rgba(15,23,42,0.06);overflow:hidden;">
+                <!-- Séparateur fin -->
+                <div style="height:1px;background:${cardBorder};line-height:1px;font-size:1px;">&nbsp;</div>
+
+                <div style="padding:28px 26px 14px 26px;">
+                  <div style="font-size:20px;font-weight:800;color:${text};line-height:28px;">
+                    Documents comptables disponibles
+                  </div>
+                  <div style="margin-top:10px;font-size:14px;color:${muted};line-height:22px;">
+                    Un client ArtisScan a partagé des documents comptables avec vous.
+                    <br />
+                    <strong style="color:${text};">Aucun compte n’est requis</strong> pour accéder aux documents.
+                  </div>
+                </div>
+
+                <!-- Bloc récap -->
+                <div style="padding:0 26px 0 26px;">
+                  <div style="background:#F1F5F9;border:1px solid ${cardBorder};border-radius:14px;padding:16px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="font-size:12px;color:${muted};padding:0 0 8px 0;">Entreprise</td>
+                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:0 0 8px 0;">${clientLabel}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:12px;color:${muted};padding:8px 0;">Période</td>
+                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0;">${periodLabel}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:12px;color:${muted};padding:8px 0;">Documents</td>
+                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0;">CSV / FEC / PDF</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:12px;color:${muted};padding:8px 0 0 0;">Date d’export</td>
+                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0 0 0;">${exportDateLabel}</td>
+                      </tr>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- CTA -->
+                <div style="padding:18px 26px 8px 26px;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                    <tr>
+                      <td align="center" style="padding:8px 0 6px 0;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td bgcolor="${brand}" style="border-radius:14px;">
+                              <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer"
+                                style="display:inline-block;background:${brand};color:#FFFFFF;text-decoration:none;font-weight:800;font-size:14px;line-height:18px;padding:14px 22px;border-radius:14px;">
+                                Accéder aux documents
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding:8px 0 16px 0;">
+                        <div style="font-size:12px;color:${muted};line-height:18px;">
+                          Les documents sont également inclus en pièces jointes (PDF, CSV comptable, FEC).
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- Footer carte -->
+                <div style="padding:0 26px 22px 26px;">
+                  <div style="border-top:1px solid ${cardBorder};padding-top:14px;">
+                    <div style="font-size:12px;color:${muted};line-height:18px;">
+                      Email envoyé via ArtisScan – Solution de gestion comptable pour artisans.
+                      <br />
+                      <a href="${siteUrl}" style="color:${brand};text-decoration:none;font-weight:700;">www.artisscan.fr</a>
+                      <span style="color:#CBD5E1;"> • </span>
+                      <a href="${siteUrl}/legal/mentions-legales" style="color:${muted};text-decoration:none;">Mentions légales</a>
+                    </div>
+                  </div>
+                </div>
               </td>
             </tr>
-            ` : ''}
-            
-            ${totalTVA ? `
-            <!-- TVA Récupérable -->
+
+            <!-- footer extérieur -->
             <tr>
-              <td style="padding: 25px 30px 25px 0; color: #64748b; font-size: 16px; border-bottom: 1px solid #e2e8f0;">
-                TVA Récupérable
-              </td>
-              <td style="padding: 25px 0 25px 30px; color: #10b981; font-size: 19px; font-weight: 700; text-align: right; border-bottom: 1px solid #e2e8f0;">
-                + ${totalTVA} €
+              <td align="center" style="padding:16px 6px 0 6px;">
+                <div style="font-size:11px;color:#94A3B8;line-height:16px;">
+                  Besoin d’aide ? <a href="mailto:contact@artisscan.fr" style="color:${brand};text-decoration:none;font-weight:700;">contact@artisscan.fr</a>
+                </div>
               </td>
             </tr>
-            ` : ''}
-            
-          </tbody>
-        </table>
-        
-        ${totalTTC ? `
-        <!-- Total TTC (Encadré Orange) -->
-        <div style="margin-top: 30px; background: linear-gradient(135deg, #fff5e6 0%, #ffe6cc 100%); border: 3px solid #FF8C00; border-radius: 12px; padding: 28px; text-align: center;">
-          <p style="color: #cc6600; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 12px 0;">
-            💰 TOTAL TTC
-          </p>
-          <p style="color: #FF8C00; font-size: 42px; font-weight: 900; margin: 0; letter-spacing: -1px;">
-            ${totalTTC} €
-          </p>
-        </div>
-        ` : ''}
-        
-      </div>
-
-      <!-- Ligne de séparation fine -->
-      <div style="border-top: 1px solid #e2e8f0; margin: 40px 0 32px;"></div>
-
-      <!-- Signature Simple -->
-      <div style="margin-bottom: 40px;">
-        <p style="color: #64748b; font-size: 16px; line-height: 1.8; margin: 0 0 8px 0;">
-          Cordialement,
-        </p>
-        <p style="margin: 0;">
-          <span style="color: #FF8C00; font-size: 18px; font-weight: 700;">L'équipe ArtisScan</span>
-        </p>
-      </div>
-
-      <!-- Ligne de séparation -->
-      <div style="border-top: 1px solid #e2e8f0; margin: 32px 0; padding-top: 20px;">
-        <p style="color: #94a3b8; font-size: 13px; text-align: center; margin: 0; line-height: 1.6;">
-          <strong style="color: #FF8C00;">ArtisScan</strong> — La gestion intelligente pour les artisans
-        </p>
-        <p style="color: #94a3b8; font-size: 13px; text-align: center; margin: 8px 0 0 0;">
-          <a href="mailto:contact@artisscan.fr" style="color: #FF8C00; text-decoration: none;">contact@artisscan.fr</a>
-        </p>
-      </div>
-
-    </div>
-
-    <!-- Footer -->
-    <div style="background-color: #1e293b; padding: 32px 40px; text-align: center;">
-      <p style="color: #94a3b8; font-size: 13px; margin: 0 0 8px 0; line-height: 1.6;">
-        <strong style="color: #ffffff;">ArtisScan</strong> - Gestion intelligente pour artisans
-      </p>
-      <p style="color: #64748b; font-size: 12px; margin: 0; line-height: 1.6;">
-        © ${new Date().getFullYear()} ArtisScan. Tous droits réservés.
-      </p>
-      <div style="margin-top: 16px;">
-        <a href="https://www.artisscan.fr" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
-          Site web
-        </a>
-        <span style="color: #475569;">•</span>
-        <a href="https://www.artisscan.fr/legal/confidentialite" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
-          Confidentialité
-        </a>
-        <span style="color: #475569;">•</span>
-        <a href="mailto:contact@artisscan.fr" style="color: #FF8C00; text-decoration: none; font-size: 12px; font-weight: 600; margin: 0 12px;">
-          Contact
-        </a>
-      </div>
-    </div>
-
-  </div>
-  
-</body>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
 </html>`;
 
     // Préparer les pièces jointes (PDF + CSV) - base64 inchangé
