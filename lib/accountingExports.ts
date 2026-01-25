@@ -40,6 +40,23 @@ export function parseNumberLoose(v: any): number | null {
   return n;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function formatDateFR(raw?: string | null): string | null {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// Excel FR peut auto-interpréter les dates; on force "texte" avec une apostrophe (Excel la masque en général).
+export function formatCsvDateFRText(raw?: string | null): string {
+  const fr = formatDateFR(raw);
+  return fr ? `'${fr}` : '';
+}
+
 function toYyyyMmDd(raw?: string | null): string | null {
   if (!raw) return null;
   const d = new Date(raw);
@@ -65,6 +82,27 @@ export function getAccountingPeriodLabel(inv: ExportInvoice): string {
   return iso.slice(0, 7); // YYYY-MM
 }
 
+function safeInvoiceNumber(raw: any): string {
+  if (raw === null || raw === undefined) return '';
+  if (typeof raw === 'number') return Number.isFinite(raw) ? String(raw) : '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  if (s.toLowerCase() === 'nan' || s.toLowerCase() === 'undefined' || s.toLowerCase() === 'null') return '';
+  return s;
+}
+
+export type PaymentMethod = 'CB' | 'Virement' | 'Espèces' | 'Chèque';
+
+function normalizePaymentMethod(raw: any): PaymentMethod | '' {
+  const s = (raw ?? '').toString().trim().toLowerCase();
+  if (!s) return '';
+  if (s === 'cb' || s === 'carte' || s === 'carte bancaire' || s === 'card') return 'CB';
+  if (s === 'virement' || s === 'transfer' || s === 'wire') return 'Virement';
+  if (s === 'especes' || s === 'espèces' || s === 'cash') return 'Espèces';
+  if (s === 'cheque' || s === 'chèque' || s === 'check') return 'Chèque';
+  return '';
+}
+
 export function escapeCsvCell(value: any, sep: ';' | '|' = ';'): string {
   const v = (value ?? '').toString().replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
   // Pour FEC on doit surtout éviter le séparateur et les retours à la ligne
@@ -79,6 +117,10 @@ export function formatDecimalDot(n: number | null | undefined): string {
 
 function isCoherent(ht: number, tva: number, ttc: number): boolean {
   return Math.abs((ht + tva) - ttc) <= 0.05;
+}
+
+function isCoherentCentime(ht: number, tva: number, ttc: number): boolean {
+  return Math.abs((ht + tva) - ttc) <= 0.01;
 }
 
 export function getBestEffortAmounts(inv: ExportInvoice): Amounts {
@@ -163,20 +205,20 @@ export function generateAccountingCSV(invoices: ExportInvoice[]): string {
   ];
 
   const rows = invoices.map((inv) => {
-    const dateIso = toYyyyMmDd(inv.date_facture) || toYyyyMmDd(inv.created_at) || '';
-    const numero = (inv.numero_facture || inv.invoice_number || '').toString().trim();
+    const dateFR = formatCsvDateFRText(inv.date_facture) || formatCsvDateFRText(inv.created_at);
+    const numero = safeInvoiceNumber(inv.numero_facture ?? inv.invoice_number);
     const fournisseur = (inv.entreprise || 'Non renseigné').toString().trim() || 'Non renseigné';
     const libelle = (inv.description || `Achat - ${fournisseur}`).toString().trim();
     const period = getAccountingPeriodLabel(inv);
     const { ht, tva, ttc, vatRatePercent, estimated, coherent } = getBestEffortAmounts(inv);
     const type = 'Achat';
-    const mode = '';
+    const mode = normalizePaymentMethod((inv as any)?.mode_paiement ?? (inv as any)?.payment_method ?? (inv as any)?.paymentMethod);
     const id = (inv.id || '').toString();
 
     const statusSuffix = !coherent || estimated ? ' (À vérifier)' : '';
 
     return [
-      escapeCsvCell(dateIso),
+      escapeCsvCell(dateFR),
       escapeCsvCell(numero),
       escapeCsvCell(fournisseur),
       escapeCsvCell(`${libelle}${statusSuffix}`),
@@ -278,20 +320,41 @@ export function generateFEC(invoices: ExportInvoice[]): string {
   const lignes: FECLigne[] = [];
 
   invoices.forEach((inv, idx) => {
-    const dateIso = toYyyyMmDd(inv.date_facture) || toYyyyMmDd(inv.created_at);
-    const dateYmd = toYyyyMmDdCompactOrToday(dateIso);
+    const rawDate = inv.date_facture || inv.created_at || null;
+    const dateIso = toYyyyMmDd(rawDate);
+    if (!dateIso) {
+      throw new Error("La date de facture est incohérente et doit être corrigée avant l’export FEC.");
+    }
+    const d = new Date(dateIso);
+    const maxYear = new Date().getFullYear() + 1;
+    if (isNaN(d.getTime()) || d.getFullYear() > maxYear) {
+      throw new Error("La date de facture est incohérente et doit être corrigée avant l’export FEC.");
+    }
+    const dateYmd = dateIso.replace(/-/g, '');
 
-    const fournisseur = (inv.entreprise || 'Fournisseur').toString().trim() || 'Fournisseur';
+    const fournisseur = (inv.entreprise || '').toString().trim();
+    if (!fournisseur) {
+      throw new Error("Le fournisseur est manquant et doit être renseigné avant l’export FEC.");
+    }
     const categorie = (inv.categorie || 'Autre').toString();
     const description = (inv.description || `Achat - ${fournisseur}`).toString();
 
-    const amounts = getBestEffortAmounts(inv);
-    const { ht, tva, ttc } = amounts;
-    const coherent = amounts.coherent;
-    const estimated = amounts.estimated;
+    // FEC = strict: on ne corrige rien silencieusement.
+    const htRaw = parseNumberLoose(inv.amount_ht);
+    const tvaRaw = parseNumberLoose(inv.amount_tva);
+    const ttcRaw = parseNumberLoose(inv.total_amount);
+    if (htRaw === null || ttcRaw === null) {
+      throw new Error("Les montants de la facture sont incomplets et doivent être corrigés avant l’export FEC.");
+    }
+    const ht = round2(htRaw);
+    const tva = round2(tvaRaw ?? 0);
+    const ttc = round2(ttcRaw);
+    if (!isCoherentCentime(ht, tva, ttc)) {
+      throw new Error("Les montants HT/TVA/TTC sont incohérents et doivent être corrigés avant l’export FEC.");
+    }
 
     const ecritureNum = `AC${dateYmd}${String(idx + 1).padStart(4, '0')}`;
-    const pieceRefRaw = (inv.numero_facture || inv.invoice_number || '').toString().trim();
+    const pieceRefRaw = safeInvoiceNumber(inv.numero_facture ?? inv.invoice_number);
     const pieceRef = (pieceRefRaw ? pieceRefRaw : `SCAN${(inv.id || '').toString().slice(-6) || String(idx + 1).padStart(6, '0')}`)
       .replace(/\s+/g, '')
       .substring(0, 20);
@@ -299,8 +362,7 @@ export function generateFEC(invoices: ExportInvoice[]): string {
     const compAuxNum = normalizeAuxCode(fournisseur, (inv.id || '').toString(), 20);
     const compteCharge = getCompteComptable(categorie, ttc);
 
-    const libSuffix = !coherent || estimated ? ' A_VERIFIER' : '';
-    const ecritureLib = `${description}`.slice(0, 80) + libSuffix;
+    const ecritureLib = `${description}`.slice(0, 80);
 
     // 1) Débit charge
     lignes.push({

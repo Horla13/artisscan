@@ -1815,6 +1815,29 @@ export default function Dashboard() {
       return;
     }
 
+    // Contrôles non bloquants (CSV) : on avertit mais on exporte.
+    let missingSupplier = 0;
+    let invalidDate = 0;
+    let incoherent = 0;
+    for (const inv of invoicesToExport) {
+      const fournisseur = (inv?.entreprise || '').toString().trim();
+      if (!fournisseur) missingSupplier++;
+      const d = new Date(inv?.date_facture || inv?.created_at || '');
+      if (isNaN(d.getTime())) invalidDate++;
+      const ht = Number(inv?.amount_ht ?? 0);
+      const tva = Number(inv?.amount_tva ?? 0);
+      const ttc = Number(inv?.total_amount ?? 0);
+      if (Number.isFinite(ht) && Number.isFinite(tva) && Number.isFinite(ttc)) {
+        if (Math.abs((ht + tva) - ttc) > 0.01) incoherent++;
+      }
+    }
+    if (missingSupplier + invalidDate + incoherent > 0) {
+      showToastMessage(
+        `⚠️ CSV exporté avec avertissement : ${missingSupplier ? `${missingSupplier} fournisseur(s) manquant(s)` : ''}${missingSupplier && (invalidDate || incoherent) ? ', ' : ''}${invalidDate ? `${invalidDate} date(s) invalide(s)` : ''}${(missingSupplier || invalidDate) && incoherent ? ', ' : ''}${incoherent ? `${incoherent} montant(s) incohérent(s)` : ''}.`,
+        'success'
+      );
+    }
+
     const csvContent = generateAccountingCSV(invoicesToExport as any);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -1840,21 +1863,24 @@ export default function Dashboard() {
       return;
     }
 
-    const fec = generateFEC(invoicesToExport as any);
-    const blob = new Blob([fec], { type: 'text/plain;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    const fileName = selectedMonths.length === 1
-      ? `ArtisScan_FEC_${getMonthLabel(selectedMonths[0]).replace(/\s+/g, '_')}.txt`
-      : `ArtisScan_FEC_${new Date().toISOString().split('T')[0]}.txt`;
-    link.setAttribute('download', fileName);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    showToastMessage('✅ Export FEC téléchargé', 'success');
+    try {
+      const fec = generateFEC(invoicesToExport as any);
+      const blob = new Blob([fec], { type: 'text/plain;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const fileName = selectedMonths.length === 1
+        ? `ArtisScan_FEC_${getMonthLabel(selectedMonths[0]).replace(/\s+/g, '_')}.txt`
+        : `ArtisScan_FEC_${new Date().toISOString().split('T')[0]}.txt`;
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToastMessage('✅ Export FEC téléchargé', 'success');
+    } catch (e: any) {
+      showToastMessage(e?.message || "La date de facture est incohérente et doit être corrigée avant l’export FEC.", 'error');
+    }
   };
 
   // Export PDF comptable (A4 lisible cabinet)

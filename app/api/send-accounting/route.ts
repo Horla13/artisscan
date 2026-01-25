@@ -707,6 +707,15 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error('❌ Erreur send-accounting:', err);
+    const msg = String(err?.message || '');
+    if (
+      msg.includes('export FEC') ||
+      msg.includes('date de facture') ||
+      msg.includes('fournisseur') ||
+      msg.includes('montants')
+    ) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     return NextResponse.json({ 
       error: err.message || 'Erreur lors de l\'envoi de l\'email' 
     }, { status: 500 });
