@@ -531,8 +531,7 @@ export async function POST(req: NextRequest) {
     // ========== CORPS DE L'EMAIL (transactionnel premium, compatible Gmail/Outlook/Apple Mail) ==========
     const siteUrl =
       (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.artisscan.fr').toString().replace(/\/$/, '');
-    // Le comptable reçoit déjà les pièces jointes. Le CTA sert de point d’entrée “propre”.
-    const downloadUrl = siteUrl;
+    const logoUrl = `${siteUrl}/logo-email.png`;
 
     const brand = '#FF6600';
     const bg = '#F8FAFC';
@@ -541,15 +540,15 @@ export async function POST(req: NextRequest) {
     const muted = '#64748B';
 
     const clientLabel = (companyName || userName || userEmail || 'Client ArtisScan').toString().trim();
-    const periodLabel = (periodDescription || 'Toutes les périodes').toString();
     const exportDateLabel = exportDate.toLocaleDateString('fr-FR');
+    const docLabel = `${pdfFileName} / ${accountingCsvFileName} / ${fecFileName}`;
 
     const emailBody = `<!DOCTYPE html>
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Documents comptables disponibles</title>
+    <title>Documents comptables – ArtisScan</title>
   </head>
   <body style="margin:0;padding:0;background:${bg};font-family:Arial,Helvetica,sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${bg};">
@@ -565,7 +564,7 @@ export async function POST(req: NextRequest) {
                       <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                         <tr>
                           <td style="vertical-align:middle;padding-right:10px;">
-                            <img src="${siteUrl}/icon-rounded.svg" width="36" height="36" alt="ArtisScan" style="display:block;border:0;outline:none;text-decoration:none;border-radius:10px;" />
+                            <img src="${logoUrl}" width="36" height="36" alt="ArtisScan" style="display:block;border:0;outline:none;text-decoration:none;border-radius:10px;" />
                           </td>
                           <td style="vertical-align:middle;">
                             <div style="font-size:14px;font-weight:800;color:${text};line-height:18px;">ArtisScan</div>
@@ -589,13 +588,11 @@ export async function POST(req: NextRequest) {
                 <div style="height:1px;background:${cardBorder};line-height:1px;font-size:1px;">&nbsp;</div>
 
                 <div style="padding:28px 26px 14px 26px;">
-                  <div style="font-size:20px;font-weight:800;color:${text};line-height:28px;">
-                    Documents comptables disponibles
-                  </div>
+                  <div style="font-size:20px;font-weight:800;color:${text};line-height:28px;">Documents comptables – ArtisScan</div>
                   <div style="margin-top:10px;font-size:14px;color:${muted};line-height:22px;">
-                    Un client ArtisScan a partagé des documents comptables avec vous.
+                    Des documents comptables ont été partagés avec vous via ArtisScan.
                     <br />
-                    <strong style="color:${text};">Aucun compte n’est requis</strong> pour accéder aux documents.
+                    Vous trouverez les fichiers en pièces jointes à cet email.
                   </div>
                 </div>
 
@@ -608,12 +605,8 @@ export async function POST(req: NextRequest) {
                         <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:0 0 8px 0;">${clientLabel}</td>
                       </tr>
                       <tr>
-                        <td style="font-size:12px;color:${muted};padding:8px 0;">Période</td>
-                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0;">${periodLabel}</td>
-                      </tr>
-                      <tr>
-                        <td style="font-size:12px;color:${muted};padding:8px 0;">Documents</td>
-                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0;">CSV / FEC / PDF</td>
+                        <td style="font-size:12px;color:${muted};padding:8px 0;">Document</td>
+                        <td align="right" style="font-size:12px;color:${text};font-weight:700;padding:8px 0;">${docLabel}</td>
                       </tr>
                       <tr>
                         <td style="font-size:12px;color:${muted};padding:8px 0 0 0;">Date d’export</td>
@@ -623,31 +616,10 @@ export async function POST(req: NextRequest) {
                   </div>
                 </div>
 
-                <!-- CTA -->
-                <div style="padding:18px 26px 8px 26px;">
-                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                    <tr>
-                      <td align="center" style="padding:8px 0 6px 0;">
-                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                          <tr>
-                            <td bgcolor="${brand}" style="border-radius:14px;">
-                              <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer"
-                                style="display:inline-block;background:${brand};color:#FFFFFF;text-decoration:none;font-weight:800;font-size:14px;line-height:18px;padding:14px 22px;border-radius:14px;">
-                                Accéder aux documents
-                              </a>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td align="center" style="padding:8px 0 16px 0;">
-                        <div style="font-size:12px;color:${muted};line-height:18px;">
-                          Les documents sont également inclus en pièces jointes (PDF, CSV comptable, FEC).
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
+                <div style="padding:18px 26px 6px 26px;">
+                  <div style="font-size:12px;color:${muted};line-height:18px;">
+                    Fichiers inclus en pièces jointes : PDF, CSV comptable, FEC.
+                  </div>
                 </div>
 
                 <!-- Footer carte -->
@@ -656,9 +628,7 @@ export async function POST(req: NextRequest) {
                     <div style="font-size:12px;color:${muted};line-height:18px;">
                       Email envoyé via ArtisScan – Solution de gestion comptable pour artisans.
                       <br />
-                      <a href="${siteUrl}" style="color:${brand};text-decoration:none;font-weight:700;">www.artisscan.fr</a>
-                      <span style="color:#CBD5E1;"> • </span>
-                      <a href="${siteUrl}/legal/mentions-legales" style="color:${muted};text-decoration:none;">Mentions légales</a>
+                      www.artisscan.fr
                     </div>
                   </div>
                 </div>
@@ -669,7 +639,7 @@ export async function POST(req: NextRequest) {
             <tr>
               <td align="center" style="padding:16px 6px 0 6px;">
                 <div style="font-size:11px;color:#94A3B8;line-height:16px;">
-                  Besoin d’aide ? <a href="mailto:contact@artisscan.fr" style="color:${brand};text-decoration:none;font-weight:700;">contact@artisscan.fr</a>
+                  Besoin d’aide ? contact@artisscan.fr
                 </div>
               </td>
             </tr>
