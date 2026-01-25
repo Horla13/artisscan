@@ -536,8 +536,8 @@ export async function POST(req: NextRequest) {
     const brand = '#FF6600';
     const bg = '#F8FAFC';
     const cardBorder = '#E2E8F0';
-    const text = '#0F172A';
-    const muted = '#64748B';
+    const text = '#111827';
+    const muted = '#334155';
 
     const clientLabel = (companyName || userName || userEmail || 'Client ArtisScan').toString().trim();
     const exportDateLabel = exportDate.toLocaleDateString('fr-FR');
@@ -584,11 +584,11 @@ export async function POST(req: NextRequest) {
             <!-- Carte -->
             <tr>
               <td style="background:#FFFFFF;border:1px solid ${cardBorder};border-radius:18px;box-shadow:0 10px 30px rgba(15,23,42,0.06);overflow:hidden;">
-                <!-- Séparateur fin -->
-                <div style="height:1px;background:${cardBorder};line-height:1px;font-size:1px;">&nbsp;</div>
+                <!-- Bandeau orange -->
+                <div style="height:10px;background:${brand};line-height:10px;font-size:10px;">&nbsp;</div>
 
                 <div style="padding:28px 26px 14px 26px;">
-                  <div style="font-size:20px;font-weight:800;color:${text};line-height:28px;">Documents comptables – ArtisScan</div>
+                  <div style="font-size:20px;font-weight:800;color:${brand};line-height:28px;">Documents comptables disponibles</div>
                   <div style="margin-top:10px;font-size:14px;color:${muted};line-height:22px;">
                     Des documents comptables ont été partagés avec vous via ArtisScan.
                     <br />
@@ -598,7 +598,7 @@ export async function POST(req: NextRequest) {
 
                 <!-- Bloc récap -->
                 <div style="padding:0 26px 0 26px;">
-                  <div style="background:#F1F5F9;border:1px solid ${cardBorder};border-radius:14px;padding:16px;">
+                  <div style="background:#F1F5F9;border:1px solid ${cardBorder};border-left:4px solid ${brand};border-radius:14px;padding:16px;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                       <tr>
                         <td style="font-size:12px;color:${muted};padding:0 0 8px 0;">Entreprise</td>
@@ -624,7 +624,7 @@ export async function POST(req: NextRequest) {
 
                 <!-- Footer carte -->
                 <div style="padding:0 26px 22px 26px;">
-                  <div style="border-top:1px solid ${cardBorder};padding-top:14px;">
+                  <div style="border-top:1px solid ${brand};padding-top:14px;">
                     <div style="font-size:12px;color:${muted};line-height:18px;">
                       Email envoyé via ArtisScan – Solution de gestion comptable pour artisans.
                       <br />
