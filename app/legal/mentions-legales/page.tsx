@@ -14,7 +14,13 @@ export default function MentionsLegales() {
           <br />
           <strong>Capital social :</strong> 1 €
           <br />
-          <strong>Siège social :</strong> 198 Boulevard Ange Martin, 13190 Allauch, France
+          <strong>Siège social :</strong> 198 boulevard Ange Martin, 13190 Allauch, France
+          <br />
+          <strong>SIREN :</strong> 100 143 148
+          <br />
+          <strong>RCS :</strong> 100 143 148 R.C.S. Marseille
+          <br />
+          <strong>Banque :</strong> Shine
           <br />
           <strong>Email de contact :</strong> <a href="mailto:contact@artisscan.fr">contact@artisscan.fr</a>
         </p>
@@ -22,18 +28,30 @@ export default function MentionsLegales() {
 
       <section>
         <h2>2. Directeur de la publication</h2>
-        <p>Giovanni Russo</p>
+        <p>Giovanni Russo, dirigeant (responsable de publication)</p>
       </section>
 
       <section>
         <h2>3. Hébergement</h2>
         <p>
           <strong>Hébergeur :</strong> OVH
+          <br />
+          OVH SAS — 2 rue Kellermann, 59100 Roubaix, France
         </p>
       </section>
 
       <section>
-        <h2>4. Propriété intellectuelle</h2>
+        <h2>4. Paiement et facturation</h2>
+        <p>
+          <strong>Paiements sécurisés via :</strong> Stripe.
+          <br />
+          <strong>Important :</strong> ArtisScan / VertexLab ne stocke aucune donnée bancaire. Les données de paiement sont
+          traitées par Stripe.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. Propriété intellectuelle</h2>
         <p>
           Le site <strong>ArtisScan</strong> et l'ensemble de son contenu (textes, images, graphismes, logo, icônes, etc.) 
           sont la propriété exclusive de l'éditeur, sauf mention contraire.
@@ -49,7 +67,7 @@ export default function MentionsLegales() {
       </section>
 
       <section>
-        <h2>5. Limitation de responsabilité</h2>
+        <h2>6. Limitation de responsabilité</h2>
         <p>
           L'éditeur s'efforce d'assurer l'exactitude et la mise à jour des informations diffusées sur ce site, 
           dont il se réserve le droit de corriger le contenu à tout moment et sans préavis.
@@ -63,7 +81,7 @@ export default function MentionsLegales() {
       </section>
 
       <section>
-        <h2>6. Liens hypertextes</h2>
+        <h2>7. Liens hypertextes</h2>
         <p>
           Le site peut contenir des liens hypertextes vers d'autres sites présents sur le réseau Internet. 
           L'éditeur n'exerce aucun contrôle sur ces sites externes et décline toute responsabilité quant à leur contenu.
@@ -71,11 +89,11 @@ export default function MentionsLegales() {
       </section>
 
       <section>
-        <h2>7. Crédits</h2>
+        <h2>8. Crédits</h2>
         <p>
           <strong>Conception et développement :</strong> ArtisScan<br />
           <strong>Technologies :</strong> Next.js, React, Tailwind CSS, TypeScript<br />
-          <strong>Services :</strong> Supabase (authentification et stockage), Paddle (paiements), Services d’email (support)<br />
+          <strong>Services :</strong> Supabase (authentification et base de données), Stripe (paiements), Brevo (emails transactionnels)<br />
           <strong>Icônes :</strong> Lucide Icons
         </p>
       </section>

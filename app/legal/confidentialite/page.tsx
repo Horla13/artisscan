@@ -28,7 +28,7 @@ export default function Confidentialite() {
           <li><strong>Données d’identification :</strong> adresse email</li>
           <li><strong>Données d’authentification :</strong> mot de passe (géré par Supabase Auth)</li>
           <li><strong>Données documentaires/comptables :</strong> documents importés, métadonnées et exports</li>
-          <li><strong>Données de facturation :</strong> informations nécessaires à la facturation/abonnement (gérées par Paddle)</li>
+          <li><strong>Données de facturation :</strong> informations nécessaires à la facturation/abonnement (traitées via Stripe)</li>
           <li><strong>Données techniques :</strong> logs, adresse IP, événements de sécurité, données de navigation</li>
           <li><strong>Cookies :</strong> cookies essentiels et, le cas échéant, cookies de mesure d’audience</li>
         </ul>
@@ -63,10 +63,10 @@ export default function Confidentialite() {
         <p>Vos données personnelles sont traitées par :</p>
         <ul>
           <li><strong>ArtisScan :</strong> Accès limité aux données nécessaires à la fourniture du service</li>
-          <li><strong>Supabase :</strong> Hébergement sécurisé de la base de données</li>
-          <li><strong>Paddle :</strong> Paiements, facturation et taxes (Merchant of Record)</li>
-          <li><strong>OVH :</strong> Hébergement</li>
-          <li><strong>Prestataires email :</strong> Envoi d’emails de service et support</li>
+          <li><strong>Supabase :</strong> Hébergement de la base de données et authentification</li>
+          <li><strong>Stripe :</strong> Paiements et gestion de l’abonnement</li>
+          <li><strong>OVH :</strong> Hébergement du site</li>
+          <li><strong>Prestataires email (ex : Brevo) :</strong> Envoi d’emails de service et support</li>
         </ul>
         <p>
           <strong>Nous ne vendons, ne louons ni ne partageons vos données personnelles avec des tiers à des fins commerciales.</strong>
@@ -93,7 +93,7 @@ export default function Confidentialite() {
         <ul>
           <li>Chiffrement des données en transit (HTTPS/TLS)</li>
           <li>Authentification sécurisée (Supabase Auth)</li>
-          <li>Hébergement sur des serveurs sécurisés (OVH, Supabase)</li>
+          <li>Hébergement sur des infrastructures sécurisées (OVH, Supabase)</li>
           <li>Accès limité aux données (politique du moindre privilège)</li>
         </ul>
       </section>
@@ -136,7 +136,7 @@ export default function Confidentialite() {
       <section>
         <h2>10. Transferts de données hors UE</h2>
         <p>
-          Certains prestataires techniques (notamment Supabase et Paddle) peuvent être situés en dehors de l’Union
+          Certains prestataires techniques (notamment Supabase et Stripe) peuvent être situés en dehors de l’Union
           Européenne ou impliquer des transferts internationaux. Lorsque cela est requis, nous veillons à la mise en
           place de garanties appropriées conformément au RGPD (ex. clauses contractuelles types).
         </p>

@@ -82,15 +82,16 @@ export default function CGU() {
       </section>
 
       <section>
-        <h2>5. Paiement et facturation via Paddle (Merchant of Record)</h2>
+        <h2>5. Paiement et facturation (Stripe)</h2>
         <p>
-          Les paiements et la facturation sont opérés par <strong>Paddle</strong> en tant que{' '}
-          <strong>Merchant of Record</strong> (vendeur officiel). Paddle peut émettre les factures/reçus et gérer les taxes
-          applicables conformément à la réglementation.
+          Les paiements relatifs aux abonnements ArtisScan sont opérés de manière sécurisée via <strong>Stripe</strong>.
         </p>
         <p>
-          ArtisScan (VertexLab) reste responsable de la fourniture du service logiciel, de l’accès à la plateforme et du
-          support.
+          <strong>ArtisScan / VertexLab ne stocke aucune donnée bancaire</strong>. Les informations de paiement sont
+          traitées directement par Stripe.
+        </p>
+        <p>
+          ArtisScan (VertexLab) reste responsable de la fourniture du service logiciel, de l’accès à la plateforme et du support.
         </p>
       </section>
 
