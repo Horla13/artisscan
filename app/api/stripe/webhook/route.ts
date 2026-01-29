@@ -126,10 +126,7 @@ export async function POST(req: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  // 🔒 V1: forcer Stripe TEST (log-only: on ne casse jamais la réponse webhook)
-  if (stripeSecretKey?.startsWith('sk_live_')) {
-    console.error('⛔ Webhook: clé Stripe LIVE détectée (interdit en V1)');
-  }
+  // Live OK: on évite tout blocage côté webhook (Stripe exige un 2xx).
 
   const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-12-15.clover' });
 

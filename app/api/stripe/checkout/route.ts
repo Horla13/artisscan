@@ -23,11 +23,6 @@ export async function POST(req: NextRequest) {
     console.error('❌ /api/stripe/checkout: configuration manquante');
     return NextResponse.json({ error: 'Configuration manquante' }, { status: 500 });
   }
-  // 🔒 Interdire Stripe Live (V1 = test mode uniquement)
-  if (stripeSecretKey.startsWith('sk_live_')) {
-    console.error('⛔ /api/stripe/checkout: clé Stripe LIVE détectée (interdit en V1)');
-    return NextResponse.json({ error: 'Stripe live interdit. Utilisez une clé sk_test.' }, { status: 500 });
-  }
 
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
