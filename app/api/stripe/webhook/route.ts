@@ -119,11 +119,44 @@ async function updateProfileWithSubscription(
   }
 }
 
+async function resolveSupabaseUserIdFromCustomerId(
+  supabaseAdmin: SupabaseClient<any>,
+  stripeCustomerId: string | null
+): Promise<string | null> {
+  if (!stripeCustomerId) return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('stripe_customer_id', stripeCustomerId)
+      .maybeSingle();
+    if (error) {
+      console.warn('⚠️ Webhook: lookup user_id via stripe_customer_id a échoué', { stripeCustomerId, error: error.message });
+      return null;
+    }
+    return (data as any)?.id || null;
+  } catch (e: any) {
+    console.warn('⚠️ Webhook: exception lookup user_id via stripe_customer_id', { stripeCustomerId, message: e?.message || e });
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY!;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!stripeSecretKey || !webhookSecret || !supabaseUrl || !serviceRoleKey) {
+    console.error('❌ Webhook Stripe: configuration manquante', {
+      hasStripeSecretKey: Boolean(stripeSecretKey),
+      hasWebhookSecret: Boolean(webhookSecret),
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+    });
+    // Stripe attend un 2xx; on loggue et on sort proprement.
+    return NextResponse.json({ received: true, warned: true });
+  }
+
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   // Live OK: on évite tout blocage côté webhook (Stripe exige un 2xx).
@@ -141,6 +174,16 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('❌ Signature invalide', err?.message);
     return NextResponse.json({ error: 'Signature invalide' }, { status: 400 });
+  }
+
+  // ✅ Log demandé (utile en prod pour diagnostiquer la sync Live → Supabase)
+  console.log('🔥 Stripe webhook received', event.type);
+  console.log('🔎 Stripe webhook meta', { id: event.id, livemode: event.livemode, type: event.type });
+
+  // Stripe LIVE uniquement (sécurité)
+  if (event.livemode !== true) {
+    console.warn('⚠️ Webhook: event non-live ignoré', { id: event.id, type: event.type, livemode: event.livemode });
+    return NextResponse.json({ received: true });
   }
 
   try {
@@ -180,9 +223,17 @@ export async function POST(req: NextRequest) {
     // 2) Subscription events (source de vérité)
     if (type === 'customer.subscription.created' || type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
       const subscription = obj as Stripe.Subscription;
-      const supabaseUserId = (subscription as any)?.metadata?.supabase_user_id;
+      let supabaseUserId: string | null = (subscription as any)?.metadata?.supabase_user_id || null;
       if (!supabaseUserId) {
-        console.warn('⚠️ subscription event sans supabase_user_id', { type, subscription_id: subscription.id });
+        // Fallback automatique (sans schéma) : mapper via stripe_customer_id déjà stocké dans profiles
+        const stripeCustomerId =
+          typeof (subscription as any)?.customer === 'string'
+            ? ((subscription as any).customer as string)
+            : ((subscription as any)?.customer?.id as string | undefined) || null;
+        supabaseUserId = await resolveSupabaseUserIdFromCustomerId(supabaseAdmin, stripeCustomerId);
+      }
+      if (!supabaseUserId) {
+        console.warn('⚠️ subscription event: mapping user introuvable', { type, subscription_id: subscription.id });
         return NextResponse.json({ received: true });
       }
 
